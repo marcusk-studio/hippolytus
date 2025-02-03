@@ -5,5 +5,6 @@
     "lint": "cargo fmt --check && cargo clippy --all-targets -- -D warnings",
     "fix": "cargo fmt && cargo clippy --fix",
     "test": "cargo test"
-  }
+  },
+  "version": "1.9.0"
 }
