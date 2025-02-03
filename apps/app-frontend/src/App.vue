@@ -86,11 +86,21 @@ const criticalErrorMessage = ref()
 
 const isMaximized = ref(false)
 
+// Import all background images
+const backgrounds = import.meta.glob('@/assets/backgrounds/*')
+const backgroundKeys = Object.keys(backgrounds)
+const randomBackground = ref('')
+
 onMounted(async () => {
   await useCheckDisableMouseover()
 
   document.querySelector('body').addEventListener('click', handleClick)
   document.querySelector('body').addEventListener('auxclick', handleAuxClick)
+
+  // Choose a random background
+  const randomKey = backgroundKeys[Math.floor(Math.random() * backgroundKeys.length)]
+  const imageModule = await backgrounds[randomKey]()
+  randomBackground.value = imageModule.default
 })
 
 onUnmounted(() => {
@@ -246,9 +256,7 @@ async function logOut() {
 const MIDAS_BITFLAG = 1 << 0
 const hasPlus = computed(
   () =>
-    credentials.value &&
-    credentials.value.user &&
-    (credentials.value.user.badges & MIDAS_BITFLAG) === MIDAS_BITFLAG,
+    true,
 )
 
 const sidebarToggled = ref(true)
@@ -359,86 +367,14 @@ function handleAuxClick(e) {
 <template>
   <SplashScreen v-if="!stateFailed" ref="splashScreen" data-tauri-drag-region />
   <div id="teleports"></div>
-  <div v-if="stateInitialized" class="app-grid-layout relative">
-    <Suspense>
+  <div v-if="stateInitialized" class="flex overflow-hidden flex-col px-8 py-7 bg-[#0B0101] h-screen">
+     <Suspense>
       <AppSettingsModal ref="settingsModal" />
-    </Suspense>
-    <Suspense>
-      <InstanceCreationModal ref="installationModal" />
-    </Suspense>
-    <div
-      class="app-grid-navbar bg-bg-raised flex flex-col p-[0.5rem] pt-0 gap-[0.5rem] w-[--left-bar-width]"
-    >
-      <NavButton v-tooltip.right="'Home'" to="/">
-        <HomeIcon />
-      </NavButton>
-      <NavButton
-        v-tooltip.right="'Discover content'"
-        to="/browse/modpack"
-        :is-primary="() => route.path.startsWith('/browse') && !route.query.i"
-        :is-subpage="(route) => route.path.startsWith('/project') && !route.query.i"
-      >
-        <CompassIcon />
-      </NavButton>
-      <NavButton
-        v-tooltip.right="'Library'"
-        to="/library"
-        :is-subpage="
-          () =>
-            route.path.startsWith('/instance') ||
-            ((route.path.startsWith('/browse') || route.path.startsWith('/project')) &&
-              route.query.i)
-        "
-      >
-        <LibraryIcon />
-      </NavButton>
-      <div class="h-px w-6 mx-auto my-2 bg-button-bg"></div>
-      <suspense>
-        <QuickInstanceSwitcher />
-      </suspense>
-      <NavButton
-        v-tooltip.right="'Create new instance'"
-        :to="() => $refs.installationModal.show()"
-        :disabled="offline"
-      >
-        <PlusIcon />
-      </NavButton>
-      <div class="flex flex-grow"></div>
-      <NavButton v-if="updateAvailable" v-tooltip.right="'Install update'" :to="() => restartApp()">
-        <DownloadIcon />
-      </NavButton>
-      <NavButton v-tooltip.right="'Settings'" :to="() => $refs.settingsModal.show()">
-        <SettingsIcon />
-      </NavButton>
-      <ButtonStyled v-if="credentials" type="transparent" circular>
-        <OverflowMenu
-          :options="[
-            {
-              id: 'sign-out',
-              action: () => logOut(),
-              color: 'danger',
-            },
-          ]"
-          direction="left"
-        >
-          <Avatar
-            :src="credentials.user.avatar_url"
-            :alt="credentials.user.username"
-            size="32px"
-            circle
-          />
-          <template #sign-out> <LogOutIcon /> Sign out </template>
-        </OverflowMenu>
-      </ButtonStyled>
-      <NavButton v-else v-tooltip.right="'Sign in'" :to="() => signIn()">
-        <LogInIcon />
-        <template #label>Sign in</template>
-      </NavButton>
-    </div>
-    <div data-tauri-drag-region class="app-grid-statusbar bg-bg-raised h-[--top-bar-height] flex">
-      <div data-tauri-drag-region class="flex p-3">
-        <ModrinthAppLogo class="h-full w-auto text-contrast pointer-events-none" />
-        <div class="flex items-center gap-1 ml-3">
+     </Suspense>
+    <!-- Top Navigation Bar -->
+    <div data-tauri-drag-region class="app-grid-statusbar bg-bg-raised h-[--top-bar-height] flex rounded-[25px]">
+      <div data-tauri-drag-region class="flex p-3 w-full items-center relative">
+        <div class="flex items-center gap-1">
           <button
             class="cursor-pointer p-0 m-0 border-none outline-none bg-button-bg rounded-full flex items-center justify-center w-6 h-6 hover:brightness-75 transition-all"
             @click="router.back()"
@@ -452,151 +388,140 @@ function handleAuxClick(e) {
             <RightArrowIcon />
           </button>
         </div>
-        <Breadcrumbs class="pt-[2px]" />
-      </div>
-      <section class="flex ml-auto items-center">
-        <ButtonStyled
-          v-if="!forceSidebar && themeStore.toggleSidebar"
-          :type="sidebarToggled ? 'standard' : 'transparent'"
-          circular
-        >
-          <button
-            class="mr-3 transition-transform"
-            :class="{ 'rotate-180': !sidebarToggled }"
-            @click="sidebarToggled = !sidebarToggled"
+        <div class="w-[200px]">
+          <Breadcrumbs class="pt-[2px]" />
+        </div>
+        <div class="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
+          <ModrinthAppLogo class="h-16 w-auto text-contrast" />
+        </div>
+        <div class="flex-grow"></div>
+        <div class="flex items-center gap-3">
+          <ButtonStyled
+            v-if="!forceSidebar && themeStore.toggleSidebar"
+            :type="sidebarToggled ? 'standard' : 'transparent'"
+            circular
           >
-            <RightArrowIcon />
-          </button>
-        </ButtonStyled>
-        <div class="flex mr-3">
+            <button
+              class="mr-3 transition-transform"
+              :class="{ 'rotate-180': !sidebarToggled }"
+              @click="sidebarToggled = !sidebarToggled"
+            >
+              <RightArrowIcon />
+            </button>
+          </ButtonStyled>
           <Suspense>
             <RunningAppBar />
           </Suspense>
+          <section v-if="!nativeDecorations" class="window-controls">
+            <Button class="titlebar-button" icon-only @click="() => getCurrentWindow().minimize()">
+              <MinimizeIcon />
+            </Button>
+            <Button
+              class="titlebar-button"
+              icon-only
+              @click="() => getCurrentWindow().toggleMaximize()"
+            >
+              <RestoreIcon v-if="isMaximized" />
+              <MaximizeIcon v-else />
+            </Button>
+            <Button class="titlebar-button close" icon-only @click="handleClose">
+              <XIcon />
+            </Button>
+          </section>
         </div>
-        <section v-if="!nativeDecorations" class="window-controls">
-          <Button class="titlebar-button" icon-only @click="() => getCurrentWindow().minimize()">
-            <MinimizeIcon />
-          </Button>
-          <Button
-            class="titlebar-button"
-            icon-only
-            @click="() => getCurrentWindow().toggleMaximize()"
+      </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="flex gap-5 mt-6"
+       :style="{
+        height: '90%',
+      }">
+
+      <!-- Left Sidebar -->
+      <div class="app-grid-navbar bg-bg-raised flex flex-col p-4 w-[--left-bar-width] rounded-[25px] h-full">
+    <div class="flex flex-col h-full">
+      <div class="w-full">
+        <suspense><AccountsCard mode="normal" class="mb-4" /></suspense>
+
+      </div>
+
+      <!-- Main Navigation -->
+      <nav
+        class="flex flex-col justify-center items-start px-5 py-2.5 rounded-3xl bg-zinc-800 bg-opacity-50"
+        role="navigation"
+        aria-label="Main navigation"
+      >
+        <div class="flex flex-col items-start w-full gap-2">
+          <NavButton
+            v-tooltip.right="'Home'"
+            to="/"
+            class="flex gap-4 justify-center items-center px-2 py-1.5 rounded-xl min-h-[45px] w-full hover:bg-zinc-700 focus:outline-none"
+            tabindex="0"
+            aria-label="Navigate to home page"
           >
-            <RestoreIcon v-if="isMaximized" />
-            <MaximizeIcon v-else />
-          </Button>
-          <Button class="titlebar-button close" icon-only @click="handleClose">
-            <XIcon />
-          </Button>
-        </section>
-      </section>
-    </div>
-  </div>
-  <div
-    v-if="stateInitialized"
-    class="app-contents experimental-styles-within"
-    :class="{ 'sidebar-enabled': sidebarVisible }"
-  >
-    <div class="app-viewport flex-grow router-view">
-      <div
-        class="loading-indicator-container h-8 fixed z-50"
-        :style="{
-          top: 'calc(var(--top-bar-height))',
-          left: 'calc(var(--left-bar-width))',
-          width: 'calc(100% - var(--left-bar-width) - var(--right-bar-width))',
-        }"
-      >
-        <ModrinthLoadingIndicator />
-      </div>
-      <div
-        v-if="themeStore.featureFlags.page_path"
-        class="absolute bottom-0 left-0 m-2 bg-tooltip-bg text-tooltip-text font-semibold rounded-full px-2 py-1 text-xs z-50"
-      >
-        {{ route.fullPath }}
-      </div>
-      <div
-        id="background-teleport-target"
-        class="absolute h-full -z-10 rounded-tl-[--radius-xl] overflow-hidden"
-        :style="{
-          width: 'calc(100% - var(--right-bar-width))',
-        }"
-      ></div>
-      <RouterView v-slot="{ Component }">
-        <template v-if="Component">
-          <Suspense @pending="loading.startLoading()" @resolve="loading.stopLoading()">
-            <component :is="Component"></component>
-          </Suspense>
-        </template>
-      </RouterView>
-    </div>
-    <div
-      class="app-sidebar mt-px shrink-0 flex flex-col border-0 border-l-[1px] border-[--brand-gradient-border] border-solid overflow-auto"
-      :class="{ 'has-plus': hasPlus }"
-    >
-      <div
-        class="app-sidebar-scrollable flex-grow shrink overflow-y-auto relative"
-        :class="{ 'pb-12': !hasPlus }"
-      >
-        <div id="sidebar-teleport-target" class="sidebar-teleport-content"></div>
-        <div class="sidebar-default-content" :class="{ 'sidebar-enabled': sidebarVisible }">
-          <div class="p-4 border-0 border-b-[1px] border-[--brand-gradient-border] border-solid">
-            <h3 class="text-lg m-0">Playing as</h3>
-            <suspense>
-              <AccountsCard ref="accounts" mode="small" />
-            </suspense>
-          </div>
-          <div class="p-4 border-0 border-b-[1px] border-[--brand-gradient-border] border-solid">
-            <suspense>
-              <FriendsList :credentials="credentials" :sign-in="() => signIn()" />
-            </suspense>
-          </div>
-          <div v-if="news && news.length > 0" class="pt-4 flex flex-col">
-            <h3 class="px-4 text-lg m-0">News</h3>
-            <template v-for="(item, index) in news" :key="`news-${index}`">
-              <a
-                :class="`flex flex-col outline-offset-[-4px] hover:bg-[--brand-gradient-border] focus:bg-[--brand-gradient-border] px-4 transition-colors ${index === 0 ? 'pt-2 pb-4' : 'py-4'}`"
-                :href="item.link"
-                target="_blank"
-                rel="external"
-              >
-                <img
-                  :src="item.thumbnail"
-                  alt="News thumbnail"
-                  aria-hidden="true"
-                  class="w-full aspect-[3/1] object-cover rounded-2xl border-[1px] border-solid border-[--brand-gradient-border]"
-                />
-                <h4 class="mt-2 mb-0 text-sm leading-none text-contrast font-semibold">
-                  {{ item.title }}
-                </h4>
-                <p class="my-1 text-sm text-secondary leading-tight">{{ item.summary }}</p>
-                <p class="text-right text-sm text-secondary opacity-60 leading-tight m-0">
-                  {{ dayjs(item.date).fromNow() }}
-                </p>
-              </a>
-              <hr
-                v-if="index !== news.length - 1"
-                class="h-px my-[-2px] mx-4 border-0 m-0 bg-[--brand-gradient-border]"
-              />
-            </template>
-          </div>
+            <HomeIcon class="object-contain shrink-0 self-stretch my-auto w-6 aspect-square" />
+            <span class="self-stretch my-auto">Home</span>
+          </NavButton>
+
+          <NavButton
+            v-tooltip.right="'Discover content'"
+            to="/browse/modpack"
+            :is-primary="() => route.path.startsWith('/browse') && !route.query.i"
+            :is-subpage="(route) => route.path.startsWith('/project') && !route.query.i"
+            class="flex gap-4 justify-center items-center px-2 py-1.5 rounded-xl min-h-[45px] w-full hover:bg-zinc-700 focus:outline-none"
+            tabindex="0"
+            aria-label="Navigate to discover page"
+          >
+            <CompassIcon class="object-contain shrink-0 self-stretch my-auto w-6 aspect-square" />
+            <span class="self-stretch my-auto">Discover</span>
+          </NavButton>
+
+          <NavButton
+            v-tooltip.right="'Library'"
+            to="/library"
+            :is-subpage="
+              () =>
+                route.path.startsWith('/instance') ||
+                ((route.path.startsWith('/browse') || route.path.startsWith('/project')) &&
+                  route.query.i)
+            "
+            class="flex gap-4 justify-center items-center px-2 py-1.5 rounded-xl min-h-[45px] w-full hover:bg-zinc-700 focus:outline-none"
+            tabindex="0"
+            aria-label="Access your library"
+          >
+            <LibraryIcon class="object-contain shrink-0 self-stretch my-auto w-6 aspect-square" />
+            <span class="self-stretch my-auto">Library</span>
+          </NavButton>
         </div>
-      </div>
-      <template v-if="showAd">
-        <a
-          href="https://modrinth.plus?app"
-          class="absolute bottom-[250px] w-full flex justify-center items-center gap-1 px-4 py-3 text-purple font-medium hover:underline z-10"
-          target="_blank"
-        >
-          <ArrowBigUpDashIcon class="text-2xl" /> Upgrade to Modrinth+
-        </a>
-        <PromotionWrapper />
-      </template>
+      </nav>
     </div>
-    <div class="view">
-      <div v-if="criticalErrorMessage" class="critical-error-banner" data-tauri-drag-region>
-        <h1>{{ criticalErrorMessage.header }}</h1>
-        <div class="markdown-body" v-html="renderString(criticalErrorMessage.body ?? '')"></div>
+    <div class="flex flex-grow"></div>
+    <nav class="flex flex-col justify-center items-start px-5 py-2.5 rounded-3xl bg-zinc-800 bg-opacity-50">
+    <NavButton  class="flex gap-4 justify-center items-center px-2 py-1.5 rounded-xl min-h-[45px] w-full hover:bg-zinc-700 focus:outline-none" v-tooltip.right="'Settings'" :to="() => $refs.settingsModal.show()">
+        <SettingsIcon />
+        <span class="self-stretch my-auto">Settings</span>
+      </NavButton>
+    </nav>
+  </div>
+      <!-- Main Content -->
+      <div
+        class="flex-grow rounded-[25px] overflow-auto mt-4 mb-4"
+        :style="{
+          backgroundImage: randomBackground ? `url(${randomBackground})` : undefined,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center'
+        }"
+       >
+        <RouterView v-slot="{ Component }">
+          <template v-if="Component">
+            <Suspense @pending="loading.startLoading()" @resolve="loading.stopLoading()">
+              <component :is="Component"></component>
+            </Suspense>
+          </template>
+        </RouterView>
       </div>
+
     </div>
   </div>
   <URLConfirmModal ref="urlModal" />
@@ -676,8 +601,8 @@ function handleAuxClick(e) {
 
 .app-grid-layout,
 .app-contents {
-  --top-bar-height: 3rem;
-  --left-bar-width: 4rem;
+  --top-bar-height: 65px;
+  --left-bar-width: 300px;
   --right-bar-width: 300px;
 }
 
@@ -708,7 +633,6 @@ function handleAuxClick(e) {
   right: 0;
   bottom: 0;
   height: calc(100vh - var(--top-bar-height));
-  background-color: var(--color-bg);
   border-top-left-radius: var(--radius-xl);
 
   display: grid;

@@ -11,15 +11,21 @@
         <span> Offline </span>
       </div>
     </div>
-    <div v-if="selectedProcess" class="status">
-      <span class="circle running" />
-      <div ref="profileButton" class="running-text">
-        <router-link :to="`/instance/${encodeURIComponent(selectedProcess.profile.path)}`">
+    <div 
+      v-if="selectedProcess" 
+      class="flex h-8 overflow-hidden gap-3 justify-center items-center px-2 rounded-[9px] shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] bg-gradient-to-r from-[#F05B32] to-[#E59256] [box-shadow:_0_0_10px_rgba(249,115,22,0.7)]"
+    >
+      <span class="circle running w-4 h-4 rounded-full m-0" />
+      <div ref="profileButton" class="self-stretch my-auto flex items-center gap-1">
+        <router-link 
+          :to="`/instance/${encodeURIComponent(selectedProcess.profile.path)}`"
+          class="text-sm leading-4 font-medium text-white"
+        >
           {{ selectedProcess.profile.name }}
         </router-link>
         <div
           v-if="currentProcesses.length > 1"
-          class="arrow button-base"
+          class="arrow button-base text-white"
           :class="{ rotate: showProfiles }"
           @click="toggleProfiles()"
         >
@@ -34,13 +40,25 @@
       >
         <StopCircleIcon />
       </Button>
-      <Button v-tooltip="'View logs'" icon-only class="icon-button" @click="goToTerminal()">
+      <Button 
+        v-tooltip="'View logs'" 
+        icon-only 
+        class="icon-button text-white" 
+        @click="goToTerminal()"
+      >
         <TerminalSquareIcon />
       </Button>
     </div>
-    <div v-else class="status">
-      <span class="circle stopped" />
-      <span class="running-text"> No instances running </span>
+    <div 
+      v-else 
+      class="flex h-8 overflow-hidden gap-3 justify-center items-center px-2 rounded-[9px] shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] bg-gradient-to-r from-[#F05B32] to-[#E59256] [box-shadow:_0_0_10px_rgba(249,115,22,0.7)]"
+      role="status"
+      aria-live="polite"
+    >
+      <span class="circle stopped w-4 h-4 bg-gray-500 rounded-full m-0" />
+      <div class="self-stretch my-auto flex items-center">
+        <span class="text-sm leading-4 font-medium text-white">No instances running</span>
+      </div>
     </div>
   </div>
   <transition name="download">
@@ -289,6 +307,11 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-md);
   border: 1px solid var(--color-button-bg);
   padding: var(--gap-sm) var(--gap-lg);
+
+  &:not(:has(.running)) {
+    border: none;
+    padding: 0;
+  }
 }
 
 .running-text {
@@ -314,19 +337,20 @@ onBeforeUnmount(() => {
   margin-right: 0.25rem;
 
   &.running {
-    background-color: var(--color-brand);
+    background-color: #22C55E;
   }
 
   &.stopped {
-    background-color: var(--color-base);
+    display: block;
   }
 }
 
 .icon-button {
-  background-color: rgba(0, 0, 0, 0);
+  background-color: transparent;
   box-shadow: none;
   width: 1.25rem !important;
   height: 1.25rem !important;
+  padding: 0;
 
   svg {
     min-width: 1.25rem;

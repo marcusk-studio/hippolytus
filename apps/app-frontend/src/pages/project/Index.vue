@@ -1,124 +1,106 @@
 <template>
   <div>
-    <Teleport to="#sidebar-teleport-target">
-      <ProjectSidebarCompatibility
-        :project="data"
-        :tags="{ loaders: allLoaders, gameVersions: allGameVersions }"
-        class="project-sidebar-section"
-      />
-      <ProjectSidebarLinks link-target="_blank" :project="data" class="project-sidebar-section" />
-      <ProjectSidebarCreators
-        :organization="null"
-        :members="members"
-        :org-link="(slug) => `https://modrinth.com/organization/${slug}`"
-        :user-link="(username) => `https://modrinth.com/user/${username}`"
-        link-target="_blank"
-        class="project-sidebar-section"
-      />
-      <ProjectSidebarDetails
-        :project="data"
-        :has-versions="versions.length > 0"
-        :link-target="`_blank`"
-        class="project-sidebar-section"
-      />
-    </Teleport>
-    <div class="flex flex-col gap-4 p-6">
-      <InstanceIndicator v-if="instance" :instance="instance" />
-      <template v-if="data">
-        <Teleport
-          v-if="themeStore.featureFlags.project_background"
-          to="#background-teleport-target"
-        >
-          <ProjectBackgroundGradient :project="data" />
-        </Teleport>
-        <ProjectHeader :project="data" @contextmenu.prevent.stop="handleRightClick">
-          <template #actions>
-            <ButtonStyled size="large" color="brand">
-              <button
-                v-tooltip="installed ? `This project is already installed` : null"
-                :disabled="installed || installing"
-                @click="install(null)"
-              >
-                <DownloadIcon v-if="!installed && !installing" />
-                <CheckIcon v-else-if="installed" />
-                {{ installing ? 'Installing...' : installed ? 'Installed' : 'Install' }}
-              </button>
-            </ButtonStyled>
-            <ButtonStyled size="large" circular type="transparent">
-              <OverflowMenu
-                :tooltip="`More options`"
-                :options="[
-                  {
-                    id: 'follow',
-                    disabled: true,
-                    tooltip: 'Coming soon',
-                    action: () => {},
-                  },
-                  {
-                    id: 'save',
-                    disabled: true,
-                    tooltip: 'Coming soon',
-                    action: () => {},
-                  },
-                  {
-                    id: 'open-in-browser',
-                    link: `https://modrinth.com/${data.project_type}/${data.slug}`,
-                    external: true,
-                  },
-                  {
-                    divider: true,
-                  },
-                  {
-                    id: 'report',
-                    color: 'red',
-                    hoverFilled: true,
-                    link: `https://modrinth.com/report?item=project&itemID=${data.id}`,
-                  },
-                ]"
-                aria-label="More options"
-              >
-                <MoreVerticalIcon aria-hidden="true" />
-                <template #open-in-browser> <ExternalIcon /> Open in browser </template>
-                <template #follow> <HeartIcon /> Follow </template>
-                <template #save> <BookmarkIcon /> Save </template>
-                <template #report> <ReportIcon /> Report </template>
-              </OverflowMenu>
-            </ButtonStyled>
-          </template>
-        </ProjectHeader>
-        <NavTabs
-          :links="[
-            {
-              label: 'Description',
-              href: `/project/${$route.params.id}`,
-            },
-            {
-              label: 'Versions',
-              href: {
-                path: `/project/${$route.params.id}/versions`,
-                query: { l: instance?.loader, g: instance?.game_version },
+    <div class="flex flex-col gap-4 p-6 relative">
+      <div class="blurred-background"></div>
+      <div class="relative z-10">
+        <InstanceIndicator v-if="instance" :instance="instance" />
+        <template v-if="data">
+          <Teleport
+            v-if="themeStore.featureFlags.project_background"
+            to="#background-teleport-target"
+          >
+            <ProjectBackgroundGradient :project="data" />
+          </Teleport>
+          <ProjectHeader :project="data" @contextmenu.prevent.stop="handleRightClick">
+            <template #actions>
+              <ButtonStyled size="large" color="brand">
+                <button
+                  v-tooltip="installed ? `This project is already installed` : null"
+                  :disabled="installed || installing"
+                  @click="install(null)"
+                >
+                  <DownloadIcon v-if="!installed && !installing" />
+                  <CheckIcon v-else-if="installed" />
+                  {{ installing ? 'Installing...' : installed ? 'Installed' : 'Install' }}
+                </button>
+              </ButtonStyled>
+              <ButtonStyled size="large" circular type="transparent">
+                <OverflowMenu
+                  :tooltip="`More options`"
+                  :options="[
+                    {
+                      id: 'follow',
+                      disabled: true,
+                      tooltip: 'Coming soon',
+                      action: () => {},
+                    },
+                    {
+                      id: 'save',
+                      disabled: true,
+                      tooltip: 'Coming soon',
+                      action: () => {},
+                    },
+                    {
+                      id: 'open-in-browser',
+                      link: `https://modrinth.com/${data.project_type}/${data.slug}`,
+                      external: true,
+                    },
+                    {
+                      divider: true,
+                    },
+                    {
+                      id: 'report',
+                      color: 'red',
+                      hoverFilled: true,
+                      link: `https://modrinth.com/report?item=project&itemID=${data.id}`,
+                    },
+                  ]"
+                  aria-label="More options"
+                >
+                  <MoreVerticalIcon aria-hidden="true" />
+                  <template #open-in-browser> <ExternalIcon /> Open in browser </template>
+                  <template #follow> <HeartIcon /> Follow </template>
+                  <template #save> <BookmarkIcon /> Save </template>
+                  <template #report> <ReportIcon /> Report </template>
+                </OverflowMenu>
+              </ButtonStyled>
+            </template>
+          </ProjectHeader>
+          <NavTabs
+            :links="[
+              {
+                label: 'Description',
+                href: `/project/${$route.params.id}`,
               },
-              subpages: ['version'],
-            },
-            {
-              label: 'Gallery',
-              href: `/project/${$route.params.id}/gallery`,
-              shown: data.gallery.length > 0,
-            },
-          ]"
-        />
-        <RouterView
-          :project="data"
-          :versions="versions"
-          :members="members"
-          :instance="instance"
-          :install="install"
-          :installed="installed"
-          :installing="installing"
-          :installed-version="installedVersion"
-        />
-      </template>
-      <template v-else> Project data couldn't not be loaded. </template>
+              {
+                label: 'Versions',
+                href: {
+                  path: `/project/${$route.params.id}/versions`,
+                  query: { l: instance?.loader, g: instance?.game_version },
+                },
+                subpages: ['version'],
+              },
+              {
+                label: 'Gallery',
+                href: `/project/${$route.params.id}/gallery`,
+                shown: data.gallery.length > 0,
+              },
+            ]"
+            class="nav-spacing"
+          />
+          <RouterView
+            :project="data"
+            :versions="versions"
+            :members="members"
+            :instance="instance"
+            :install="install"
+            :installed="installed"
+            :installing="installing"
+            :installed-version="installedVersion"
+          />
+        </template>
+        <template v-else> Project data couldn't not be loaded. </template>
+      </div>
     </div>
     <ContextMenu ref="options" @option-clicked="handleOptionsClick">
       <template #install> <DownloadIcon /> Install </template>
@@ -142,12 +124,8 @@ import {
 } from '@modrinth/assets'
 import {
   ProjectHeader,
-  ProjectSidebarCompatibility,
   ButtonStyled,
   OverflowMenu,
-  ProjectSidebarLinks,
-  ProjectSidebarCreators,
-  ProjectSidebarDetails,
   ProjectBackgroundGradient,
 } from '@modrinth/ui'
 
@@ -438,5 +416,16 @@ const handleOptionsClick = (args) => {
 
 .project-sidebar-section {
   @apply p-4 flex flex-col gap-2 border-0 border-b-[1px] border-[--brand-gradient-border] border-solid;
+}
+
+.blurred-background {
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(8px);
+  z-index: 0;
+}
+
+.nav-spacing {
+  margin-bottom: 1.5rem;
 }
 </style>

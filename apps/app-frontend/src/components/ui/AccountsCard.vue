@@ -1,65 +1,73 @@
 <template>
-  <div
-    v-if="mode !== 'isolated'"
-    ref="button"
-    class="button-base mt-2 px-3 py-2 bg-button-bg rounded-xl flex items-center gap-2"
-    :class="{ expanded: mode === 'expanded' }"
-    @click="toggleMenu"
-  >
-    <Avatar
-      size="36px"
-      :src="
-        selectedAccount
-          ? `https://mc-heads.net/avatar/${selectedAccount.id}/128`
-          : 'https://launcher-files.modrinth.com/assets/steve_head.png'
-      "
-    />
-    <div class="flex flex-col w-full">
-      <span>{{ selectedAccount ? selectedAccount.username : 'Select account' }}</span>
-      <span class="text-secondary text-xs">Minecraft account</span>
-    </div>
-    <DropdownIcon class="w-5 h-5 shrink-0" />
-  </div>
-  <transition name="fade">
-    <Card
-      v-if="showCard || mode === 'isolated'"
-      ref="card"
-      class="account-card"
-      :class="{ expanded: mode === 'expanded', isolated: mode === 'isolated' }"
+  <div class="relative" style="width: 250px">
+    <div
+      v-if="mode !== 'isolated'"
+      ref="button"
+      class="flex overflow-hidden gap-3 px-4 py-3 bg-white rounded-3xl border-2 border-gray-700 border-solid shadow-2xl items-center justify-center w-full cursor-pointer"
+      role="article"
+      @click="toggleMenu"
     >
-      <div v-if="selectedAccount" class="selected account">
-        <Avatar size="xs" :src="`https://mc-heads.net/avatar/${selectedAccount.id}/128`" />
-        <div>
-          <h4>{{ selectedAccount.username }}</h4>
-          <p>Selected</p>
-        </div>
-        <Button v-tooltip="'Log out'" icon-only color="raised" @click="logout(selectedAccount.id)">
-          <TrashIcon />
-        </Button>
+      <Avatar
+        size="64px"
+        class="rounded-2xl object-contain shrink-0"
+        :src="
+          selectedAccount
+            ? `https://minecraftpfp.com/api/pfp/${selectedAccount.username}.png`
+            : 'https://launcher-files.modrinth.com/assets/steve_head.png'
+        "
+        :alt="selectedAccount ? selectedAccount.username : 'Default avatar'"
+      />
+      <div class="flex flex-col justify-center">
+        <p class="text-xs font-light text-gray-600 leading-none">Playing as</p>
+        <h2 class="text-lg font-bold leading-none text-black truncate">{{ selectedAccount ? selectedAccount.username : 'Select account' }}</h2>
       </div>
-      <div v-else class="logged-out account">
-        <h4>Not signed in</h4>
-        <Button v-tooltip="'Log in'" icon-only color="primary" @click="login()">
-          <LogInIcon />
-        </Button>
-      </div>
-      <div v-if="displayAccounts.length > 0" class="account-group">
-        <div v-for="account in displayAccounts" :key="account.id" class="account-row">
-          <Button class="option account" @click="setAccount(account)">
-            <Avatar :src="`https://mc-heads.net/avatar/${account.id}/128`" class="icon" />
-            <p>{{ account.username }}</p>
-          </Button>
-          <Button v-tooltip="'Log out'" icon-only @click="logout(account.id)">
+      <DropdownIcon
+        class="w-4 h-4 text-gray-600 ml-2 transition-transform"
+        :class="{ 'rotate-180': showCard }"
+      />
+    </div>
+
+    <transition name="fade">
+      <Card
+        v-if="showCard || mode === 'isolated'"
+        ref="card"
+        class="account-card"
+        :class="{ expanded: mode === 'expanded', isolated: mode === 'isolated' }"
+      >
+        <div v-if="selectedAccount" class="selected account">
+          <Avatar size="xs" :src="`https://crafatar.com/avatars/${selectedAccount.id}`" />
+          <div class="flex-1 min-w-0">
+            <h4 class="truncate">{{ selectedAccount.username }}</h4>
+            <p>Selected</p>
+          </div>
+          <Button v-tooltip="'Log out'" icon-only color="raised" @click="logout(selectedAccount.id)">
             <TrashIcon />
           </Button>
         </div>
-      </div>
-      <Button v-if="accounts.length > 0" @click="login()">
-        <PlusIcon />
-        Add account
-      </Button>
-    </Card>
-  </transition>
+        <div v-else class="logged-out account">
+          <h4>Not signed in</h4>
+          <Button v-tooltip="'Log in'" icon-only color="primary" @click="login()">
+            <LogInIcon />
+          </Button>
+        </div>
+        <div v-if="displayAccounts.length > 0" class="account-group">
+          <div v-for="account in displayAccounts" :key="account.id" class="account-row">
+            <Button class="option account flex-1 min-w-0" @click="setAccount(account)">
+              <Avatar :src="`https://crafatar.com/avatars/${account.id}`" class="icon" />
+              <p class="truncate">{{ account.username }}</p>
+            </Button>
+            <Button v-tooltip="'Log out'" icon-only @click="logout(account.id)">
+              <TrashIcon />
+            </Button>
+          </div>
+        </div>
+        <Button v-if="accounts.length > 0" @click="login()">
+          <PlusIcon />
+          Add account
+        </Button>
+      </Card>
+    </transition>
+  </div>
 </template>
 
 <script setup>
@@ -90,6 +98,9 @@ const emit = defineEmits(['change'])
 
 const accounts = ref({})
 const defaultUser = ref()
+const showCard = ref(false)
+const card = ref(null)
+const button = ref(null)
 
 async function refreshValues() {
   defaultUser.value = await get_default_user().catch(handleError)
@@ -137,9 +148,6 @@ const logout = async (id) => {
   trackEvent('AccountLogOut')
 }
 
-const showCard = ref(false)
-const card = ref(null)
-const button = ref(null)
 const handleClickOutside = (event) => {
   const elements = document.elementsFromPoint(event.clientX, event.clientY)
   if (
@@ -180,8 +188,40 @@ onUnmounted(() => {
 </script>
 
 <style scoped lang="scss">
+.account-card {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* Center items horizontally */
+  justify-content: center; /* Center items vertically */
+  top: calc(100% + 0.5rem);
+  left: 0;
+  z-index: 11;
+  gap: 0.5rem;
+  padding: 1rem;
+  width: 100%; /* Matches the parent container's width */
+  user-select: none;
+  max-height: 98vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: white;
+  border-radius: var(--radius-xl);
+  border: 2px solid var(--color-gray-700);
+  box-shadow: var(--shadow-2xl);
+
+  &.expanded {
+    left: 13.5rem;
+  }
+
+  &.isolated {
+    position: relative;
+    left: 0;
+    top: 0;
+  }
+}
+
 .selected {
-  background: var(--color-brand-highlight);
+  background: #f05b32;
   border-radius: var(--radius-lg);
   color: var(--color-contrast);
   gap: 1rem;
@@ -206,53 +246,6 @@ onUnmounted(() => {
   }
 }
 
-.account-card {
-  position: fixed;
-  display: flex;
-  flex-direction: column;
-  margin-top: 0.5rem;
-  right: 2rem;
-  z-index: 11;
-  gap: 0.5rem;
-  padding: 1rem;
-  border: 1px solid var(--color-button-bg);
-  width: max-content;
-  user-select: none;
-  -ms-user-select: none;
-  -webkit-user-select: none;
-  max-height: 98vh;
-  overflow-y: auto;
-
-  &::-webkit-scrollbar-track {
-    border-top-right-radius: 1rem;
-    border-bottom-right-radius: 1rem;
-  }
-
-  &::-webkit-scrollbar {
-    border-top-right-radius: 1rem;
-    border-bottom-right-radius: 1rem;
-  }
-
-  &.hidden {
-    display: none;
-  }
-
-  &.expanded {
-    left: 13.5rem;
-  }
-
-  &.isolated {
-    position: relative;
-    left: 0;
-    top: 0;
-  }
-}
-
-.accounts-title {
-  font-size: 1.2rem;
-  font-weight: bolder;
-}
-
 .account-group {
   width: 100%;
   display: flex;
@@ -262,8 +255,8 @@ onUnmounted(() => {
 
 .option {
   width: calc(100% - 2.25rem);
-  background: var(--color-raised-bg);
-  color: var(--color-base);
+  background: #292929;
+  color: var(--color-contrast);
   box-shadow: none;
 
   img {

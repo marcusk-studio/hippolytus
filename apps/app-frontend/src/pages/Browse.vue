@@ -97,7 +97,13 @@ async function updateInstanceContext() {
 }
 
 const instanceFilters = computed(() => {
-  const filters = []
+  const filters = [
+    // Add author facet filter
+    {
+      type: 'author',
+      option: 'robotkoer'
+    }
+  ]
 
   if (instance.value) {
     const gameVersion = instance.value.game_version
@@ -210,6 +216,7 @@ async function refreshSearch() {
       },
     }
   }
+
   if (instance.value) {
     for (const val of rawResults.result.hits) {
       val.installed =
@@ -251,7 +258,6 @@ async function refreshSearch() {
 
 async function setPage(newPageNumber: number) {
   currentPage.value = newPageNumber
-
   await onSearchChangeToTop()
 }
 
@@ -259,7 +265,6 @@ const searchWrapper: Ref<HTMLElement | null> = ref(null)
 
 async function onSearchChangeToTop() {
   await nextTick()
-
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
@@ -270,11 +275,8 @@ function clearSearch() {
 watch(
   () => route.params.projectType,
   async (newType) => {
-    // Check if the newType is not the same as the current value
     if (!newType || newType === projectType.value) return
-
     projectType.value = newType
-
     currentSortType.value = { display: 'Relevance', name: 'relevance' }
     query.value = ''
   },
@@ -313,10 +315,7 @@ const selectableProjectTypes = computed(() => {
 
   const links = [
     { label: 'Modpacks', href: `/browse/modpack`, shown: modpacks },
-    { label: 'Mods', href: `/browse/mod`, shown: mods },
     { label: 'Resource Packs', href: `/browse/resourcepack` },
-    { label: 'Data Packs', href: `/browse/datapack`, shown: dataPacks },
-    { label: 'Shaders', href: `/browse/shader` },
   ]
 
   if (params) {
@@ -381,143 +380,130 @@ await refreshSearch()
 </script>
 
 <template>
-  <Teleport v-if="filters" to="#sidebar-teleport-target">
-    <div
-      v-if="instance"
-      class="border-0 border-b-[1px] p-4 last:border-b-0 border-[--brand-gradient-border] border-solid"
-    >
-      <Checkbox
-        v-model="instanceHideInstalled"
-        label="Hide installed content"
-        class="filter-checkbox"
-        @update:model-value="onSearchChangeToTop()"
-        @click.prevent.stop
-      />
-    </div>
-    <SearchSidebarFilter
-      v-for="filter in filters.filter((f) => f.display !== 'none')"
-      :key="`filter-${filter.id}`"
-      v-model:selected-filters="currentFilters"
-      v-model:toggled-groups="toggledGroups"
-      v-model:overridden-provided-filter-types="overriddenProvidedFilterTypes"
-      :provided-filters="instanceFilters"
-      :filter-type="filter"
-      class="border-0 border-b-[1px] [&:first-child>button]:pt-4 last:border-b-0 border-[--brand-gradient-border] border-solid"
-      button-class="button-animation flex flex-col gap-1 px-4 py-3 w-full bg-transparent cursor-pointer border-none hover:bg-button-bg"
-      content-class="mb-3"
-      inner-panel-class="ml-2 mr-3"
-      :open-by-default="
-        filter.id.startsWith('category') || filter.id === 'environment' || filter.id === 'license'
-      "
-    >
-      <template #header>
-        <h3 class="text-base m-0">{{ filter.formatted_name }}</h3>
-      </template>
-      <template #locked-game_version>
-        {{ formatMessage(messages.gameVersionProvidedByInstance) }}
-      </template>
-      <template #locked-mod_loader>
-        {{ formatMessage(messages.modLoaderProvidedByInstance) }}
-      </template>
-      <template #sync-button> {{ formatMessage(messages.syncFilterButton) }} </template>
-    </SearchSidebarFilter>
-  </Teleport>
-  <div ref="searchWrapper" class="flex flex-col gap-3 p-6">
-    <template v-if="instance">
-      <InstanceIndicator :instance="instance" />
-      <h1 class="m-0 mb-1 text-xl">Install content to instance</h1>
-    </template>
-    <NavTabs :links="selectableProjectTypes" />
-    <div class="iconified-input">
-      <SearchIcon aria-hidden="true" class="text-lg" />
-      <input
-        v-model="query"
-        class="h-12 card-shadow"
-        autocomplete="off"
-        spellcheck="false"
-        type="text"
-        :placeholder="`Search ${projectType}s...`"
-      />
-      <Button v-if="query" class="r-btn" @click="() => clearSearch()">
-        <XIcon />
-      </Button>
-    </div>
-    <div class="flex gap-2">
-      <DropdownSelect
-        v-slot="{ selected }"
-        v-model="currentSortType"
-        class="max-w-[16rem]"
-        name="Sort by"
-        :options="sortTypes as any"
-        :display-name="(option: SortType | undefined) => option?.display"
-      >
-        <span class="font-semibold text-primary">Sort by: </span>
-        <span class="font-semibold text-secondary">{{ selected }}</span>
-      </DropdownSelect>
-      <DropdownSelect
-        v-slot="{ selected }"
-        v-model="maxResults"
-        name="Max results"
-        :options="[5, 10, 15, 20, 50, 100]"
-        class="max-w-[9rem]"
-      >
-        <span class="font-semibold text-primary">View: </span>
-        <span class="font-semibold text-secondary">{{ selected }}</span>
-      </DropdownSelect>
-      <Pagination :page="currentPage" :count="pageCount" class="ml-auto" @switch-page="setPage" />
-    </div>
-    <SearchFilterControl
-      v-model:selected-filters="currentFilters"
-      :filters="filters.filter((f) => f.display !== 'none')"
-      :provided-filters="instanceFilters"
-      :overridden-provided-filter-types="overriddenProvidedFilterTypes"
-      :provided-message="messages.providedByInstance"
-    />
-    <div class="search">
-      <section v-if="loading" class="offline">
-        <LoadingIndicator />
-      </section>
-      <section v-else-if="offline && results.total_hits === 0" class="offline">
-        You are currently offline. Connect to the internet to browse Modrinth!
-      </section>
-      <section v-else class="project-list display-mode--list instance-results" role="list">
-        <SearchCard
-          v-for="result in results.hits"
-          :key="result?.project_id"
-          :project="result"
-          :instance="instance"
-          :categories="[
-            ...categories.filter(
-              (cat) =>
-                result?.display_categories.includes(cat.name) && cat.project_type === projectType,
-            ),
-            ...loaders.filter(
-              (loader) =>
-                result?.display_categories.includes(loader.name) &&
-                loader.supported_project_types?.includes(projectType),
-            ),
-          ]"
-          :installed="result.installed || newlyInstalled.includes(result.project_id)"
-          @install="
-            (id) => {
-              newlyInstalled.push(id)
-            }
-          "
-          @contextmenu.prevent.stop="(event) => handleRightClick(event, result)"
-        />
-        <ContextMenu ref="options" @option-clicked="handleOptionsClick">
-          <template #open_link> <GlobeIcon /> Open in Modrinth <ExternalIcon /> </template>
-          <template #copy_link> <ClipboardCopyIcon /> Copy link </template>
-        </ContextMenu>
-      </section>
-      <div class="flex justify-end">
-        <pagination
-          :page="currentPage"
-          :count="pageCount"
-          class="pagination-after"
-          @switch-page="setPage"
-        />
+  <div>
+    <div class="content-wrapper">
+      <div class="blur-background">
+        <div ref="searchWrapper" class="flex flex-col gap-3 p-6">
+          <template v-if="instance">
+            <InstanceIndicator :instance="instance" />
+            <h1 class="m-0 mb-1 text-xl">Install content to instance</h1>
+          </template>
+          <NavTabs :links="selectableProjectTypes" />
+          <div class="iconified-input">
+            <SearchIcon aria-hidden="true" class="text-lg" />
+            <input
+              v-model="query"
+              class="h-12 card-shadow"
+              autocomplete="off"
+              spellcheck="false"
+              type="text"
+              :placeholder="`Search ${projectType}s...`"
+            />
+            <Button v-if="query" class="r-btn" @click="() => clearSearch()">
+              <XIcon />
+            </Button>
+          </div>
+          <div class="flex gap-2">
+            <DropdownSelect
+              v-slot="{ selected }"
+              v-model="currentSortType"
+              class="max-w-[16rem]"
+              name="Sort by"
+              :options="sortTypes as any"
+              :display-name="(option: SortType | undefined) => option?.display"
+            >
+              <span class="font-semibold text-primary">Sort by: </span>
+              <span class="font-semibold text-secondary">{{ selected }}</span>
+            </DropdownSelect>
+            <DropdownSelect
+              v-slot="{ selected }"
+              v-model="maxResults"
+              name="Max results"
+              :options="[5, 10, 15, 20, 50, 100]"
+              class="max-w-[9rem]"
+            >
+              <span class="font-semibold text-primary">View: </span>
+              <span class="font-semibold text-secondary">{{ selected }}</span>
+            </DropdownSelect>
+            <Pagination :page="currentPage" :count="pageCount" class="ml-auto" @switch-page="setPage" />
+          </div>
+          <SearchFilterControl
+            v-model:selected-filters="currentFilters"
+            :filters="filters.filter((f) => f.display !== 'none')"
+            :provided-filters="instanceFilters"
+            :overridden-provided-filter-types="overriddenProvidedFilterTypes"
+            :provided-message="messages.providedByInstance"
+          />
+          <div class="search">
+            <section v-if="loading" class="offline">
+              <LoadingIndicator />
+            </section>
+            <section v-else-if="offline && results.total_hits === 0" class="offline">
+              You are currently offline. Connect to the internet to browse Modrinth!
+            </section>
+            <section v-else class="project-list display-mode--list instance-results" role="list">
+              <SearchCard
+                v-for="result in results.hits"
+                :key="result?.project_id"
+                :project="result"
+                :instance="instance"
+                :categories="[
+                  ...categories.filter(
+                    (cat) =>
+                      result?.display_categories.includes(cat.name) && cat.project_type === projectType,
+                  ),
+                  ...loaders.filter(
+                    (loader) =>
+                      result?.display_categories.includes(loader.name) &&
+                      loader.supported_project_types?.includes(projectType),
+                  ),
+                ]"
+                :installed="result.installed || newlyInstalled.includes(result.project_id)"
+                @install="
+                  (id) => {
+                    newlyInstalled.push(id)
+                  }
+                "
+                @contextmenu.prevent.stop="(event) => handleRightClick(event, result)"
+              />
+              <ContextMenu ref="options" @option-clicked="handleOptionsClick">
+                <template #open_link> <GlobeIcon /> Open in Modrinth <ExternalIcon /> </template>
+                <template #copy_link> <ClipboardCopyIcon /> Copy link </template>
+              </ContextMenu>
+            </section>
+            <div class="flex justify-end">
+              <pagination
+                :page="currentPage"
+                :count="pageCount"
+                class="pagination-after"
+                @switch-page="setPage"
+              />
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.blur-background {
+  backdrop-filter: blur(5px);
+  height: 82vh;
+}
+.blur-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: -1;
+}
+
+.content-wrapper {
+  position: relative;
+  z-index: 1;
+}
+</style>

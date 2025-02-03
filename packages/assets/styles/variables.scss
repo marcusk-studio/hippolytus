@@ -51,11 +51,9 @@
 
   --shadow-card: rgba(50, 50, 100, 0.1) 0px 2px 4px 0px;
 
-  --brand-gradient-bg: linear-gradient(
-    0deg,
-    rgba(68, 182, 138, 0.175) 0%,
-    rgba(58, 250, 112, 0.125) 100%
-  );
+  --brand-gradient-bg: linear-gradient(0deg,
+      rgba(68, 182, 138, 0.175) 0%,
+      rgba(58, 250, 112, 0.125) 100%);
   --brand-gradient-button: rgba(255, 255, 255, 0.5);
   --brand-gradient-border: rgba(32, 64, 32, 0.15);
   --brand-gradient-fade-out-color: linear-gradient(to bottom, rgba(213, 235, 224, 0), #d0ece0 70%);
@@ -116,11 +114,11 @@ html {
 .dark-mode,
 .dark,
 :root[data-theme='dark'] {
-  --color-bg: #16181c;
-  --color-raised-bg: #26292f;
+  --color-bg: #0B0101;
+  --color-raised-bg: #0B0101;
   --color-super-raised-bg: #40434a;
-  --color-button-bg: hsl(222, 13%, 30%);
-  --color-button-border: rgba(193, 190, 209, 0.12);
+  --color-button-bg: hsl(0, 0%, 14%);
+  --color-button-border: rgba(40, 0, 255, 0);
   --color-scrollbar: var(--color-button-bg);
 
   --color-divider: var(--color-button-bg);
@@ -132,7 +130,7 @@ html {
   --color-accent-contrast: #000000;
 
   --color-red: #ff496e;
-  --color-orange: #ffa347;
+  --color-orange: #f05b32;
   --color-green: #1bd96a;
   --color-blue: #4f9cff;
   --color-purple: #c78aff;
@@ -151,10 +149,9 @@ html {
   --color-blue-bg: rgba(79, 156, 255, 0.2);
   --color-purple-bg: rgba(199, 138, 255, 0.2);
 
-  --color-brand: var(--color-green);
-  --color-brand-highlight: rgba(27, 217, 106, 0.25);
-  --color-brand-shadow: rgba(27, 217, 106, 0.7);
-
+  --color-brand: var(--color-orange);
+  --color-brand-highlight: rgba(230, 107, 66, 0.25);
+  --color-brand-shadow: rgba(230, 107, 66, 0.25);
   --shadow-inset-lg: inset 0px -2px 2px hsla(221, 39%, 11%, 0.1);
   --shadow-inset: inset 0px -2px 2px hsla(221, 39%, 11%, 0.05);
   --shadow-inset-sm: inset 0px -1px 1px hsla(221, 39%, 11%, 0.25);
@@ -200,11 +197,9 @@ html {
 
   --color-ad: #0d1828;
 
-  --brand-gradient-bg: linear-gradient(
-    0deg,
-    rgba(22, 66, 51, 0.15) 0%,
-    rgba(55, 137, 73, 0.1) 100%
-  );
+  --brand-gradient-bg: linear-gradient(0deg,
+      rgba(22, 66, 51, 0.15) 0%,
+      rgba(55, 137, 73, 0.1) 100%);
 }
 
 .experimental-styles-within {
@@ -217,13 +212,14 @@ html {
   --color-bg: #ebebeb;
   --color-raised-bg: #ffffff;
   --color-button-bg: #f5f5f5;
-  --color-base: #2c2e31;
+  --color-base: #0065ff;
   --color-secondary: #484d54;
   --color-accent-contrast: #ffffff;
 }
 
 .light-mode,
 .light {
+
   .experimental-styles-within,
   &.experimental-styles-within {
     @extend .light-experiments;
@@ -231,6 +227,7 @@ html {
 }
 
 .experimental-styles-within {
+
   .light-mode,
   .light {
     @extend .light-experiments;
@@ -238,11 +235,12 @@ html {
 }
 
 .dark-experiments {
-  --color-button-bg: #33363d;
+  --color-button-bg: #191415;
 }
 
 .dark-mode:not(.oled-mode),
 .dark:not(.oled-mode) {
+
   .experimental-styles-within,
   &.experimental-styles-within {
     @extend .dark-experiments;
@@ -250,6 +248,7 @@ html {
 }
 
 .experimental-styles-within {
+
   .dark-mode:not(.oled-mode),
   .dark:not(.oled-mode) {
     @extend .dark-experiments;
