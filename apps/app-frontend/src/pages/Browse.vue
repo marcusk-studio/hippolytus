@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, shallowRef, watch } from 'vue'
 import type { Ref } from 'vue'
+import { ref as vueRef } from 'vue'
 import { SearchIcon, XIcon, ClipboardCopyIcon, GlobeIcon, ExternalIcon } from '@modrinth/assets'
 import type { Category, GameVersion, Platform, ProjectType, SortType, Tags } from '@modrinth/ui'
 import {
@@ -96,14 +97,46 @@ async function updateInstanceContext() {
   }
 }
 
+type FeaturedProject = {
+  id: string
+  name: string
+}
+
+const featuredProjects = vueRef<FeaturedProject[]>([])
+
+async function fetchFeaturedProjects() {
+  try {
+    const response = await fetch('https://cdn.marcusk.fun/featured.json')
+    const data: { featured_projects: FeaturedProject[] } = await response.json()
+    featuredProjects.value = data.featured_projects
+    return true
+  } catch (error) {
+    handleError(error)
+    featuredProjects.value = []
+    return false
+  }
+}
+
+const fetchSuccessful = ref(false)
+
+fetchSuccessful.value = await fetchFeaturedProjects()
+
 const instanceFilters = computed(() => {
-  const filters = [
-    // Add author facet filter
-    {
-      type: 'author',
-      option: 'robotkoer'
-    }
-  ]
+  const filters = []
+
+  if (fetchSuccessful.value && featuredProjects.value.length > 0) {
+    featuredProjects.value.forEach(project => {
+      filters.push({
+        type: 'project_id',
+        option: `project_id:${project.id}`
+      })
+    })
+  } else {
+    filters.push({
+      type: 'project_id',
+      option: 'project_id:none'
+    })
+  }
 
   if (instance.value) {
     const gameVersion = instance.value.game_version
@@ -165,6 +198,8 @@ const {
   // Functions
   createPageParams,
 } = useSearch(projectTypes, tags, instanceFilters)
+
+query.value = ''
 
 const offline = ref(!navigator.onLine)
 window.addEventListener('offline', () => {
@@ -389,51 +424,23 @@ await refreshSearch()
             <h1 class="m-0 mb-1 text-xl">Install content to instance</h1>
           </template>
           <NavTabs :links="selectableProjectTypes" />
-          <div class="iconified-input">
-            <SearchIcon aria-hidden="true" class="text-lg" />
-            <input
-              v-model="query"
-              class="h-12 card-shadow"
-              autocomplete="off"
-              spellcheck="false"
-              type="text"
-              :placeholder="`Search ${projectType}s...`"
-            />
-            <Button v-if="query" class="r-btn" @click="() => clearSearch()">
-              <XIcon />
-            </Button>
-          </div>
           <div class="flex gap-2">
-            <DropdownSelect
-              v-slot="{ selected }"
-              v-model="currentSortType"
-              class="max-w-[16rem]"
-              name="Sort by"
-              :options="sortTypes as any"
-              :display-name="(option: SortType | undefined) => option?.display"
-            >
+            <DropdownSelect v-slot="{ selected }" v-model="currentSortType" class="max-w-[16rem]" name="Sort by"
+              :options="sortTypes as any" :display-name="(option: SortType | undefined) => option?.display">
               <span class="font-semibold text-primary">Sort by: </span>
               <span class="font-semibold text-secondary">{{ selected }}</span>
             </DropdownSelect>
-            <DropdownSelect
-              v-slot="{ selected }"
-              v-model="maxResults"
-              name="Max results"
-              :options="[5, 10, 15, 20, 50, 100]"
-              class="max-w-[9rem]"
-            >
+            <DropdownSelect v-slot="{ selected }" v-model="maxResults" name="Max results"
+              :options="[5, 10, 15, 20, 50, 100]" class="max-w-[9rem]">
               <span class="font-semibold text-primary">View: </span>
               <span class="font-semibold text-secondary">{{ selected }}</span>
             </DropdownSelect>
             <Pagination :page="currentPage" :count="pageCount" class="ml-auto" @switch-page="setPage" />
           </div>
-          <SearchFilterControl
-            v-model:selected-filters="currentFilters"
-            :filters="filters.filter((f) => f.display !== 'none')"
-            :provided-filters="instanceFilters"
+          <SearchFilterControl v-model:selected-filters="currentFilters"
+            :filters="filters.filter((f) => f.display !== 'none')" :provided-filters="instanceFilters"
             :overridden-provided-filter-types="overriddenProvidedFilterTypes"
-            :provided-message="messages.providedByInstance"
-          />
+            :provided-message="messages.providedByInstance" />
           <div class="search">
             <section v-if="loading" class="offline">
               <LoadingIndicator />
@@ -442,42 +449,33 @@ await refreshSearch()
               You are currently offline. Connect to the internet to browse Modrinth!
             </section>
             <section v-else class="project-list display-mode--list instance-results" role="list">
-              <SearchCard
-                v-for="result in results.hits"
-                :key="result?.project_id"
-                :project="result"
-                :instance="instance"
-                :categories="[
-                  ...categories.filter(
-                    (cat) =>
-                      result?.display_categories.includes(cat.name) && cat.project_type === projectType,
-                  ),
-                  ...loaders.filter(
-                    (loader) =>
-                      result?.display_categories.includes(loader.name) &&
-                      loader.supported_project_types?.includes(projectType),
-                  ),
-                ]"
-                :installed="result.installed || newlyInstalled.includes(result.project_id)"
-                @install="
-                  (id) => {
-                    newlyInstalled.push(id)
-                  }
-                "
-                @contextmenu.prevent.stop="(event) => handleRightClick(event, result)"
-              />
+              <SearchCard v-for="result in results.hits" :key="result?.project_id" :project="result"
+                :instance="instance" :categories="[
+            ...categories.filter(
+              (cat) =>
+                result?.display_categories.includes(cat.name) && cat.project_type === projectType,
+            ),
+            ...loaders.filter(
+              (loader) =>
+                result?.display_categories.includes(loader.name) &&
+                loader.supported_project_types?.includes(projectType),
+            ),
+          ]" :installed="result.installed || newlyInstalled.includes(result.project_id)" @install="(id) => {
+            newlyInstalled.push(id)
+          }
+            " @contextmenu.prevent.stop="(event) => handleRightClick(event, result)" />
               <ContextMenu ref="options" @option-clicked="handleOptionsClick">
-                <template #open_link> <GlobeIcon /> Open in Modrinth <ExternalIcon /> </template>
-                <template #copy_link> <ClipboardCopyIcon /> Copy link </template>
+                <template #open_link>
+                  <GlobeIcon /> Open in Modrinth
+                  <ExternalIcon />
+                </template>
+                <template #copy_link>
+                  <ClipboardCopyIcon /> Copy link
+                </template>
               </ContextMenu>
             </section>
             <div class="flex justify-end">
-              <pagination
-                :page="currentPage"
-                :count="pageCount"
-                class="pagination-after"
-                @switch-page="setPage"
-              />
+              <pagination :page="currentPage" :count="pageCount" class="pagination-after" @switch-page="setPage" />
             </div>
           </div>
         </div>
@@ -491,6 +489,7 @@ await refreshSearch()
   backdrop-filter: blur(5px);
   height: 82vh;
 }
+
 .blur-overlay {
   position: fixed;
   top: 0;
