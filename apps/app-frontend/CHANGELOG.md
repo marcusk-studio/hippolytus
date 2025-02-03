@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.9.1](https://github.com/marcusk-studio/hippolytus/compare/app-frontend-v1.9.0...app-frontend-v1.9.1) (2025-02-03)
+
+
+### 👽 Miscellaneous
+
+* add backgrounds ([f3d89ae](https://github.com/marcusk-studio/hippolytus/commit/f3d89ae208bc1715211a1011e5416a128866edc2))
+* fix lfs files ([99ba8fe](https://github.com/marcusk-studio/hippolytus/commit/99ba8fe21ed78c7fa8abc8ce532e5a2dc003bf5c))
+
 ## [1.9.0](https://github.com/marcusk-studio/hippolytus/compare/app-frontend-v1.8.6...app-frontend-v1.9.0) (2025-02-03)
 
 
