@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.9.1](https://github.com/marcusk-studio/hippolytus/compare/app-frontend-v1.9.0...app-frontend-v1.9.1) (2025-02-03)
+
+
+### 🐛 Bugfixes
+
+* **app-f:** limit results to certain ids ([33bf97b](https://github.com/marcusk-studio/hippolytus/commit/33bf97bbe370ee1501db6c815e9ce0a635bc5303))
+
+
+### 👽 Miscellaneous
+
+* add backgrounds ([241776c](https://github.com/marcusk-studio/hippolytus/commit/241776c751ee5975bf5b5b8b64964bde3485d282))
+* fix lfs files ([241776c](https://github.com/marcusk-studio/hippolytus/commit/241776c751ee5975bf5b5b8b64964bde3485d282))
+* remove git lfs ([241776c](https://github.com/marcusk-studio/hippolytus/commit/241776c751ee5975bf5b5b8b64964bde3485d282))
+
 ## [1.9.0](https://github.com/marcusk-studio/hippolytus/compare/app-frontend-v1.8.6...app-frontend-v1.9.0) (2025-02-03)
 
 
