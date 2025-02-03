@@ -1,0 +1,60 @@
+{
+    "packages": {
+      "apps/app": {
+        "package-name": "app",
+        "release-type": "node",
+        "prerelease": false,
+        "include-v-in-tag": true,
+        "pull-request-header": "Hella Better than Helios 🚀"
+      },
+      "apps/app-frontend": {
+        "package-name": "app-frontend",
+        "release-type": "node",
+        "prerelease": false,
+        "include-v-in-tag": true,
+        "pull-request-header": "Hella Better than Helios 🚀"
+      },
+      "packages/app-lib": {
+        "package-name": "app-lib",
+        "release-type": "node",
+        "prerelease": false,
+        "include-v-in-tag": true,
+        "pull-request-header": "Hella Better than Helios 🚀"
+      }
+    },
+    "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+    "changelog-sections": [
+      {
+        "section": "✨ Features",
+        "type": "feat"
+      },
+      {
+        "section": "🐛 Bugfixes",
+        "type": "fix"
+      },
+      {
+        "section": "👽 Miscellaneous",
+        "type": "chore"
+      },
+      {
+        "section": "👽 Miscellaneous",
+        "type": "style"
+      },
+      {
+        "section": "⬆️ Dependency updates",
+        "type": "deps"
+      },
+      {
+        "section": "♻️ OPS",
+        "type": "ops"
+      },
+      {
+        "section": "♻️ OPS",
+        "type": "ci"
+      },
+      {
+        "section": "📜 Documentation",
+        "type": "docs"
+      }
+    ]
+  }
