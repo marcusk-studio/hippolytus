@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.1](https://github.com/marcusk-studio/hippolytus/compare/app-v1.10.0...app-v1.10.1) (2025-02-04)
+
+
+### 👽 Miscellaneous
+
+* configure build workflow ([#6](https://github.com/marcusk-studio/hippolytus/issues/6)) ([7548fe3](https://github.com/marcusk-studio/hippolytus/commit/7548fe34dc8c4d6082dc74296aff331676e67151))
+
 ## [1.10.0](https://github.com/marcusk-studio/hippolytus/compare/app-v1.9.0...app-v1.10.0) (2025-02-04)
 
 

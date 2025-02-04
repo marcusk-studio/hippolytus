@@ -1,5 +1,5 @@
 {
-    "apps/app": "1.10.0",
+    "apps/app": "1.10.1",
     "apps/app-frontend": "1.10.0",
     "packages/app-lib": "1.9.0"
 }
