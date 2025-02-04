@@ -1,0 +1,79 @@
+name: Test Upload Only
+'on':
+  push:
+    branches:
+      - test1
+permissions:
+  contents: read
+  actions: read  # ← Required for cross-workflow artifact access
+  id-token: write
+
+jobs:
+    upload-s3:
+      runs-on: ubuntu-latest
+      steps:
+        - name: Download all artifacts
+          uses: actions/download-artifact@v4
+          with:
+            path: artifacts
+            run-id: 13146835720
+
+        - name: Extract version from Windows binary
+          id: extract_version
+          run: |
+            exe_path=$(find artifacts/windows-latest/nsis -name "MARCUSK Launcher_*_x64-setup.exe" | head -1)
+            filename=$(basename "$exe_path")
+            version=$(echo "$filename" | sed -E 's/MARCUSK Launcher_([0-9]+\.[0-9]+\.[0-9]+)_x64-setup.exe/\1/')
+            echo "version=$version" >> $GITHUB_OUTPUT
+
+        - name: Generate update manifest
+          id: generate_manifest
+          env:
+            DOWNLOAD_URL_BASE: 'https://cdn.marcuskstudio.live'
+            VERSION: ${{ steps.extract_version.outputs.version }}
+          run: |
+            cat > update-manifest.json << EOF
+            {
+              "version": "${VERSION}",
+              "notes": "See the assets to download this version and install.",
+              "pub_date": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+              "platforms": {
+                "darwin-x86_64": {
+                  signature": "$(cat artifacts/macos-latest/*/*.app.tar.gz.sig)",
+                  "url": "${DOWNLOAD_URL_BASE}/releases/latest/$(basename artifacts/macos-latest/*/*.app.tar.gz)"
+                },
+                "darwin-aarch64": {
+                  "signature": "$(cat artifacts/macos-latest/*/*.app.tar.gz.sig)",
+                  "url": "${DOWNLOAD_URL_BASE}/releases/latest/$(basename artifacts/macos-latest/*/*.app.tar.gz)"
+                },
+                "linux-x86_64": {
+                  "signature": "$(cat artifacts/ubuntu-22.04/*/*.AppImage.tar.gz.sig)",
+                  "url": "${DOWNLOAD_URL_BASE}/releases/latest/$(basename artifacts/ubuntu-22.04/*/*.AppImage.tar.gz)"
+                },
+                "windows-x86_64": {
+                  "signature": "$(cat artifacts/windows-latest/msi/*.msi.zip.sig)",
+                  url": "${DOWNLOAD_URL_BASE}/releases/latest/$(basename artifacts/windows-latest/msi/*.msi.zip)"
+                }
+              }
+            }
+            EOF
+
+        - name: Upload artifacts to R2
+          uses: randomairborne/r2-release@v1.0.1
+          with:
+            r2-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+            r2-access-key-id: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+            r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+            r2-bucket: launcherbinaries
+            r2-path: releases/latest
+            local-path: artifacts
+
+        - name: Upload update manifest to R2
+          uses: randomairborne/r2-release@v1.0.1
+          with:
+            r2-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+            r2-access-key-id: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+            r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+            r2-bucket: launcherbinaries
+            local-path: update-manifest.json
+            r2-path: update-manifest.json
