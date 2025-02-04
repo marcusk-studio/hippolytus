@@ -122,7 +122,11 @@ const fetchSuccessful = ref(false)
 fetchSuccessful.value = await fetchFeaturedProjects()
 
 const instanceFilters = computed(() => {
-  const filters = []
+  const filters: {
+    type: string;
+    option: string;
+    negative?: boolean;
+  }[] = []
 
   if (fetchSuccessful.value && featuredProjects.value.length > 0) {
     featuredProjects.value.forEach(project => {
@@ -255,8 +259,8 @@ async function refreshSearch() {
   if (instance.value) {
     for (const val of rawResults.result.hits) {
       val.installed =
-        newlyInstalled.value.includes(val.project_id) ||
-        Object.values(instanceProjects.value).some(
+        (newlyInstalled.value as string[]).includes(val.project_id) ||
+        (instanceProjects.value ?? []).some(
           (x) => x.metadata && x.metadata.project_id === val.project_id,
         )
     }
@@ -324,8 +328,8 @@ const selectableProjectTypes = computed(() => {
 
   if (instance.value) {
     if (
-      availableGameVersions.value.findIndex((x) => x.version === instance.value.game_version) <=
-      availableGameVersions.value.findIndex((x) => x.version === '1.13')
+      (availableGameVersions.value as GameVersion[]).findIndex((x) => x.version === instance.value?.game_version) <=
+      (availableGameVersions.value as GameVersion[]).findIndex((x) => x.version === '1.13')
     ) {
       dataPacks = true
     }
@@ -388,8 +392,8 @@ const messages = defineMessages({
 })
 
 const options = ref(null)
-const handleRightClick = (event, result) => {
-  options.value.showMenu(event, result, [
+const handleRightClick = (event: MouseEvent, result: any) => {
+  (options.value as any)?.showMenu(event, result, [
     {
       name: 'open_link',
     },
@@ -398,7 +402,7 @@ const handleRightClick = (event, result) => {
     },
   ])
 }
-const handleOptionsClick = (args) => {
+const handleOptionsClick = (args: { option: string; item: { project_type: string; slug: string } }) => {
   switch (args.option) {
     case 'open_link':
       openUrl(`https://modrinth.com/${args.item.project_type}/${args.item.slug}`)
@@ -417,7 +421,7 @@ await refreshSearch()
 <template>
   <div>
     <div class="content-wrapper">
-      <div class="blur-background">
+      <div>
         <div ref="searchWrapper" class="flex flex-col gap-3 p-6">
           <template v-if="instance">
             <InstanceIndicator :instance="instance" />
@@ -425,16 +429,6 @@ await refreshSearch()
           </template>
           <NavTabs :links="selectableProjectTypes" />
           <div class="flex gap-2">
-            <DropdownSelect v-slot="{ selected }" v-model="currentSortType" class="max-w-[16rem]" name="Sort by"
-              :options="sortTypes as any" :display-name="(option: SortType | undefined) => option?.display">
-              <span class="font-semibold text-primary">Sort by: </span>
-              <span class="font-semibold text-secondary">{{ selected }}</span>
-            </DropdownSelect>
-            <DropdownSelect v-slot="{ selected }" v-model="maxResults" name="Max results"
-              :options="[5, 10, 15, 20, 50, 100]" class="max-w-[9rem]">
-              <span class="font-semibold text-primary">View: </span>
-              <span class="font-semibold text-secondary">{{ selected }}</span>
-            </DropdownSelect>
             <Pagination :page="currentPage" :count="pageCount" class="ml-auto" @switch-page="setPage" />
           </div>
           <SearchFilterControl v-model:selected-filters="currentFilters"
@@ -445,34 +439,13 @@ await refreshSearch()
             <section v-if="loading" class="offline">
               <LoadingIndicator />
             </section>
-            <section v-else-if="offline && results.total_hits === 0" class="offline">
+            <section v-else-if="offline && results?.total_hits === 0" class="offline">
               You are currently offline. Connect to the internet to browse Modrinth!
             </section>
             <section v-else class="project-list display-mode--list instance-results" role="list">
-              <SearchCard v-for="result in results.hits" :key="result?.project_id" :project="result"
-                :instance="instance" :categories="[
-            ...categories.filter(
-              (cat) =>
-                result?.display_categories.includes(cat.name) && cat.project_type === projectType,
-            ),
-            ...loaders.filter(
-              (loader) =>
-                result?.display_categories.includes(loader.name) &&
-                loader.supported_project_types?.includes(projectType),
-            ),
-          ]" :installed="result.installed || newlyInstalled.includes(result.project_id)" @install="(id) => {
-            newlyInstalled.push(id)
-          }
-            " @contextmenu.prevent.stop="(event) => handleRightClick(event, result)" />
-              <ContextMenu ref="options" @option-clicked="handleOptionsClick">
-                <template #open_link>
-                  <GlobeIcon /> Open in Modrinth
-                  <ExternalIcon />
-                </template>
-                <template #copy_link>
-                  <ClipboardCopyIcon /> Copy link
-                </template>
-              </ContextMenu>
+              <!-- @vue-ignore -->
+              <SearchCard v-for="result in results?.hits" :key="result?.project_id" :project="result"
+                :instance="instance ? instance : undefined" :categories="categories" />
             </section>
             <div class="flex justify-end">
               <pagination :page="currentPage" :count="pageCount" class="pagination-after" @switch-page="setPage" />

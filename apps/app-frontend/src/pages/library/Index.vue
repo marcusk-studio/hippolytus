@@ -35,15 +35,13 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="p-6 flex blur-background flex-col gap-3">
+  <div class="p-6 flex flex-col gap-3">
     <h1 class="m-0 text-2xl hidden">Library</h1>
-    <NavTabs
-      :links="[
-        { label: 'All instances', href: `/library` },
-        { label: 'Shared with me', href: `/library/shared`, shown: false },
-        { label: 'Saved', href: `/library/saved`, shown: false },
-      ]"
-    />
+    <NavTabs :links="[
+      { label: 'All instances', href: `/library` },
+      { label: 'Shared with me', href: `/library/shared`, shown: false },
+      { label: 'Saved', href: `/library/saved`, shown: false },
+    ]" />
     <template v-if="instances.length > 0">
       <RouterView :instances="instances" />
     </template>
@@ -88,4 +86,3 @@ onUnmounted(() => {
   height: 82vh;
 }
 </style>
-

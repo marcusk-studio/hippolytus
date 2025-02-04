@@ -36,7 +36,7 @@ pub async fn modrinth_login<R: Runtime>(
     .inner_size(420.0, 632.0)
     .max_inner_size(420.0, 632.0)
     .zoom_hotkeys_enabled(false)
-    .title("Sign into Modrinth")
+    .title("Sign into MARCUSK Launcher")
     .always_on_top(true)
     .center()
     .build()?;

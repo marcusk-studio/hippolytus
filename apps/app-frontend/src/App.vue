@@ -368,44 +368,38 @@ function handleAuxClick(e) {
   <SplashScreen v-if="!stateFailed" ref="splashScreen" data-tauri-drag-region />
   <div id="teleports"></div>
   <div v-if="stateInitialized" class="flex overflow-hidden flex-col px-8 py-7 bg-[#0B0101] h-screen">
-     <Suspense>
+    <Suspense>
       <AppSettingsModal ref="settingsModal" />
-     </Suspense>
+    </Suspense>
     <!-- Top Navigation Bar -->
     <div data-tauri-drag-region class="app-grid-statusbar bg-bg-raised h-[--top-bar-height] flex rounded-[25px]">
       <div data-tauri-drag-region class="flex p-3 w-full items-center relative">
         <div class="flex items-center gap-1">
           <button
             class="cursor-pointer p-0 m-0 border-none outline-none bg-button-bg rounded-full flex items-center justify-center w-6 h-6 hover:brightness-75 transition-all"
-            @click="router.back()"
-          >
+            @click="router.back()">
             <LeftArrowIcon />
           </button>
           <button
             class="cursor-pointer p-0 m-0 border-none outline-none bg-button-bg rounded-full flex items-center justify-center w-6 h-6 hover:brightness-75 transition-all"
-            @click="router.forward()"
-          >
+            @click="router.forward()">
             <RightArrowIcon />
           </button>
         </div>
-        <div class="w-[200px]">
-          <Breadcrumbs class="pt-[2px]" />
+        <div class="w-[400px] overflow-hidden">
+          <div class="truncate">
+            <Breadcrumbs class="pt-[2px]" />
+          </div>
         </div>
         <div class="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
           <ModrinthAppLogo class="h-16 w-auto text-contrast" />
         </div>
         <div class="flex-grow"></div>
         <div class="flex items-center gap-3">
-          <ButtonStyled
-            v-if="!forceSidebar && themeStore.toggleSidebar"
-            :type="sidebarToggled ? 'standard' : 'transparent'"
-            circular
-          >
-            <button
-              class="mr-3 transition-transform"
-              :class="{ 'rotate-180': !sidebarToggled }"
-              @click="sidebarToggled = !sidebarToggled"
-            >
+          <ButtonStyled v-if="!forceSidebar && themeStore.toggleSidebar"
+            :type="sidebarToggled ? 'standard' : 'transparent'" circular>
+            <button class="mr-3 transition-transform" :class="{ 'rotate-180': !sidebarToggled }"
+              @click="sidebarToggled = !sidebarToggled">
               <RightArrowIcon />
             </button>
           </ButtonStyled>
@@ -416,11 +410,7 @@ function handleAuxClick(e) {
             <Button class="titlebar-button" icon-only @click="() => getCurrentWindow().minimize()">
               <MinimizeIcon />
             </Button>
-            <Button
-              class="titlebar-button"
-              icon-only
-              @click="() => getCurrentWindow().toggleMaximize()"
-            >
+            <Button class="titlebar-button" icon-only @click="() => getCurrentWindow().toggleMaximize()">
               <RestoreIcon v-if="isMaximized" />
               <MaximizeIcon v-else />
             </Button>
@@ -433,93 +423,79 @@ function handleAuxClick(e) {
     </div>
 
     <!-- Main Content Area -->
-    <div class="flex gap-5 mt-6"
-       :style="{
-        height: '90%',
-      }">
+    <div class="flex gap-5 mt-6" :style="{
+    height: '90%',
+  }">
 
       <!-- Left Sidebar -->
       <div class="app-grid-navbar bg-bg-raised flex flex-col p-4 w-[--left-bar-width] rounded-[25px] h-full">
-    <div class="flex flex-col h-full">
-      <div class="w-full">
-        <suspense><AccountsCard mode="normal" class="mb-4" /></suspense>
+        <div class="flex flex-col h-full">
+          <div class="w-full">
+            <suspense>
+              <AccountsCard mode="normal" class="mb-4" />
+            </suspense>
 
-      </div>
+          </div>
 
-      <!-- Main Navigation -->
-      <nav
-        class="flex flex-col justify-center items-start px-5 py-2.5 rounded-3xl bg-zinc-800 bg-opacity-50"
-        role="navigation"
-        aria-label="Main navigation"
-      >
-        <div class="flex flex-col items-start w-full gap-2">
-          <NavButton
-            v-tooltip.right="'Home'"
-            to="/"
-            class="flex gap-4 justify-center items-center px-2 py-1.5 rounded-xl min-h-[45px] w-full hover:bg-zinc-700 focus:outline-none"
-            tabindex="0"
-            aria-label="Navigate to home page"
-          >
-            <HomeIcon class="object-contain shrink-0 self-stretch my-auto w-6 aspect-square" />
-            <span class="self-stretch my-auto">Home</span>
-          </NavButton>
+          <!-- Main Navigation -->
+          <nav class="flex flex-col justify-center items-start px-5 py-2.5 rounded-3xl bg-zinc-800 bg-opacity-50"
+            role="navigation" aria-label="Main navigation">
+            <div class="flex flex-col items-start w-full gap-2">
+              <NavButton v-tooltip.right="'Home'" to="/"
+                class="flex gap-4 justify-center items-center px-2 py-1.5 rounded-xl min-h-[45px] w-full hover:bg-zinc-700 focus:outline-none"
+                tabindex="0" aria-label="Navigate to home page">
+                <HomeIcon class="object-contain shrink-0 self-stretch my-auto w-6 aspect-square" />
+                <span class="self-stretch my-auto">Home</span>
+              </NavButton>
 
-          <NavButton
-            v-tooltip.right="'Discover content'"
-            to="/browse/modpack"
-            :is-primary="() => route.path.startsWith('/browse') && !route.query.i"
-            :is-subpage="(route) => route.path.startsWith('/project') && !route.query.i"
-            class="flex gap-4 justify-center items-center px-2 py-1.5 rounded-xl min-h-[45px] w-full hover:bg-zinc-700 focus:outline-none"
-            tabindex="0"
-            aria-label="Navigate to discover page"
-          >
-            <CompassIcon class="object-contain shrink-0 self-stretch my-auto w-6 aspect-square" />
-            <span class="self-stretch my-auto">Discover</span>
-          </NavButton>
+              <NavButton v-tooltip.right="'Discover content'" to="/browse/modpack"
+                :is-primary="() => route.path.startsWith('/browse') && !route.query.i"
+                :is-subpage="(route) => route.path.startsWith('/project') && !route.query.i"
+                class="flex gap-4 justify-center items-center px-2 py-1.5 rounded-xl min-h-[45px] w-full hover:bg-zinc-700 focus:outline-none"
+                tabindex="0" aria-label="Navigate to discover page">
+                <CompassIcon class="object-contain shrink-0 self-stretch my-auto w-6 aspect-square" />
+                <span class="self-stretch my-auto">Discover</span>
+              </NavButton>
 
-          <NavButton
-            v-tooltip.right="'Library'"
-            to="/library"
-            :is-subpage="
-              () =>
-                route.path.startsWith('/instance') ||
-                ((route.path.startsWith('/browse') || route.path.startsWith('/project')) &&
-                  route.query.i)
-            "
-            class="flex gap-4 justify-center items-center px-2 py-1.5 rounded-xl min-h-[45px] w-full hover:bg-zinc-700 focus:outline-none"
-            tabindex="0"
-            aria-label="Access your library"
-          >
-            <LibraryIcon class="object-contain shrink-0 self-stretch my-auto w-6 aspect-square" />
-            <span class="self-stretch my-auto">Library</span>
-          </NavButton>
+              <NavButton v-tooltip.right="'Library'" to="/library" :is-subpage="() =>
+    route.path.startsWith('/instance') ||
+    ((route.path.startsWith('/browse') || route.path.startsWith('/project')) &&
+      route.query.i)
+    " class="flex gap-4 justify-center items-center px-2 py-1.5 rounded-xl min-h-[45px] w-full hover:bg-zinc-700 focus:outline-none"
+                tabindex="0" aria-label="Access your library">
+                <LibraryIcon class="object-contain shrink-0 self-stretch my-auto w-6 aspect-square" />
+                <span class="self-stretch my-auto">Library</span>
+              </NavButton>
+            </div>
+          </nav>
         </div>
-      </nav>
-    </div>
-    <div class="flex flex-grow"></div>
-    <nav class="flex flex-col justify-center items-start px-5 py-2.5 rounded-3xl bg-zinc-800 bg-opacity-50">
-    <NavButton  class="flex gap-4 justify-center items-center px-2 py-1.5 rounded-xl min-h-[45px] w-full hover:bg-zinc-700 focus:outline-none" v-tooltip.right="'Settings'" :to="() => $refs.settingsModal.show()">
-        <SettingsIcon />
-        <span class="self-stretch my-auto">Settings</span>
-      </NavButton>
-    </nav>
-  </div>
+        <div class="flex flex-grow"></div>
+        <nav class="flex flex-col justify-center items-start px-5 py-2.5 rounded-3xl bg-zinc-800 bg-opacity-50">
+          <NavButton
+            class="flex gap-4 justify-center items-center px-2 py-1.5 rounded-xl min-h-[45px] w-full hover:bg-zinc-700 focus:outline-none"
+            v-tooltip.right="'Settings'" :to="() => $refs.settingsModal.show()">
+            <SettingsIcon />
+            <span class="self-stretch my-auto">Settings</span>
+          </NavButton>
+        </nav>
+      </div>
       <!-- Main Content -->
-      <div
-        class="flex-grow rounded-[25px] overflow-auto mt-4 mb-4"
-        :style="{
-          backgroundImage: randomBackground ? `url(${randomBackground})` : undefined,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center'
-        }"
-       >
-        <RouterView v-slot="{ Component }">
-          <template v-if="Component">
-            <Suspense @pending="loading.startLoading()" @resolve="loading.stopLoading()">
-              <component :is="Component"></component>
-            </Suspense>
-          </template>
-        </RouterView>
+      <div class="flex-grow rounded-[25px] overflow-hidden mt-4 mb-4" :style="{
+    backgroundImage: randomBackground ? `url(${randomBackground})` : undefined,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    position: 'relative',
+  }">
+        <div v-if="route.path !== '/'" class="backdrop-blur-md absolute inset-0 z-0"></div>
+        <div class="relative z-10 h-full overflow-auto">
+          <RouterView v-slot="{ Component }">
+            <template v-if="Component">
+              <Suspense @pending="loading.startLoading()" @resolve="loading.stopLoading()">
+                <component :is="Component"></component>
+              </Suspense>
+            </template>
+          </RouterView>
+        </div>
       </div>
 
     </div>
@@ -577,6 +553,7 @@ function handleAuxClick(e) {
     }
 
     &.close {
+
       &:hover,
       &:active {
         color: var(--color-accent-contrast);
@@ -718,14 +695,15 @@ function handleAuxClick(e) {
   display: none;
 }
 
-.sidebar-teleport-content:empty + .sidebar-default-content.sidebar-enabled {
+.sidebar-teleport-content:empty+.sidebar-default-content.sidebar-enabled {
   display: contents;
 }
 </style>
 <style>
 .mac {
   .app-grid-statusbar {
-    padding-left: 5rem;
+    padding-left: 0.5rem;
+    padding-top: 0.5rem;
   }
 }
 
