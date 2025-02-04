@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.0](https://github.com/marcusk-studio/hippolytus/compare/app-v1.9.0...app-v1.10.0) (2025-02-04)
+
+
+### ✨ Features
+
+* **app-f:** ui overhaul ([#4](https://github.com/marcusk-studio/hippolytus/issues/4)) ([8716e0b](https://github.com/marcusk-studio/hippolytus/commit/8716e0b7a1e7974679ebaff50e4ae19b3e3bc24d))
+
 ## [1.9.0](https://github.com/marcusk-studio/hippolytus/compare/app-v1.8.6...app-v1.9.0) (2025-02-03)
 
 
