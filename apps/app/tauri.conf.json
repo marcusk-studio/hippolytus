@@ -43,10 +43,10 @@
       }
     ]
   },
-  "productName": "Modrinth App",
+  "productName": "MARCUSK Launcher",
   "version": "0.9.2",
   "mainBinaryName": "Modrinth App",
-  "identifier": "ModrinthApp",
+  "identifier": "MARCUSKLauncher",
   "plugins": {
     "deep-link": {
       "desktop": {
@@ -65,7 +65,7 @@
         "fullscreen": false,
         "height": 800,
         "resizable": true,
-        "title": "Modrinth App",
+        "title": "MARCUSK Launcher",
         "width": 1280,
         "minHeight": 700,
         "minWidth": 1100,
