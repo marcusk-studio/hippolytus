@@ -1,111 +1,104 @@
 <template>
   <div>
     <div class="flex flex-col gap-4 p-6 relative">
-      <div class="blurred-background"></div>
       <div class="relative z-10">
         <InstanceIndicator v-if="instance" :instance="instance" />
         <template v-if="data">
-          <Teleport
-            v-if="themeStore.featureFlags.project_background"
-            to="#background-teleport-target"
-          >
+          <Teleport v-if="themeStore.featureFlags.project_background" to="#background-teleport-target">
             <ProjectBackgroundGradient :project="data" />
           </Teleport>
           <ProjectHeader :project="data" @contextmenu.prevent.stop="handleRightClick">
             <template #actions>
               <ButtonStyled size="large" color="brand">
-                <button
-                  v-tooltip="installed ? `This project is already installed` : null"
-                  :disabled="installed || installing"
-                  @click="install(null)"
-                >
+                <button v-tooltip="installed ? `This project is already installed` : null"
+                  :disabled="installed || installing" @click="install(null)">
                   <DownloadIcon v-if="!installed && !installing" />
                   <CheckIcon v-else-if="installed" />
                   {{ installing ? 'Installing...' : installed ? 'Installed' : 'Install' }}
                 </button>
               </ButtonStyled>
               <ButtonStyled size="large" circular type="transparent">
-                <OverflowMenu
-                  :tooltip="`More options`"
-                  :options="[
-                    {
-                      id: 'follow',
-                      disabled: true,
-                      tooltip: 'Coming soon',
-                      action: () => {},
-                    },
-                    {
-                      id: 'save',
-                      disabled: true,
-                      tooltip: 'Coming soon',
-                      action: () => {},
-                    },
-                    {
-                      id: 'open-in-browser',
-                      link: `https://modrinth.com/${data.project_type}/${data.slug}`,
-                      external: true,
-                    },
-                    {
-                      divider: true,
-                    },
-                    {
-                      id: 'report',
-                      color: 'red',
-                      hoverFilled: true,
-                      link: `https://modrinth.com/report?item=project&itemID=${data.id}`,
-                    },
-                  ]"
-                  aria-label="More options"
-                >
+                <OverflowMenu :tooltip="`More options`" :options="[
+          {
+            id: 'follow',
+            disabled: true,
+            tooltip: 'Coming soon',
+            action: () => { },
+          },
+          {
+            id: 'save',
+            disabled: true,
+            tooltip: 'Coming soon',
+            action: () => { },
+          },
+          {
+            id: 'open-in-browser',
+            link: `https://modrinth.com/${data.project_type}/${data.slug}`,
+            external: true,
+          },
+          {
+            divider: true,
+          },
+          {
+            id: 'report',
+            color: 'red',
+            hoverFilled: true,
+            link: `https://modrinth.com/report?item=project&itemID=${data.id}`,
+          },
+        ]" aria-label="More options">
                   <MoreVerticalIcon aria-hidden="true" />
-                  <template #open-in-browser> <ExternalIcon /> Open in browser </template>
-                  <template #follow> <HeartIcon /> Follow </template>
-                  <template #save> <BookmarkIcon /> Save </template>
-                  <template #report> <ReportIcon /> Report </template>
+                  <template #open-in-browser>
+                    <ExternalIcon /> Open in browser
+                  </template>
+                  <template #follow>
+                    <HeartIcon /> Follow
+                  </template>
+                  <template #save>
+                    <BookmarkIcon /> Save
+                  </template>
+                  <template #report>
+                    <ReportIcon /> Report
+                  </template>
                 </OverflowMenu>
               </ButtonStyled>
             </template>
           </ProjectHeader>
-          <NavTabs
-            :links="[
-              {
-                label: 'Description',
-                href: `/project/${$route.params.id}`,
-              },
-              {
-                label: 'Versions',
-                href: {
-                  path: `/project/${$route.params.id}/versions`,
-                  query: { l: instance?.loader, g: instance?.game_version },
-                },
-                subpages: ['version'],
-              },
-              {
-                label: 'Gallery',
-                href: `/project/${$route.params.id}/gallery`,
-                shown: data.gallery.length > 0,
-              },
-            ]"
-            class="nav-spacing"
-          />
-          <RouterView
-            :project="data"
-            :versions="versions"
-            :members="members"
-            :instance="instance"
-            :install="install"
-            :installed="installed"
-            :installing="installing"
-            :installed-version="installedVersion"
-          />
+          <NavTabs :links="[
+          {
+            label: 'Description',
+            href: `/project/${$route.params.id}`,
+          },
+          {
+            label: 'Versions',
+            href: {
+              path: `/project/${$route.params.id}/versions`,
+              query: { l: instance?.loader, g: instance?.game_version },
+            },
+            subpages: ['version'],
+          },
+          {
+            label: 'Gallery',
+            href: `/project/${$route.params.id}/gallery`,
+            shown: data.gallery.length > 0,
+          },
+        ]" class="nav-spacing" />
+          <RouterView :project="data" :versions="versions" :members="members" :instance="instance" :install="install"
+            :installed="installed" :installing="installing" :installed-version="installedVersion" />
         </template>
         <template v-else> Project data couldn't not be loaded. </template>
       </div>
     </div>
     <ContextMenu ref="options" @option-clicked="handleOptionsClick">
-      <template #install> <DownloadIcon /> Install </template>
-      <template #open_link> <GlobeIcon /> Open in Modrinth <ExternalIcon /> </template>
-      <template #copy_link> <ClipboardCopyIcon /> Copy link </template>
+      <template #install>
+        <DownloadIcon /> Install
+      </template>
+      <template #open_link>
+        <GlobeIcon /> Open in Modrinth
+        <ExternalIcon />
+      </template>
+      <template #copy_link>
+        <ClipboardCopyIcon /> Copy link
+      </template>
     </ContextMenu>
   </div>
 </template>
@@ -171,14 +164,14 @@ async function fetchProjectData() {
   const project = await get_project(route.params.id, 'must_revalidate').catch(handleError)
 
   data.value = project
-  ;[versions.value, members.value, categories.value, instance.value, instanceProjects.value] =
-    await Promise.all([
-      get_version_many(project.versions, 'must_revalidate').catch(handleError),
-      get_team(project.team).catch(handleError),
-      get_categories().catch(handleError),
-      route.query.i ? getInstance(route.query.i).catch(handleError) : Promise.resolve(),
-      route.query.i ? getInstanceProjects(route.query.i).catch(handleError) : Promise.resolve(),
-    ])
+    ;[versions.value, members.value, categories.value, instance.value, instanceProjects.value] =
+      await Promise.all([
+        get_version_many(project.versions, 'must_revalidate').catch(handleError),
+        get_team(project.team).catch(handleError),
+        get_categories().catch(handleError),
+        route.query.i ? getInstance(route.query.i).catch(handleError) : Promise.resolve(),
+        route.query.i ? getInstanceProjects(route.query.i).catch(handleError) : Promise.resolve(),
+      ])
 
   versions.value = versions.value.sort((a, b) => dayjs(b.date_published) - dayjs(a.date_published))
 
@@ -381,6 +374,7 @@ const handleOptionsClick = (args) => {
 
     &:focus-visible,
     &:hover {
+
       svg,
       img,
       span {
@@ -389,6 +383,7 @@ const handleOptionsClick = (args) => {
     }
 
     &:active {
+
       svg,
       img,
       span {
