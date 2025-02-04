@@ -1,7 +1,7 @@
 import { posthog } from 'posthog-js'
 
 export const initAnalytics = () => {
-  posthog.init('phc_hm2ihMpTAoE86xIm7XzsCB8RPiTRKivViK5biiHedm', {
+  posthog.init('phc_POpL1yZ9chHj2zRqMu4GCofU5PDXeKIyUEfwXp7NCZ9', {
     persistence: 'localStorage',
   })
 }
