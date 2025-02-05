@@ -42,7 +42,7 @@ pub async fn login<R: Runtime>(
             },
         )?),
     )
-    .title("Sign into Modrinth")
+    .title("Sign into the MARCUSK Launcher")
     .always_on_top(true)
     .center()
     .build()?;
