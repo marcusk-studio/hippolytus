@@ -213,51 +213,57 @@ jobs:
       - name: Print directory structure
         run: ls -R artifacts
 
-      - name: Generate update manifest
-        id: generate_manifest
-        env:
-          DOWNLOAD_URL_BASE: 'https://cdn.marcuskstudio.live'
-          VERSION: ${{ steps.get_version.outputs.version }}
-        run: |
-          cat > update-manifest.json << EOF
-          {
-            "version": "${VERSION}",
-            "notes": "A new version of the MARCUSK Launcher is out!.",
-            "pub_date": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-            "platforms": {
-              "darwin-x86_64": {
-                "signature": "$(cat artifacts/macos-latest/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig)",
-                "url": "https://cdn.marcuskstudio.live/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/macos/MARCUSK%20Launcher.app.tar.gz",
-                "install_urls": [
-                  "https://cdn.marcuskstudio.live/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/dmg/MARCUSK%20Launcher_${VERSION}_universal.dmg"
-                ]
-              },
-              "darwin-aarch64": {
-                "signature": "$(cat artifacts/macos-latest/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig)",
-                "url": "https://cdn.marcuskstudio.live/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/macos/MARCUSK%20Launcher.app.tar.gz",
-                "install_urls": [
-                  "https://cdn.marcuskstudio.live/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/macos/MARCUSK%20Launcher.app.tar.gz"
-                ]
-              },
-              "linux-x86_64": {
-                "signature": "$(cat artifacts/ubuntu-22.04/release/bundle/appimage/*.AppImage.tar.gz.sig)",
-                "url": "https://cdn.marcuskstudio.live/releases/${VERSION}/ubuntu-22.04/release/bundle/appimage/MARCUSK%20Launcher_${VERSION}_amd64.AppImage.tar.gz",
-                "install_urls": [
-                  "https://cdn.marcuskstudio.live/releases/${VERSION}/ubuntu-22.04/release/bundle/deb/MARCUSK%20Launcher_${VERSION}_amd64.deb",
-                  "https://cdn.marcuskstudio.live/releases/${VERSION}/ubuntu-22.04/release/bundle/appimage/MARCUSK%20Launcher_${VERSION}_amd64.AppImage",
-                  "https://cdn.marcuskstudio.live/releases/${VERSION}/ubuntu-22.04/release/bundle/rpm/MARCUSK%20Launcher-${VERSION}-1.x86_64.rpm"
-                ]
-              },
-              "windows-x86_64": {
-                "signature": "$(cat artifacts/windows-latest/release/bundle/nsis/MARCUSK%20Launcher_${VERSION}_x64-setup.nsis.zip.sig)",
-                "url": "https://cdn.marcuskstudio.live/releases/${VERSION}/windows-latest/release/bundle/nsis/MARCUSK%20Launcher_${VERSION}_x64-setup.nsis.zip",
-                "install_urls": [
-                  "https://cdn.marcuskstudio.live/releases/${VERSION}/windows-latest/release/bundle/nsis/MARCUSK%20Launcher_${VERSION}_x64-setup.exe"
-                ]
-              }
+    - name: Generate update manifest
+      id: generate_manifest
+      env:
+        DOWNLOAD_URL_BASE: 'https://cdn.marcuskstudio.live'
+        VERSION: ${{ steps.get_version.outputs.version }}
+      run: |
+        # Read signatures into variables
+        DARWIN_SIGNATURE=$(cat artifacts/macos-latest/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig)
+        LINUX_SIGNATURE=$(cat artifacts/ubuntu-22.04/release/bundle/appimage/*.AppImage.tar.gz.sig)
+        WINDOWS_SIGNATURE=$(cat "artifacts/windows-latest/release/bundle/nsis/MARCUSK Launcher_${VERSION}_x64-setup.nsis.zip.sig")
+
+        # Generate JSON file
+        cat > update-manifest.json <<EOF
+        {
+          "version": "${VERSION}",
+          "notes": "A new version of the MARCUSK Launcher is out!",
+          "pub_date": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+          "platforms": {
+            "darwin-x86_64": {
+              "signature": "${DARWIN_SIGNATURE}",
+              "url": "${DOWNLOAD_URL_BASE}/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/macos/MARCUSK%20Launcher.app.tar.gz",
+              "install_urls": [
+                "${DOWNLOAD_URL_BASE}/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/dmg/MARCUSK%20Launcher_${VERSION}_universal.dmg"
+              ]
+            },
+            "darwin-aarch64": {
+              "signature": "${DARWIN_SIGNATURE}",
+              "url": "${DOWNLOAD_URL_BASE}/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/macos/MARCUSK%20Launcher.app.tar.gz",
+              "install_urls": [
+                "${DOWNLOAD_URL_BASE}/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/macos/MARCUSK%20Launcher.app.tar.gz"
+              ]
+            },
+            "linux-x86_64": {
+              "signature": "${LINUX_SIGNATURE}",
+              "url": "${DOWNLOAD_URL_BASE}/releases/${VERSION}/ubuntu-22.04/release/bundle/appimage/MARCUSK%20Launcher_${VERSION}_amd64.AppImage.tar.gz",
+              "install_urls": [
+                "${DOWNLOAD_URL_BASE}/releases/${VERSION}/ubuntu-22.04/release/bundle/deb/MARCUSK%20Launcher_${VERSION}_amd64.deb",
+                "${DOWNLOAD_URL_BASE}/releases/${VERSION}/ubuntu-22.04/release/bundle/appimage/MARCUSK%20Launcher_${VERSION}_amd64.AppImage",
+                "${DOWNLOAD_URL_BASE}/releases/${VERSION}/ubuntu-22.04/release/bundle/rpm/MARCUSK%20Launcher-${VERSION}-1.x86_64.rpm"
+              ]
+            },
+            "windows-x86_64": {
+              "signature": "${WINDOWS_SIGNATURE}",
+              "url": "${DOWNLOAD_URL_BASE}/releases/${VERSION}/windows-latest/release/bundle/nsis/MARCUSK%20Launcher_${VERSION}_x64-setup.nsis.zip",
+              "install_urls": [
+                "${DOWNLOAD_URL_BASE}/releases/${VERSION}/windows-latest/release/bundle/nsis/MARCUSK%20Launcher_${VERSION}_x64-setup.exe"
+              ]
             }
           }
-          EOF
+        }
+        EOF
 
       - name: Upload artifacts to R2
         uses: ryand56/r2-upload-action@latest
