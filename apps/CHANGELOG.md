@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.5](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.11.4...apps-v1.11.5) (2025-02-05)
+
+
+### 🐛 Bugfixes
+
+* **app-f:** eliminate theme selector ([805ac3c](https://github.com/marcusk-studio/hippolytus/commit/805ac3cd8b78875cfa7ea1edc4d68501e5d7c943))
+
 ## [1.11.4](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.11.3...apps-v1.11.4) (2025-02-05)
 
 
