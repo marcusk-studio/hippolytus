@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.3](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.11.2...apps-v1.11.3) (2025-02-05)
+
+
+### 👽 Miscellaneous
+
+* **app:** add google font to csp ([66b043f](https://github.com/marcusk-studio/hippolytus/commit/66b043fdde0bfb009a99df36928b1ac4676df16f))
+
 ## [1.11.2](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.11.1...apps-v1.11.2) (2025-02-05)
 
 
