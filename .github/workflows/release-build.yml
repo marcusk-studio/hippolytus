@@ -197,6 +197,14 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      
+      - name: Get version from manifest
+        id: get_version
+        run: |
+          version=$(jq -r '.apps' .release-please-manifest.json)
+          echo "version=$version" >> $GITHUB_OUTPUT
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -205,19 +213,11 @@ jobs:
       - name: Print directory structure
         run: ls -R artifacts
 
-      - name: Extract version from Windows binary
-        id: extract_version
-        run: |
-          exe_path=$(find artifacts/windows-latest/release/bundle/nsis -name "MARCUSK Launcher_*_x64-setup.exe" | head -1)
-          filename=$(basename "$exe_path")
-          version=$(echo "$filename" | sed -E 's/MARCUSK Launcher_([0-9]+\.[0-9]+\.[0-9]+)_x64-setup.exe/\1/')
-          echo "version=$version" >> $GITHUB_OUTPUT
-
       - name: Generate update manifest
         id: generate_manifest
         env:
           DOWNLOAD_URL_BASE: 'https://cdn.marcuskstudio.live'
-          VERSION: ${{ steps.extract_version.outputs.version }}
+          VERSION: ${{ steps.get_version.outputs.version }}
         run: |
           cat > update-manifest.json << EOF
           {
@@ -229,7 +229,7 @@ jobs:
                 "signature": "$(cat artifacts/macos-latest/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig)",
                 "url": "https://cdn.marcuskstudio.live/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/macos/MARCUSK%20Launcher.app.tar.gz",
                 "install_urls": [
-                  "https://cdn.marcuskstudio.live/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/dmg/MARCUSK%20Launcher_0.9.2_universal.dmg"
+                  "https://cdn.marcuskstudio.live/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/dmg/MARCUSK%20Launcher_${VERSION}_universal.dmg"
                 ]
               },
               "darwin-aarch64": {
@@ -249,7 +249,7 @@ jobs:
                 ]
               },
               "windows-x86_64": {
-                "signature": "$(cat artifacts/windows-latest/release/bundle/nsis/*.nsis.zip.sig)",
+                "signature": "$(cat artifacts/windows-latest/release/bundle/nsis/MARCUSK%20Launcher_${VERSION}_x64-setup.nsis.zip.sig",
                 "url": "https://cdn.marcuskstudio.live/releases/${VERSION}/windows-latest/release/bundle/nsis/MARCUSK%20Launcher_${VERSION}_x64-setup.nsis.zip",
                 "install_urls": [
                   "https://cdn.marcuskstudio.live/releases/${VERSION}/windows-latest/release/bundle/nsis/MARCUSK%20Launcher_${VERSION}_x64-setup.exe"
