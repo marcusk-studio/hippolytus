@@ -1,21 +1,14 @@
 {
+    "extra-files": [
+     {
+      "type": "json",
+      "path": "app/tauri.conf.json",
+      "jsonpath": "$.version"
+     }
+    ],
     "packages": {
-      "apps/app": {
-        "package-name": "app",
-        "release-type": "node",
-        "prerelease": false,
-        "include-v-in-tag": true,
-        "pull-request-header": "Hella Better than Helios 🚀"
-      },
-      "apps/app-frontend": {
-        "package-name": "app-frontend",
-        "release-type": "node",
-        "prerelease": false,
-        "include-v-in-tag": true,
-        "pull-request-header": "Hella Better than Helios 🚀"
-      },
-      "packages/app-lib": {
-        "package-name": "app-lib",
+      "apps": {
+        "package-name": "apps",
         "release-type": "node",
         "prerelease": false,
         "include-v-in-tag": true,
@@ -35,26 +28,6 @@
       {
         "section": "👽 Miscellaneous",
         "type": "chore"
-      },
-      {
-        "section": "👽 Miscellaneous",
-        "type": "style"
-      },
-      {
-        "section": "⬆️ Dependency updates",
-        "type": "deps"
-      },
-      {
-        "section": "♻️ OPS",
-        "type": "ops"
-      },
-      {
-        "section": "♻️ OPS",
-        "type": "ci"
-      },
-      {
-        "section": "📜 Documentation",
-        "type": "docs"
       }
     ]
   }
