@@ -11,16 +11,10 @@
     "copyright": "",
     "targets": "all",
     "externalBin": [],
-    "icon": [
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
-    ],
+    "icon": ["icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
-      "signCommand": "trusted-signing-cli -e https://weu.codesigning.azure.net -a marcusklauncher -c MarcuskStudioLauncher %1",
       "nsis": {
         "installMode": "perMachine",
         "installerHooks": "./nsis/hooks.nsi"
@@ -43,27 +37,15 @@
     },
     "fileAssociations": [
       {
-        "ext": [
-          "mrpack"
-        ],
+        "ext": ["mrpack"],
         "mimeType": "application/zip+mrpack"
       }
     ]
   },
-  "productName": "MARCUSK Launcher",
+  "productName": "MARCUSKLauncher",
   "version": "1.11.0",
-  "mainBinaryName": "MARCUSK Launcher",
+  "mainBinaryName": "MARCUSKLauncher",
   "identifier": "MARCUSKLauncher",
-  "plugins": {
-    "deep-link": {
-      "desktop": {
-        "schemes": [
-          "modrinth"
-        ]
-      },
-      "mobile": []
-    }
-  },
   "app": {
     "withGlobalTauri": false,
     "macOSPrivateApi": true,
@@ -85,24 +67,14 @@
     ],
     "security": {
       "assetProtocol": {
-        "scope": [
-          "$APPDATA/caches/icons/*",
-          "$APPCONFIG/caches/icons/*",
-          "$CONFIG/caches/icons/*"
-        ],
+        "scope": ["$APPDATA/caches/icons/*", "$APPCONFIG/caches/icons/*", "$CONFIG/caches/icons/*"],
         "enable": true
       },
-      "capabilities": [
-        "ads",
-        "core",
-        "plugins"
-      ],
+      "capabilities": ["ads", "core", "plugins"],
       "csp": {
         "default-src": "'self' customprotocol: asset:",
         "connect-src": "ipc: http://ipc.localhost https://modrinth.com https://*.modrinth.com https://*.posthog.com https://*.sentry.io https://api.mclo.gs https://cdn.marcuskstudio.live https://cdn.marcusk.fun",
-        "font-src": [
-          "https://cdn-raw.modrinth.com/fonts/inter/"
-        ],
+        "font-src": ["https://fonts.googleapis.com/"],
         "img-src": "https: 'unsafe-inline' 'self' asset: http://asset.localhost blob: data:",
         "style-src": "'unsafe-inline' 'self'",
         "script-src": "https://*.posthog.com 'self'",
