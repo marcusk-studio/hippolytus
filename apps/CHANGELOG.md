@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.1](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.11.0...apps-v1.11.1) (2025-02-05)
+
+
+### 👽 Miscellaneous
+
+* **app:** remove sign command ([6772ff7](https://github.com/marcusk-studio/hippolytus/commit/6772ff7c492dd724930cfb4b47fbdf8db7abc995))
+
 ## [1.11.0](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.10.0...apps-v1.11.0) (2025-02-05)
 
 
