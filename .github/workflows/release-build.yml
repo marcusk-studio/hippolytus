@@ -249,7 +249,7 @@ jobs:
                 ]
               },
               "windows-x86_64": {
-                "signature": "$(cat artifacts/windows-latest/release/bundle/nsis/MARCUSK%20Launcher_${VERSION}_x64-setup.nsis.zip.sig",
+                "signature": "$(cat artifacts/windows-latest/release/bundle/nsis/MARCUSK%20Launcher_${VERSION}_x64-setup.nsis.zip.sig)",
                 "url": "https://cdn.marcuskstudio.live/releases/${VERSION}/windows-latest/release/bundle/nsis/MARCUSK%20Launcher_${VERSION}_x64-setup.nsis.zip",
                 "install_urls": [
                   "https://cdn.marcuskstudio.live/releases/${VERSION}/windows-latest/release/bundle/nsis/MARCUSK%20Launcher_${VERSION}_x64-setup.exe"
