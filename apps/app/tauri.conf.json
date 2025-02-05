@@ -39,15 +39,7 @@
       "deb": {
         "depends": []
       }
-    },
-    "fileAssociations": [
-      {
-        "ext": [
-          "mrpack"
-        ],
-        "mimeType": "application/zip+mrpack"
-      }
-    ]
+    }
   },
   "productName": "MARCUSK Launcher",
   "version": "1.11.1",
