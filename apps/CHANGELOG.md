@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.4](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.11.3...apps-v1.11.4) (2025-02-05)
+
+
+### 🐛 Bugfixes
+
+* **app:** change icons to marcusk ([03b13b2](https://github.com/marcusk-studio/hippolytus/commit/03b13b268abc625c1d3163003243a922e6bcd38b))
+
 ## [1.11.3](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.11.2...apps-v1.11.3) (2025-02-05)
 
 
