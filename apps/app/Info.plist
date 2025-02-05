@@ -8,6 +8,8 @@
                 <key>CFBundleURLName</key>
                 <string>MARCUSKLauncher</string>
                 <key>CFBundleURLSchemes</key>
+                <array> 
+                </array>
             </dict>
         </array>
         <key>NSCameraUsageDescription</key>
