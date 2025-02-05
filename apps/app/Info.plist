@@ -6,12 +6,8 @@
         <array>
             <dict>
                 <key>CFBundleURLName</key>
-                <string>ModrinthApp</string>
+                <string>MARCUSKLauncher</string>
                 <key>CFBundleURLSchemes</key>
-                <array>
-                    <string>modrinth</string>
-                    <string>modrinthscheme</string>
-                </array>
             </dict>
         </array>
         <key>NSCameraUsageDescription</key>
