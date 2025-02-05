@@ -266,7 +266,7 @@ jobs:
           r2-access-key-id: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
           r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
           r2-bucket: launcherbinaries
-          destination-dir: releases/${{ steps.extract_version.outputs.version }}
+          destination-dir: releases/${{ steps.get_version.outputs.version }}
           source-dir: artifacts
           keep-file-fresh: true
 
