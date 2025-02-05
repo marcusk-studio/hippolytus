@@ -49,9 +49,9 @@
       }
     ]
   },
-  "productName": "MARCUSKLauncher",
+  "productName": "MARCUSK Launcher",
   "version": "1.11.1",
-  "mainBinaryName": "MARCUSKLauncher",
+  "mainBinaryName": "MARCUSK Launcher",
   "identifier": "MARCUSKLauncher",
   "app": {
     "withGlobalTauri": false,

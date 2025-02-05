@@ -227,29 +227,29 @@ jobs:
             "platforms": {
               "darwin-x86_64": {
                 "signature": "$(cat artifacts/macos-latest/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig)",
-                "url": "https://cdn.marcuskstudio.live/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/macos/MARCUSKLauncher.app.tar.gz",
+                "url": "https://cdn.marcuskstudio.live/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/macos/MARCUSK%20Launcher.app.tar.gz",
                 "install_urls": [
-                  "https://cdn.marcuskstudio.live/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/dmg/MARCUSKLauncher_0.9.2_universal.dmg"
+                  "https://cdn.marcuskstudio.live/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/dmg/MARCUSK%20Launcher_0.9.2_universal.dmg"
                 ]
               },
               "darwin-aarch64": {
                 "signature": "$(cat artifacts/macos-latest/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig)",
-                "url": "https://cdn.marcuskstudio.live/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/macos/MARCUSKLauncher.app.tar.gz",
+                "url": "https://cdn.marcuskstudio.live/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/macos/MARCUSK%20Launcher.app.tar.gz",
                 "install_urls": [
-                  "https://cdn.marcuskstudio.live/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/macos/MARCUSKLauncher.app.tar.gz"
+                  "https://cdn.marcuskstudio.live/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/macos/MARCUSK%20Launcher.app.tar.gz"
                 ]
               },
               "linux-x86_64": {
                 "signature": "$(cat artifacts/ubuntu-22.04/release/bundle/appimage/*.AppImage.tar.gz.sig)",
-                "url": "https://cdn.marcuskstudio.live/releases/${VERSION}/ubuntu-22.04/release/bundle/appimage/MARCUSKLauncher_${VERSION}_amd64.AppImage.tar.gz",
+                "url": "https://cdn.marcuskstudio.live/releases/${VERSION}/ubuntu-22.04/release/bundle/appimage/MARCUSK%20Launcher_${VERSION}_amd64.AppImage.tar.gz",
                 "install_urls": [
-                  "https://cdn.marcuskstudio.live/releases/${VERSION}/ubuntu-22.04/release/bundle/deb/MARCUSKLauncher_${VERSION}_amd64.deb",
-                  "https://cdn.marcuskstudio.live/releases/${VERSION}/ubuntu-22.04/release/bundle/appimage/MARCUSKLauncher_${VERSION}_amd64.AppImage",
-                  "https://cdn.marcuskstudio.live/releases/${VERSION}/ubuntu-22.04/release/bundle/rpm/MARCUSKLauncher-${VERSION}-1.x86_64.rpm"
+                  "https://cdn.marcuskstudio.live/releases/${VERSION}/ubuntu-22.04/release/bundle/deb/MARCUSK%20Launcher_${VERSION}_amd64.deb",
+                  "https://cdn.marcuskstudio.live/releases/${VERSION}/ubuntu-22.04/release/bundle/appimage/MARCUSK%20Launcher_${VERSION}_amd64.AppImage",
+                  "https://cdn.marcuskstudio.live/releases/${VERSION}/ubuntu-22.04/release/bundle/rpm/MARCUSK%20Launcher-${VERSION}-1.x86_64.rpm"
                 ]
               },
               "windows-x86_64": {
-                "signature": "$(cat artifacts/windows-latest/release/bundle/nsis/MARCUSKLauncher_${VERSION}_x64-setup.nsis.zip.sig)",
+                "signature": "$(cat artifacts/windows-latest/release/bundle/nsis/*.nsis.zip.sig)",
                 "url": "https://cdn.marcuskstudio.live/releases/${VERSION}/windows-latest/release/bundle/nsis/MARCUSK%20Launcher_${VERSION}_x64-setup.nsis.zip",
                 "install_urls": [
                   "https://cdn.marcuskstudio.live/releases/${VERSION}/windows-latest/release/bundle/nsis/MARCUSK%20Launcher_${VERSION}_x64-setup.exe"
