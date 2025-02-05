@@ -19,21 +19,6 @@ watch(
 )
 </script>
 <template>
-  <h2 class="m-0 text-lg font-extrabold text-contrast">Color theme</h2>
-  <p class="m-0 mt-1">Select your preferred color theme for Modrinth App.</p>
-
-  <ThemeSelector
-    :update-color-theme="
-      (theme) => {
-        themeStore.setThemeState(theme)
-        settings.theme = theme
-      }
-    "
-    :current-theme="settings.theme"
-    :theme-options="themeStore.themeOptions"
-    system-theme-color="system"
-  />
-
   <div class="mt-4 flex items-center justify-between">
     <div>
       <h2 class="m-0 text-lg font-extrabold text-contrast">Advanced rendering</h2>
