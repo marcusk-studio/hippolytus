@@ -219,7 +219,7 @@ const handleClickOutside = (event) => {
 
     <!-- Modpack selector section -->
     <div class="flex flex-col flex-grow">
-      <div class="mt-auto flex justify-center items-center gap-64">
+      <div class="mt-auto flex justify-between items-center">
         <div class="flex items-center gap-4">
           <div class="relative" ref="dropdownRef">
             <button @click="isDropdownOpen = !isDropdownOpen"
