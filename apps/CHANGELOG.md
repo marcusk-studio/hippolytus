@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.6](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.11.5...apps-v1.11.6) (2025-02-05)
+
+
+### 🐛 Bugfixes
+
+* **app:** update modrinth name to marcusk ([acc3d35](https://github.com/marcusk-studio/hippolytus/commit/acc3d359d37ee460a13d35b5dfc4e97cad444e17))
+
 ## [1.11.5](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.11.4...apps-v1.11.5) (2025-02-05)
 
 
