@@ -1,45 +1,43 @@
 name: Release
-
-on:
-  workflow_dispatch:
+'on':
+  workflow_dispatch: null
   push:
     branches:
       - main
     paths:
       - apps/**
       - packages/**
-
 concurrency:
-  group: ${{ github.workflow }}
+  group: '${{ github.workflow }}'
   cancel-in-progress: false
-
 permissions:
   contents: read
   pages: write
   id-token: write
-
 jobs:
   release-please:
     runs-on: blacksmith-2vcpu-ubuntu-2204
     outputs:
-      manifest: ${{ toJSON(steps.rp.outputs) }}
+      manifest: '${{ toJSON(steps.rp.outputs) }}'
     steps:
       - name: Generate App Token
         uses: tibdex/github-app-token@v2
         id: generate-token
         with:
-          app_id: ${{ secrets.APP_ID }}
-          private_key: ${{ secrets.APP_PRIVATE_KEY }}
+          app_id: '${{ secrets.APP_ID }}'
+          private_key: '${{ secrets.APP_PRIVATE_KEY }}'
       - name: Release Please
         id: rp
         uses: GoogleCloudPlatform/release-please-action@v4.1.3
         with:
-          token: ${{ steps.generate-token.outputs.token }}
-
+          token: '${{ steps.generate-token.outputs.token }}'
   build:
     name: Build
-    needs: [release-please]
-    if: ${{ fromJSON(needs.release-please.outputs.manifest).releases_created == 'true' }}
+    needs:
+      - release-please
+    if: >-
+      ${{ fromJSON(needs.release-please.outputs.manifest).releases_created ==
+      'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -110,7 +108,6 @@ jobs:
           key: '${{ runner.os }}-pnpm-store-${{ hashFiles(''**/pnpm-lock.yaml'') }}'
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
-
       - name: install dependencies (ubuntu only)
         if: 'startsWith(matrix.platform, ''ubuntu'')'
         run: >
@@ -119,7 +116,6 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl
           wget file libxdo-dev libssl-dev pkg-config
           libayatana-appindicator3-dev librsvg2-dev
-
       - name: Install frontend dependencies
         run: pnpm install
       - name: build app (macos)
@@ -138,7 +134,6 @@ jobs:
           APPLE_PASSWORD: '${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}'
           TAURI_SIGNING_PRIVATE_KEY: '${{ secrets.TAURI_PRIVATE_KEY }}'
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: '${{ secrets.TAURI_KEY_PASSWORD }}'
-
       - name: build app
         run: >-
           pnpm --filter=@modrinth/app run tauri build --config
@@ -149,24 +144,22 @@ jobs:
           GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
           TAURI_SIGNING_PRIVATE_KEY: '${{ secrets.TAURI_PRIVATE_KEY }}'
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: '${{ secrets.TAURI_KEY_PASSWORD }}'
-
       - name: Sign files with Trusted Signing
-        if: startsWith(matrix.platform, 'windows')
+        if: 'startsWith(matrix.platform, ''windows'')'
         uses: azure/trusted-signing-action@v0.5.1
         with:
-            azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-            azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
-            azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
-            endpoint: https://weu.codesigning.azure.net/
-            trusted-signing-account-name: marcusklauncher
-            certificate-profile-name: MarcuskStudioLauncher
-            files-folder: ${{ github.workspace }}\target\release\bundle
-            files-folder-filter: msi,exe
-            files-folder-recurse: true
-            file-digest: SHA256
-            timestamp-rfc3161: http://timestamp.acs.microsoft.com
-            timestamp-digest: SHA256
-
+          azure-tenant-id: '${{ secrets.AZURE_TENANT_ID }}'
+          azure-client-id: '${{ secrets.AZURE_CLIENT_ID }}'
+          azure-client-secret: '${{ secrets.AZURE_CLIENT_SECRET }}'
+          endpoint: 'https://weu.codesigning.azure.net/'
+          trusted-signing-account-name: marcusklauncher
+          certificate-profile-name: MarcuskStudioLauncher
+          files-folder: '${{ github.workspace }}\target\release\bundle'
+          files-folder-filter: 'msi,exe'
+          files-folder-recurse: true
+          file-digest: SHA256
+          timestamp-rfc3161: 'http://timestamp.acs.microsoft.com'
+          timestamp-digest: SHA256
       - name: 'upload ${{ matrix.platform }}'
         uses: actions/upload-artifact@v4
         with:
@@ -192,96 +185,100 @@ jobs:
             target/release/bundle/nsis/*.exe
             target/release/bundle/nsis/*.nsis.zip
             target/release/bundle/nsis/*.nsis.zip.sig
-            
   upload-s3:
     needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
       - name: Get version from manifest
         id: get_version
         run: |
           version=$(jq -r '.apps' .release-please-manifest.json)
           echo "version=$version" >> $GITHUB_OUTPUT
-
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-      
       - name: Print directory structure
         run: ls -R artifacts
+      - name: Generate update manifest
+        id: generate_manifest
+        env:
+          DOWNLOAD_URL_BASE: 'https://cdn.marcuskstudio.live'
+          VERSION: '${{ steps.get_version.outputs.version }}'
+        run: >
+          # Read signatures into variables
 
-    - name: Generate update manifest
-      id: generate_manifest
-      env:
-        DOWNLOAD_URL_BASE: 'https://cdn.marcuskstudio.live'
-        VERSION: ${{ steps.get_version.outputs.version }}
-      run: |
-        # Read signatures into variables
-        DARWIN_SIGNATURE=$(cat artifacts/macos-latest/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig)
-        LINUX_SIGNATURE=$(cat artifacts/ubuntu-22.04/release/bundle/appimage/*.AppImage.tar.gz.sig)
-        WINDOWS_SIGNATURE=$(cat "artifacts/windows-latest/release/bundle/nsis/MARCUSK Launcher_${VERSION}_x64-setup.nsis.zip.sig")
+          DARWIN_SIGNATURE=$(cat
+          artifacts/macos-latest/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig)
 
-        # Generate JSON file
-        cat > update-manifest.json <<EOF
-        {
-          "version": "${VERSION}",
-          "notes": "A new version of the MARCUSK Launcher is out!",
-          "pub_date": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-          "platforms": {
-            "darwin-x86_64": {
-              "signature": "${DARWIN_SIGNATURE}",
-              "url": "${DOWNLOAD_URL_BASE}/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/macos/MARCUSK%20Launcher.app.tar.gz",
-              "install_urls": [
-                "${DOWNLOAD_URL_BASE}/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/dmg/MARCUSK%20Launcher_${VERSION}_universal.dmg"
-              ]
-            },
-            "darwin-aarch64": {
-              "signature": "${DARWIN_SIGNATURE}",
-              "url": "${DOWNLOAD_URL_BASE}/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/macos/MARCUSK%20Launcher.app.tar.gz",
-              "install_urls": [
-                "${DOWNLOAD_URL_BASE}/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/macos/MARCUSK%20Launcher.app.tar.gz"
-              ]
-            },
-            "linux-x86_64": {
-              "signature": "${LINUX_SIGNATURE}",
-              "url": "${DOWNLOAD_URL_BASE}/releases/${VERSION}/ubuntu-22.04/release/bundle/appimage/MARCUSK%20Launcher_${VERSION}_amd64.AppImage.tar.gz",
-              "install_urls": [
-                "${DOWNLOAD_URL_BASE}/releases/${VERSION}/ubuntu-22.04/release/bundle/deb/MARCUSK%20Launcher_${VERSION}_amd64.deb",
-                "${DOWNLOAD_URL_BASE}/releases/${VERSION}/ubuntu-22.04/release/bundle/appimage/MARCUSK%20Launcher_${VERSION}_amd64.AppImage",
-                "${DOWNLOAD_URL_BASE}/releases/${VERSION}/ubuntu-22.04/release/bundle/rpm/MARCUSK%20Launcher-${VERSION}-1.x86_64.rpm"
-              ]
-            },
-            "windows-x86_64": {
-              "signature": "${WINDOWS_SIGNATURE}",
-              "url": "${DOWNLOAD_URL_BASE}/releases/${VERSION}/windows-latest/release/bundle/nsis/MARCUSK%20Launcher_${VERSION}_x64-setup.nsis.zip",
-              "install_urls": [
-                "${DOWNLOAD_URL_BASE}/releases/${VERSION}/windows-latest/release/bundle/nsis/MARCUSK%20Launcher_${VERSION}_x64-setup.exe"
-              ]
+          LINUX_SIGNATURE=$(cat
+          artifacts/ubuntu-22.04/release/bundle/appimage/*.AppImage.tar.gz.sig)
+
+          WINDOWS_SIGNATURE=$(cat
+          "artifacts/windows-latest/release/bundle/nsis/MARCUSK
+          Launcher_${VERSION}_x64-setup.nsis.zip.sig")
+
+
+          # Generate JSON file
+
+          cat > update-manifest.json <<EOF
+
+          {
+            "version": "${VERSION}",
+            "notes": "A new version of the MARCUSK Launcher is out!",
+            "pub_date": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "platforms": {
+              "darwin-x86_64": {
+                "signature": "${DARWIN_SIGNATURE}",
+                "url": "${DOWNLOAD_URL_BASE}/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/macos/MARCUSK%20Launcher.app.tar.gz",
+                "install_urls": [
+                  "${DOWNLOAD_URL_BASE}/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/dmg/MARCUSK%20Launcher_${VERSION}_universal.dmg"
+                ]
+              },
+              "darwin-aarch64": {
+                "signature": "${DARWIN_SIGNATURE}",
+                "url": "${DOWNLOAD_URL_BASE}/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/macos/MARCUSK%20Launcher.app.tar.gz",
+                "install_urls": [
+                  "${DOWNLOAD_URL_BASE}/releases/${VERSION}/macos-latest/universal-apple-darwin/release/bundle/macos/MARCUSK%20Launcher.app.tar.gz"
+                ]
+              },
+              "linux-x86_64": {
+                "signature": "${LINUX_SIGNATURE}",
+                "url": "${DOWNLOAD_URL_BASE}/releases/${VERSION}/ubuntu-22.04/release/bundle/appimage/MARCUSK%20Launcher_${VERSION}_amd64.AppImage.tar.gz",
+                "install_urls": [
+                  "${DOWNLOAD_URL_BASE}/releases/${VERSION}/ubuntu-22.04/release/bundle/deb/MARCUSK%20Launcher_${VERSION}_amd64.deb",
+                  "${DOWNLOAD_URL_BASE}/releases/${VERSION}/ubuntu-22.04/release/bundle/appimage/MARCUSK%20Launcher_${VERSION}_amd64.AppImage",
+                  "${DOWNLOAD_URL_BASE}/releases/${VERSION}/ubuntu-22.04/release/bundle/rpm/MARCUSK%20Launcher-${VERSION}-1.x86_64.rpm"
+                ]
+              },
+              "windows-x86_64": {
+                "signature": "${WINDOWS_SIGNATURE}",
+                "url": "${DOWNLOAD_URL_BASE}/releases/${VERSION}/windows-latest/release/bundle/nsis/MARCUSK%20Launcher_${VERSION}_x64-setup.nsis.zip",
+                "install_urls": [
+                  "${DOWNLOAD_URL_BASE}/releases/${VERSION}/windows-latest/release/bundle/nsis/MARCUSK%20Launcher_${VERSION}_x64-setup.exe"
+                ]
+              }
             }
           }
-        }
-        EOF
 
+          EOF
       - name: Upload artifacts to R2
         uses: ryand56/r2-upload-action@latest
         with:
-          r2-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          r2-access-key-id: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
-          r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+          r2-account-id: '${{ secrets.CLOUDFLARE_ACCOUNT_ID }}'
+          r2-access-key-id: '${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}'
+          r2-secret-access-key: '${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}'
           r2-bucket: launcherbinaries
-          destination-dir: releases/${{ steps.get_version.outputs.version }}
+          destination-dir: 'releases/${{ steps.get_version.outputs.version }}'
           source-dir: artifacts
           keep-file-fresh: true
-
       - name: Upload update manifest to R2
         uses: ryand56/r2-upload-action@latest
         with:
-          r2-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          r2-access-key-id: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
-          r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+          r2-account-id: '${{ secrets.CLOUDFLARE_ACCOUNT_ID }}'
+          r2-access-key-id: '${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}'
+          r2-secret-access-key: '${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}'
           r2-bucket: launcherbinaries
           source-dir: update-manifest.json
           destination-dir: ./
