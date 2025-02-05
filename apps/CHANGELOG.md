@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.7](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.11.6...apps-v1.11.7) (2025-02-05)
+
+
+### 🐛 Bugfixes
+
+* **app:** fix info.plist format ([eafd01a](https://github.com/marcusk-studio/hippolytus/commit/eafd01a9bc375a89f52ee0e0fabf6bde6e7e9ba8))
+
 ## [1.11.6](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.11.5...apps-v1.11.6) (2025-02-05)
 
 
