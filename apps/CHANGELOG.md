@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.11.2](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.11.1...apps-v1.11.2) (2025-02-05)
+
+
+### 👽 Miscellaneous
+
+* **app:** delete mrpack integration ([2b2755c](https://github.com/marcusk-studio/hippolytus/commit/2b2755c5b272800ceeffe5a047e3553ea7ea14b6))
+* fix app name space ([3eb9625](https://github.com/marcusk-studio/hippolytus/commit/3eb96254db3af3e1c3413f97be4e7090bd0821df))
+
 ## [1.11.1](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.11.0...apps-v1.11.1) (2025-02-05)
 
 
