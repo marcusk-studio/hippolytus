@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.11.8](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.11.7...apps-v1.11.8) (2025-02-05)
+
+
+### 🐛 Bugfixes
+
+* **app-f:** fix play button spacing ([bc13704](https://github.com/marcusk-studio/hippolytus/commit/bc13704fbf9937ccf7b94c7d9a103ff35d8d1440))
+* **app:** rebrand modrinth to marcusk ([040bcf5](https://github.com/marcusk-studio/hippolytus/commit/040bcf5abc5c472df455c19b66f911c78430939a))
+
 ## [1.11.7](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.11.6...apps-v1.11.7) (2025-02-05)
 
 
