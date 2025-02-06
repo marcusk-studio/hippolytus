@@ -138,11 +138,9 @@ function devModeCount() {
             {{ formatMessage(developerModeEnabled) }}
           </p>
           <div class="flex items-center gap-3">
-            <button
-              class="p-0 m-0 bg-transparent border-none cursor-pointer button-animation"
+            <button class="p-0 m-0 bg-transparent border-none cursor-pointer button-animation"
               :class="{ 'text-brand': themeStore.devMode, 'text-secondary': !themeStore.devMode }"
-              @click="devModeCount"
-            >
+              @click="devModeCount">
               <ModrinthIcon class="w-6 h-6" />
             </button>
             <div>

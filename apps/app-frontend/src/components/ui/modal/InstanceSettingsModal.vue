@@ -80,15 +80,13 @@ const titleMessage = defineMessage({
 })
 </script>
 <template>
-  <ModalWrapper ref="modal">
+  <ModalWrapper ref="modal" class="z-[1000]"> <!-- Increased z-index -->
     <template #title>
       <span class="flex items-center gap-2 text-lg font-semibold text-primary">
-        <Avatar
-          :src="instance.icon_path ? convertFileSrc(instance.icon_path) : undefined"
-          size="24px"
-          :tint-by="props.instance.path"
-        />
-        {{ instance.name }} <ChevronRightIcon />
+        <Avatar :src="instance.icon_path ? convertFileSrc(instance.icon_path) : undefined" size="24px"
+          :tint-by="props.instance.path" />
+        {{ instance.name }}
+        <ChevronRightIcon />
         <span class="font-extrabold text-contrast">{{ formatMessage(titleMessage) }}</span>
       </span>
     </template>

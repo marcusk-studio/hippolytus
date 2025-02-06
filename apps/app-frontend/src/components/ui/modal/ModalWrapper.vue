@@ -18,7 +18,7 @@ const props = defineProps({
   onHide: {
     type: Function,
     default() {
-      return () => {}
+      return () => { }
     },
   },
   showAdOnClose: {
@@ -48,10 +48,13 @@ function onModalHide() {
 </script>
 
 <template>
-  <Modal ref="modal" :header="header" :noblur="!themeStore.advancedRendering" @hide="onModalHide">
-    <template #title>
-      <slot name="title" />
-    </template>
-    <slot />
-  </Modal>
+  <Teleport to="body">
+    <Modal ref="modal" :header="header" :noblur="!themeStore.advancedRendering" :class="['modal-wrapper']"
+      @hide="onModalHide">
+      <template #title>
+        <slot name="title" />
+      </template>
+      <slot />
+    </Modal>
+  </Teleport>
 </template>
