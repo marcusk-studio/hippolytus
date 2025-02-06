@@ -7,7 +7,7 @@ import { profile_listener } from '@/helpers/events'
 import { useBreadcrumbs } from '@/store/breadcrumbs'
 import { handleError } from '@/store/notifications.js'
 import dayjs from 'dayjs'
-import { get_search_results } from '@/helpers/cache.js'
+import { get_search_results, get_project } from '@/helpers/cache.js'
 import { install as installVersion } from '@/store/install.js'
 import { ButtonStyled } from '@modrinth/ui'
 import {
@@ -15,6 +15,8 @@ import {
   PlayIcon,
 } from '@modrinth/assets'
 import { openUrl } from '@tauri-apps/plugin-opener'
+import { update_managed_modrinth_version } from '@/helpers/profile'
+import { get_version_many } from '@/helpers/cache.js'
 
 const featuredModpacks = ref([])
 const featuredMods = ref([])
@@ -91,17 +93,46 @@ const getFeaturedModpacks = async () => {
   if (response?.result?.hits) {
     const profiles = await list().catch(handleError)
 
-    featuredModpacks.value = response.result.hits.map(hit => {
-      const isInstalled = profiles.some(
-        profile => profile.linked_data?.project_id === hit.project_id
+    const latestVersions = await Promise.all(
+      response.result.hits.map(async hit => {
+        try {
+          const project = await get_project(hit.project_id)
+
+          if (!project?.versions?.length) {
+            return null
+          }
+
+          const versions = await get_version_many(project.versions)
+          return versions.sort((a, b) =>
+            new Date(b.date_published) - new Date(a.date_published)
+          )[0]
+        } catch (error) {
+          handleError(error)
+          return null
+        }
+      })
+    )
+
+    featuredModpacks.value = response.result.hits.map((hit, index) => {
+      const profile = profiles.find(
+        p => p.linked_data?.project_id === hit.project_id
       )
+
+      const isInstalled = !!profile
       installed.value[hit.project_id] = isInstalled
+
+      if (isInstalled && latestVersions[index]) {
+        const currentVersion = profile.linked_data.version_id
+        const latestVersion = latestVersions[index].id
+        hasUpdate.value[hit.project_id] = currentVersion !== latestVersion
+      }
 
       return {
         ...hit,
         project_id: hit.project_id,
         project_type: hit.project_type,
-        slug: hit.slug
+        slug: hit.slug,
+        latestVersionId: latestVersions[index]?.id
       }
     })
 
@@ -119,6 +150,16 @@ watch(selectedModpackId, (newValue) => {
   }
 })
 
+// Add these refs
+const updating = ref({})
+const hasUpdate = ref({})
+
+// Add this computed property
+const selectedModpackHasUpdate = computed(() => {
+  return selectedModpack.value ? hasUpdate.value[selectedModpack.value.project_id] : false
+})
+
+// Modify the install function to check for updates
 const install = async (projectId) => {
   installing.value[projectId] = true
   try {
@@ -126,11 +167,44 @@ const install = async (projectId) => {
       installing.value[projectId] = false
       if (version) {
         installed.value[projectId] = true
+        // Store the installed version ID for update checks
+        hasUpdate.value[projectId] = false
       }
     })
   } catch (error) {
     installing.value[projectId] = false
     handleError(error)
+  }
+}
+
+// Add update function
+const updateModpack = async (projectId) => {
+  if (!updating.value[projectId]) {
+    updating.value[projectId] = true
+    try {
+      const profile = (await list()).find(p => p.linked_data?.project_id === projectId)
+      const project = await get_project(projectId)
+
+      if (project?.versions?.length) {
+        const versions = await get_version_many(project.versions)
+        const latestVersion = versions.sort((a, b) =>
+          new Date(b.date_published) - new Date(a.date_published)
+        )[0]
+
+        if (profile?.path && latestVersion?.id && profile?.linked_data?.version_id) {
+          await update_managed_modrinth_version(
+            profile.path,
+            latestVersion.id
+          )
+          hasUpdate.value[projectId] = false
+          await getInstances()
+        }
+      }
+    } catch (error) {
+      handleError(error)
+    } finally {
+      updating.value[projectId] = false
+    }
   }
 }
 
@@ -263,10 +337,21 @@ const handleClickOutside = (event) => {
           <template v-if="installed[selectedModpack.project_id]">
             <div class="glassmorphism-play">
               <ButtonStyled size="2xlarge" color="transparent" class="!h-[300px] !w-[300px] !min-w-[300px]">
-                <button @click="play(selectedModpack.project_id)"
+                <button
+                  @click="selectedModpackHasUpdate ? updateModpack(selectedModpack.project_id) : play(selectedModpack.project_id)"
                   class="flex items-center justify-center gap-3 !h-full !w-full text-3xl font-bold text-white">
-                  <PlayIcon class="w-16 h-16" />
-                  Play
+                  <template v-if="updating[selectedModpack.project_id]">
+                    <span class="loader"></span>
+                    Updating...
+                  </template>
+                  <template v-else-if="selectedModpackHasUpdate">
+                    <DownloadIcon class="w-16 h-16" />
+                    Update
+                  </template>
+                  <template v-else>
+                    <PlayIcon class="w-16 h-16" />
+                    Play
+                  </template>
                 </button>
               </ButtonStyled>
             </div>
