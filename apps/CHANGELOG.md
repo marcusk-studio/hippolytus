@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.1](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.12.0...apps-v1.12.1) (2025-02-06)
+
+
+### 🐛 Bugfixes
+
+* **app-f:** delete open in browser option ([e53f5f0](https://github.com/marcusk-studio/hippolytus/commit/e53f5f02127e1cf247c1dee0cf4c11dd81c724a6))
+
 ## [1.12.0](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.11.8...apps-v1.12.0) (2025-02-06)
 
 
