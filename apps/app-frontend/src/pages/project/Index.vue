@@ -234,19 +234,7 @@ const handleRightClick = (event) => {
   ])
 }
 const handleOptionsClick = (args) => {
-  switch (args.option) {
-    case 'install':
-      install(null)
-      break
-    case 'open_link':
-      openUrl(`https://modrinth.com/${args.item.project_type}/${args.item.slug}`)
-      break
-    case 'copy_link':
-      navigator.clipboard.writeText(
-        `https://modrinth.com/${args.item.project_type}/${args.item.slug}`,
-      )
-      break
-  }
+  return
 }
 </script>
 

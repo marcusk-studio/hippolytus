@@ -393,26 +393,11 @@ const messages = defineMessages({
 
 const options = ref(null)
 const handleRightClick = (event: MouseEvent, result: any) => {
-  (options.value as any)?.showMenu(event, result, [
-    {
-      name: 'open_link',
-    },
-    {
-      name: 'copy_link',
-    },
-  ])
+  return
 }
+
 const handleOptionsClick = (args: { option: string; item: { project_type: string; slug: string } }) => {
-  switch (args.option) {
-    case 'open_link':
-      openUrl(`https://modrinth.com/${args.item.project_type}/${args.item.slug}`)
-      break
-    case 'copy_link':
-      navigator.clipboard.writeText(
-        `https://modrinth.com/${args.item.project_type}/${args.item.slug}`,
-      )
-      break
-  }
+  return
 }
 
 await refreshSearch()
