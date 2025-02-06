@@ -404,38 +404,85 @@ await refreshSearch()
 </script>
 
 <template>
-  <div>
-    <div class="content-wrapper">
-      <div>
-        <div ref="searchWrapper" class="flex flex-col gap-3 p-6">
-          <template v-if="instance">
-            <InstanceIndicator :instance="instance" />
-            <h1 class="m-0 mb-1 text-xl">Install content to instance</h1>
-          </template>
-          <NavTabs :links="selectableProjectTypes" />
-          <div class="flex gap-2">
-            <Pagination :page="currentPage" :count="pageCount" class="ml-auto" @switch-page="setPage" />
-          </div>
-          <SearchFilterControl v-model:selected-filters="currentFilters"
-            :filters="filters.filter((f) => f.display !== 'none')" :provided-filters="instanceFilters"
-            :overridden-provided-filter-types="overriddenProvidedFilterTypes"
-            :provided-message="messages.providedByInstance" />
-          <div class="search">
-            <section v-if="loading" class="offline">
-              <LoadingIndicator />
-            </section>
-            <section v-else-if="offline && results?.total_hits === 0" class="offline">
-              You are currently offline. Connect to the internet to browse Modrinth!
-            </section>
-            <section v-else class="project-list display-mode--list instance-results" role="list">
-              <!-- @vue-ignore -->
-              <SearchCard v-for="result in results?.hits" :key="result?.project_id" :project="result"
-                :instance="instance ? instance : undefined" :categories="categories" />
-            </section>
-            <div class="flex justify-end">
-              <pagination :page="currentPage" :count="pageCount" class="pagination-after" @switch-page="setPage" />
-            </div>
-          </div>
+  <div class="content-wrapper">
+    <!-- Instance Information -->
+    <div ref="searchWrapper" class="flex flex-col gap-3 p-6">
+      <template v-if="instance">
+        <InstanceIndicator :instance="instance" />
+        <h1 class="m-0 mb-1 text-xl">Install content to instance</h1>
+      </template>
+
+      <!-- Navigation and Pagination -->
+      <NavTabs :links="selectableProjectTypes" />
+      <div class="flex gap-2">
+        <Pagination
+          :page="currentPage"
+          :count="pageCount"
+          class="ml-auto"
+          @switch-page="setPage"
+        />
+      </div>
+
+      <!-- Search Filters -->
+      <SearchFilterControl
+        v-model:selected-filters="currentFilters"
+        :filters="filters.filter((f) => f.display !== 'none')"
+        :provided-filters="instanceFilters"
+        :overridden-provided-filter-types="overriddenProvidedFilterTypes"
+        :provided-message="messages.providedByInstance"
+      />
+
+      <!-- Search Results -->
+      <div class="search">
+        <section v-if="loading" class="offline">
+          <LoadingIndicator />
+        </section>
+
+        <section
+          v-else-if="offline && results?.total_hits === 0"
+          class="offline"
+        >
+          You are currently offline. Connect to the internet to browse Modrinth!
+        </section>
+
+        <section
+          v-else
+          class="project-list display-mode--list instance-results"
+          role="list"
+        >
+          <SearchCard
+            v-for="result in results.hits"
+            :key="result?.project_id"
+            :project="result"
+            :instance="instance"
+            :categories="[
+              ...categories.filter(
+                (cat) =>
+                  result?.display_categories.includes(cat.name) &&
+                  cat.project_type === projectType
+              ),
+              ...loaders.filter(
+                (loader) =>
+                  result?.display_categories.includes(loader.name) &&
+                  loader.supported_project_types?.includes(projectType)
+              )
+            ]"
+            :installed="
+              result.installed || newlyInstalled.includes(result.project_id)
+            "
+            @install="(id) => { newlyInstalled.push(id) }"
+            @contextmenu.prevent.stop="(event) => handleRightClick(event, result)"
+          />
+        </section>
+
+        <!-- Bottom Pagination -->
+        <div class="flex justify-end">
+          <Pagination
+            :page="currentPage"
+            :count="pageCount"
+            class="pagination-after"
+            @switch-page="setPage"
+          />
         </div>
       </div>
     </div>
