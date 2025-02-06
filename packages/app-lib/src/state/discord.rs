@@ -19,7 +19,7 @@ impl DiscordGuard {
     /// If it fails, it will still return a DiscordGuard, but the client will be unconnected
     pub fn init() -> crate::Result<DiscordGuard> {
         let dipc =
-            DiscordIpcClient::new("1123683254248148992").map_err(|e| {
+            DiscordIpcClient::new("1337164719634780194").map_err(|e| {
                 crate::ErrorKind::OtherError(format!(
                     "Could not create Discord client {}",
                     e,
@@ -79,8 +79,8 @@ impl DiscordGuard {
 
         let activity = Activity::new().state(msg).assets(
             Assets::new()
-                .large_image("modrinth_simple")
-                .large_text("Modrinth Logo"),
+                .large_image("marcusk")
+                .large_text("Made by Leafd"),
         );
 
         // Attempt to set the activity
