@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.12.0](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.11.8...apps-v1.12.0) (2025-02-06)
+
+
+### ✨ Features
+
+* **app-f/pages:** create update button ([2c6309c](https://github.com/marcusk-studio/hippolytus/commit/2c6309c10ff64885b5c8fd6c265deb5a322d3dc5))
+
+
+### 🐛 Bugfixes
+
+* **app-f/modal:** make modals appear at root ([cada0e8](https://github.com/marcusk-studio/hippolytus/commit/cada0e8665b315afdaeafe36bf3923abc5ab7dce))
+
 ## [1.11.8](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.11.7...apps-v1.11.8) (2025-02-05)
 
 
