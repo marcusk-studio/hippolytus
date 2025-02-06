@@ -7,7 +7,7 @@
           <Teleport v-if="themeStore.featureFlags.project_background" to="#background-teleport-target">
             <ProjectBackgroundGradient :project="data" />
           </Teleport>
-          <ProjectHeader :project="data" @contextmenu.prevent.stop="handleRightClick">
+          <ProjectHeader class="bg-[#0a0101] rounded-3xl pt-4 pl-4 pr-10 mb-6" :project="data" @contextmenu.prevent.stop="handleRightClick">
             <template #actions>
               <ButtonStyled size="large" color="brand">
                 <button v-tooltip="installed ? `This project is already installed` : null"
@@ -16,50 +16,6 @@
                   <CheckIcon v-else-if="installed" />
                   {{ installing ? 'Installing...' : installed ? 'Installed' : 'Install' }}
                 </button>
-              </ButtonStyled>
-              <ButtonStyled size="large" circular type="transparent">
-                <OverflowMenu :tooltip="`More options`" :options="[
-          {
-            id: 'follow',
-            disabled: true,
-            tooltip: 'Coming soon',
-            action: () => { },
-          },
-          {
-            id: 'save',
-            disabled: true,
-            tooltip: 'Coming soon',
-            action: () => { },
-          },
-          {
-            id: 'open-in-browser',
-            link: `https://modrinth.com/${data.project_type}/${data.slug}`,
-            external: true,
-          },
-          {
-            divider: true,
-          },
-          {
-            id: 'report',
-            color: 'red',
-            hoverFilled: true,
-            link: `https://modrinth.com/report?item=project&itemID=${data.id}`,
-          },
-        ]" aria-label="More options">
-                  <MoreVerticalIcon aria-hidden="true" />
-                  <template #open-in-browser>
-                    <ExternalIcon /> Open in browser
-                  </template>
-                  <template #follow>
-                    <HeartIcon /> Follow
-                  </template>
-                  <template #save>
-                    <BookmarkIcon /> Save
-                  </template>
-                  <template #report>
-                    <ReportIcon /> Report
-                  </template>
-                </OverflowMenu>
               </ButtonStyled>
             </template>
           </ProjectHeader>
@@ -91,10 +47,6 @@
     <ContextMenu ref="options" @option-clicked="handleOptionsClick">
       <template #install>
         <DownloadIcon /> Install
-      </template>
-      <template #open_link>
-        <GlobeIcon /> Open in Modrinth
-        <ExternalIcon />
       </template>
       <template #copy_link>
         <ClipboardCopyIcon /> Copy link
@@ -136,7 +88,6 @@ import { get_project, get_team, get_version_many } from '@/helpers/cache.js'
 import NavTabs from '@/components/ui/NavTabs.vue'
 import { useTheming } from '@/store/state.js'
 import InstanceIndicator from '@/components/ui/InstanceIndicator.vue'
-import { openUrl } from '@tauri-apps/plugin-opener'
 
 dayjs.extend(relativeTime)
 
@@ -225,12 +176,7 @@ const handleRightClick = (event) => {
     {
       type: 'divider',
     },
-    {
-      name: 'open_link',
-    },
-    {
-      name: 'copy_link',
-    },
+
   ])
 }
 const handleOptionsClick = (args) => {

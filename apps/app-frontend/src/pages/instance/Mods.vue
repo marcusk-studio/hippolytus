@@ -14,7 +14,6 @@
           <XIcon />
         </Button>
       </div>
-      <AddContentButton :instance="instance" />
     </div>
     <div class="flex items-center justify-between">
       <div v-if="filterOptions.length > 1" class="flex flex-wrap gap-1 items-center pb-4">

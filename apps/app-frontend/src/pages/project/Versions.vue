@@ -35,10 +35,6 @@
                 color: 'primary',
                 hoverFilled: true,
               },
-              {
-                id: 'open-in-browser',
-                link: `https://modrinth.com/${project.project_type}/${project.slug}/version/${version.id}`,
-              },
             ]"
             aria-label="More options"
           >
@@ -47,17 +43,7 @@
               <DownloadIcon aria-hidden="true" />
               Add to another instance
             </template>
-            <template #open-in-browser> <ExternalIcon /> Open in browser </template>
           </OverflowMenu>
-          <a
-            v-else
-            v-tooltip="`Open in browser`"
-            class="group-hover:!bg-button-bg"
-            :href="`https://modrinth.com/${project.project_type}/${project.slug}/version/${version.id}`"
-            target="_blank"
-          >
-            <ExternalIcon />
-          </a>
         </ButtonStyled>
       </template>
     </ProjectPageVersions>
