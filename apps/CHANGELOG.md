@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.12.2](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.12.1...apps-v1.12.2) (2025-02-06)
+
+
+### 🐛 Bugfixes
+
+* **app-f:** eliminate ad related privacy setting ([b00fb76](https://github.com/marcusk-studio/hippolytus/commit/b00fb767318d475a789cae3ee045efc682992206))
+* **app-f:** fix modpack tags ([1cc2bcb](https://github.com/marcusk-studio/hippolytus/commit/1cc2bcb381d8c3d915523fd16e476fa6bde5d4c9))
+* **app-f:** improve instance header contrast ([39a743c](https://github.com/marcusk-studio/hippolytus/commit/39a743c8db0126f14f0449afd48ed1492b060e86))
+
 ## [1.12.1](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.12.0...apps-v1.12.1) (2025-02-06)
 
 
