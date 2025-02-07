@@ -173,7 +173,7 @@ async function setupApp() {
   )
 
   useFetch(
-    `https://api.modrinth.com/appCriticalAnnouncement.json?version=${version}`,
+    `https://cdn.marcusk.fun/appCriticalAnnouncement_${version}.json`,
     'criticalAnnouncements',
     true,
   ).then((res) => {
