@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.3](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.12.2...apps-v1.12.3) (2025-02-07)
+
+
+### 🐛 Bugfixes
+
+* **app-f:** change critical announcement endpoint ([67cbc75](https://github.com/marcusk-studio/hippolytus/commit/67cbc75ffed7081616367d9517ddb15a5f633894))
+
 ## [1.12.2](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.12.1...apps-v1.12.2) (2025-02-06)
 
 
