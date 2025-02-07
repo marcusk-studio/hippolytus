@@ -30,7 +30,7 @@ let app = createApp(App)
 
 Sentry.init({
   app,
-  dsn: 'https://9508775ee5034536bc70433f5f531dd4@o485889.ingest.us.sentry.io/4504579615227904',
+  dsn: 'https://03f2ad671fafdadbe2a4c11ae884f4c5@o4508388109451264.ingest.de.sentry.io/4508609682014288',
   integrations: [Sentry.browserTracingIntegration({ router })],
   tracesSampleRate: 0.1,
 })
