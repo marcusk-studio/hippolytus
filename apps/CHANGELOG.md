@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.4](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.12.3...apps-v1.12.4) (2025-02-07)
+
+
+### 🐛 Bugfixes
+
+* **app-f:** change sentry dsn ([880b58c](https://github.com/marcusk-studio/hippolytus/commit/880b58c7f5a02e03cd072f914cb9c50cd3a7a210))
+
 ## [1.12.3](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.12.2...apps-v1.12.3) (2025-02-07)
 
 
