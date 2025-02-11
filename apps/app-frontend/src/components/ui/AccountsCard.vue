@@ -119,24 +119,41 @@ const selectedAccount = computed(() =>
   accounts.value.find((account) => account.id === defaultUser.value),
 )
 
+function cleanupOldCaches() {
+  const oneWeek = 7 * 24 * 60 * 60 * 1000
+  const now = Date.now()
+  
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (key.startsWith('avatar_') || key.startsWith('crafatar_')) {
+      try {
+        const cached = JSON.parse(localStorage.getItem(key))
+        if (now - cached.timestamp > oneWeek) {
+          localStorage.removeItem(key)
+        }
+      } catch {
+        localStorage.removeItem(key)
+      }
+    }
+  }
+}
+
 async function setAccount(account) {
   defaultUser.value = account.id
   await set_default_user(account.id).catch(handleError)
+  if (selectedAccount.value) {
+    localStorage.removeItem(`avatar_${selectedAccount.value.username}`)
+    localStorage.removeItem(`crafatar_${selectedAccount.value.id}`)
+  }
   emit('change')
 }
 
-async function login() {
-  const loggedIn = await login_flow().catch(handleSevereError)
-
-  if (loggedIn) {
-    await setAccount(loggedIn)
-    await refreshValues()
-  }
-
-  trackEvent('AccountLogIn')
-}
-
 const logout = async (id) => {
+  const account = accounts.value.find(acc => acc.id === id)
+  if (account) {
+    localStorage.removeItem(`avatar_${account.username}`)
+    localStorage.removeItem(`crafatar_${account.id}`)
+  }
   await remove_user(id).catch(handleError)
   await refreshValues()
   if (!selectedAccount.value && accounts.value.length > 0) {
@@ -147,6 +164,12 @@ const logout = async (id) => {
   }
   trackEvent('AccountLogOut')
 }
+
+// Add cleanup to onMounted
+onMounted(() => {
+  window.addEventListener('click', handleClickOutside)
+  cleanupOldCaches()
+})
 
 const handleClickOutside = (event) => {
   const elements = document.elementsFromPoint(event.clientX, event.clientY)
@@ -185,6 +208,38 @@ onBeforeUnmount(() => {
 onUnmounted(() => {
   unlisten()
 })
+
+function getCachedAvatarUrl(username) {
+  const cached = localStorage.getItem(`avatar_${username}`)
+  if (cached) {
+    const { url, timestamp } = JSON.parse(cached)
+    if (Date.now() - timestamp < 24 * 60 * 60 * 1000) {
+      return url
+    }
+  }
+  const newUrl = `https://minecraftpfp.com/api/pfp/${username}.png`
+  localStorage.setItem(`avatar_${username}`, JSON.stringify({
+    url: newUrl,
+    timestamp: Date.now()
+  }))
+  return newUrl
+}
+
+function getCachedCrafatarUrl(uuid) {
+  const cached = localStorage.getItem(`crafatar_${uuid}`)
+  if (cached) {
+    const { url, timestamp } = JSON.parse(cached)
+    if (Date.now() - timestamp < 24 * 60 * 60 * 1000) {
+      return url
+    }
+  }
+  const newUrl = `https://crafatar.com/avatars/${uuid}`
+  localStorage.setItem(`crafatar_${uuid}`, JSON.stringify({
+    url: newUrl,
+    timestamp: Date.now()
+  }))
+  return newUrl
+}
 </script>
 
 <style scoped lang="scss">
