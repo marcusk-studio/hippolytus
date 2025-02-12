@@ -240,6 +240,16 @@ function getCachedCrafatarUrl(uuid) {
   }))
   return newUrl
 }
+
+const login = async () => {
+  try {
+    await login_flow()
+    await refreshValues()
+    trackEvent('AccountLogIn')
+  } catch (error) {
+    handleSevereError(error)
+  }
+}
 </script>
 
 <style scoped lang="scss">
