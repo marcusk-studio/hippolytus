@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.6](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.12.5...apps-v1.12.6) (2025-02-12)
+
+
+### 🐛 Bugfixes
+
+* **app-f/components:** rebrand update message to marcusk ([817f34b](https://github.com/marcusk-studio/hippolytus/commit/817f34ba641823fb874d5eb2a578817ec27e2c0d))
+
 ## [1.12.5](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.12.4...apps-v1.12.5) (2025-02-11)
 
 
