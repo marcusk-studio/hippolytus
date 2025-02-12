@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.5](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.12.4...apps-v1.12.5) (2025-02-11)
+
+
+### 🐛 Bugfixes
+
+* **app-f/components:** add account card pfp cache ([3ece00c](https://github.com/marcusk-studio/hippolytus/commit/3ece00c026a68d31f7a7132db02076e47d02b3e7))
+
 ## [1.12.4](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.12.3...apps-v1.12.4) (2025-02-07)
 
 
