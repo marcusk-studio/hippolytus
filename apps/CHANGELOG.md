@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.12.7](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.12.6...apps-v1.12.7) (2025-02-12)
+
+
+### 🐛 Bugfixes
+
+* **app-f/components:** fix login logic ([efe541b](https://github.com/marcusk-studio/hippolytus/commit/efe541b5e0a0e080f3a93f816bda33fb04bb8eef))
+
+
+### 👽 Miscellaneous
+
+* rebrand readmes to marcusk ([da42b17](https://github.com/marcusk-studio/hippolytus/commit/da42b17a0eea05418e8ce8caec418b5cebb1742b))
+
 ## [1.12.6](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.12.5...apps-v1.12.6) (2025-02-12)
 
 
