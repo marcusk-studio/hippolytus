@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.0](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.12.7...apps-v1.13.0) (2025-02-22)
+
+
+### ✨ Features
+
+* **app-f:** add playing button state ([d5c3c78](https://github.com/marcusk-studio/hippolytus/commit/d5c3c784af02823d5c933f7e8d04226348aa519f))
+
 ## [1.12.7](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.12.6...apps-v1.12.7) (2025-02-12)
 
 
