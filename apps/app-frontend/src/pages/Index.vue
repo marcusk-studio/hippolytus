@@ -17,6 +17,7 @@ import {
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { update_managed_modrinth_version } from '@/helpers/profile'
 import { get_version_many } from '@/helpers/cache.js'
+import { process_listener } from '@/helpers/events'
 
 const featuredModpacks = ref([])
 const featuredMods = ref([])
@@ -150,16 +151,13 @@ watch(selectedModpackId, (newValue) => {
   }
 })
 
-// Add these refs
 const updating = ref({})
 const hasUpdate = ref({})
 
-// Add this computed property
 const selectedModpackHasUpdate = computed(() => {
   return selectedModpack.value ? hasUpdate.value[selectedModpack.value.project_id] : false
 })
 
-// Modify the install function to check for updates
 const install = async (projectId) => {
   installing.value[projectId] = true
   try {
@@ -177,7 +175,6 @@ const install = async (projectId) => {
   }
 }
 
-// Add update function
 const updateModpack = async (projectId) => {
   if (!updating.value[projectId]) {
     updating.value[projectId] = true
@@ -208,20 +205,42 @@ const updateModpack = async (projectId) => {
   }
 }
 
+const playing = ref({})
+
+const unlistenProcess = await process_listener((e) => {
+  const profiles = recentInstances.value
+  const profile = profiles.find(p => p.path === e.profile_path_id)
+  
+  if (profile?.linked_data?.project_id) {
+    if (e.event === 'finished') {
+      playing.value[profile.linked_data.project_id] = false
+    } else {
+      playing.value[profile.linked_data.project_id] = true
+    }
+  }
+})
+
 const play = async (projectId) => {
   const profiles = await list().catch(handleError)
   const profile = profiles.find(p => p.linked_data?.project_id === projectId)
   if (profile) {
     try {
+      playing.value[projectId] = true
       await run(profile.path).catch(handleError)
       trackEvent('InstancePlay', {
         source: 'HomePage'
       })
     } catch (error) {
+      playing.value[projectId] = false
       handleError(error)
     }
   }
 }
+
+onUnmounted(() => {
+  unlistenProcess()
+  unlistenProfile()
+})
 
 const getFeaturedMods = async () => {
   const response = await get_search_results('?facets=[["project_type:mod"]]&limit=10&index=follows')
@@ -339,7 +358,8 @@ const handleClickOutside = (event) => {
               <ButtonStyled size="2xlarge" color="transparent" class="!h-[300px] !w-[300px] !min-w-[300px]">
                 <button
                   @click="selectedModpackHasUpdate ? updateModpack(selectedModpack.project_id) : play(selectedModpack.project_id)"
-                  class="flex items-center justify-center gap-3 !h-full !w-full text-3xl font-bold text-white">
+                  :disabled="playing[selectedModpack.project_id]"
+                  class="flex items-center justify-center gap-3 !h-full !w-full text-3xl font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed">
                   <template v-if="updating[selectedModpack.project_id]">
                     <span class="loader"></span>
                     Updating...
@@ -350,7 +370,7 @@ const handleClickOutside = (event) => {
                   </template>
                   <template v-else>
                     <PlayIcon class="w-16 h-16" />
-                    Play
+                    {{ playing[selectedModpack.project_id] ? 'Playing...' : 'Play' }}
                   </template>
                 </button>
               </ButtonStyled>
@@ -361,12 +381,14 @@ const handleClickOutside = (event) => {
               <ButtonStyled size="2xlarge" color="transparent" class="!h-[300px] !w-[300px] !min-w-[300px]">
                 <button v-tooltip="installed[selectedModpack.project_id] ? `This project is already installed` : null"
                   :disabled="installing[selectedModpack.project_id]" @click="install(selectedModpack.project_id)"
-                  class="flex items-center justify-center gap-3 !h-full !w-full text-3xl font-bold text-white">
-                  <DownloadIcon v-if="!installing[selectedModpack.project_id]" class="w-16 h-16" />
-                  <div class="w-16 h-16 flex items-center justify-center" v-else>
-                    <span class="loader"></span>
+                  class="flex flex-col items-center justify-center gap-3 !h-full !w-full text-3xl font-bold text-white">
+                  <div class="flex items-center justify-center">
+                    <DownloadIcon v-if="!installing[selectedModpack.project_id]" class="w-16 h-16" />
+                    <div v-else class="w-16 h-16 flex items-center justify-center">
+                      <span class="loader"></span>
+                    </div>
                   </div>
-                  {{ installing[selectedModpack.project_id] ? 'Installing...' : 'Install' }}
+                  <div>{{ installing[selectedModpack.project_id] ? 'Installing...' : 'Install' }}</div>
                 </button>
               </ButtonStyled>
             </div>
