@@ -12,7 +12,7 @@
         class="rounded-2xl object-contain shrink-0"
         :src="
           selectedAccount
-            ? `https://minecraftpfp.com/api/pfp/${selectedAccount.username}.png`
+            ? getCachedAvatarUrl(selectedAccount.username)
             : 'https://launcher-files.modrinth.com/assets/steve_head.png'
         "
         :alt="selectedAccount ? selectedAccount.username : 'Default avatar'"
@@ -213,7 +213,7 @@ function getCachedAvatarUrl(username) {
   const cached = localStorage.getItem(`avatar_${username}`)
   if (cached) {
     const { url, timestamp } = JSON.parse(cached)
-    if (Date.now() - timestamp < 24 * 60 * 60 * 1000) {
+    if (Date.now() - timestamp < 24 * 60 * 60 * 1000) { // Cache for 24 hours
       return url
     }
   }
