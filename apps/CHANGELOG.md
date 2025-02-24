@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.1](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.13.0...apps-v1.13.1) (2025-02-24)
+
+
+### 🐛 Bugfixes
+
+* **components:** fix pfp cache ([1ff9a60](https://github.com/marcusk-studio/hippolytus/commit/1ff9a603046b5bc589654cdffc02168d40a0c91f))
+
 ## [1.13.0](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.12.7...apps-v1.13.0) (2025-02-22)
 
 
