@@ -210,7 +210,7 @@ const playing = ref({})
 const unlistenProcess = await process_listener((e) => {
   const profiles = recentInstances.value
   const profile = profiles.find(p => p.path === e.profile_path_id)
-  
+
   if (profile?.linked_data?.project_id) {
     if (e.event === 'finished') {
       playing.value[profile.linked_data.project_id] = false
@@ -316,7 +316,7 @@ const handleClickOutside = (event) => {
         <div class="flex items-center gap-4">
           <div class="relative" ref="dropdownRef">
             <button @click="isDropdownOpen = !isDropdownOpen"
-              class="w-96 p-4 bg-raised rounded-lg flex items-center justify-between border border-[--brand-gradient-border]">
+              class="w-[435px] p-4 bg-raised rounded-lg flex items-center justify-between border border-[--brand-gradient-border]">
               <div class="flex items-center gap-4" v-if="selectedModpack">
                 <img v-if="selectedModpack.icon_url" :src="selectedModpack.icon_url" class="w-8 h-8 rounded"
                   :alt="selectedModpack.title" />
