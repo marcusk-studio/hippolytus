@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.2](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.13.1...apps-v1.13.2) (2025-03-12)
+
+
+### 🐛 Bugfixes
+
+* **app-f:** fix unhandled promise rejections ([69bce1c](https://github.com/marcusk-studio/hippolytus/commit/69bce1cd08315a0a1412fa2e2947bd9cfd65f5e9))
+
 ## [1.13.1](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.13.0...apps-v1.13.1) (2025-02-24)
 
 
