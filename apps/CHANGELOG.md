@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.0](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.13.3...apps-v2.0.0) (2025-03-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* delete frontend pack
+
+### 🐛 Bugfixes
+
+* delete frontend pack ([1f5e27e](https://github.com/marcusk-studio/hippolytus/commit/1f5e27ebfe0d1b5b9f110de20e4a6f336a9d2246))
+
 ## [1.13.3](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.13.2...apps-v1.13.3) (2025-03-12)
 
 
