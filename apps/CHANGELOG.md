@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.3](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.13.2...apps-v1.13.3) (2025-03-12)
+
+
+### 🐛 Bugfixes
+
+* **app-f:** fix modpack selector width ([d44c701](https://github.com/marcusk-studio/hippolytus/commit/d44c701163e9a6e6aba54b2eaae605aa396174c0))
+
 ## [1.13.2](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.13.1...apps-v1.13.2) (2025-03-12)
 
 
