@@ -50,3 +50,9 @@ app.use(FloatingVue, {
 app.use(VIntlPlugin)
 
 app.mount('#app')
+
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('Unhandled promise rejection:', event.reason);
+  const error = useError();
+  error.showError(event.reason, 'Unhandled Promise Rejection');
+});

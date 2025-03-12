@@ -349,6 +349,11 @@ const selectionMap = ref(new Map())
 const initProjects = async (cacheBehaviour?) => {
   const newProjects = []
 
+  if (!props.instance || !props.instance.path) {
+    handleError(new Error('Instance path is missing or invalid'));
+    return;
+  }
+
   const profileProjects = await get_projects(props.instance.path, cacheBehaviour)
   const fetchProjects = []
   const fetchVersions = []
