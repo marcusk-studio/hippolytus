@@ -117,7 +117,8 @@ jobs:
           wget file libxdo-dev libssl-dev pkg-config
           libayatana-appindicator3-dev librsvg2-dev
       - name: Install frontend dependencies
-        run: pnpm install
+        run: >-
+          pnpm install --filter="!@modrinth/frontend" --filter="!apps/frontend"
       - name: build app (macos)
         run: >-
           pnpm --filter=@modrinth/app run tauri build --target
