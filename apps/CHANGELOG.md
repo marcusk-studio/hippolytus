@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.0.0...apps-v2.0.1) (2025-03-15)
+
+
+### 🐛 Bugfixes
+
+* **instance:** fix handle error ([7874793](https://github.com/marcusk-studio/hippolytus/commit/7874793b850419f2226ff4267e69a9302ff53b31))
+
 ## [2.0.0](https://github.com/marcusk-studio/hippolytus/compare/apps-v1.13.3...apps-v2.0.0) (2025-03-12)
 
 
