@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.2](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.0.1...apps-v2.0.2) (2025-04-24)
+
+
+### 🐛 Bugfixes
+
+* introduce vipsmp modpack ([#32](https://github.com/marcusk-studio/hippolytus/issues/32)) ([b7ffb94](https://github.com/marcusk-studio/hippolytus/commit/b7ffb94aa6c10fdebfd80db0ffb14ec07b4175c3))
+
 ## [2.0.1](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.0.0...apps-v2.0.1) (2025-03-15)
 
 
