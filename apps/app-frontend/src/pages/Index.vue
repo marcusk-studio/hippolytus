@@ -69,7 +69,7 @@ const featuredProjects = ref([])
 
 const fetchFeaturedProjects = async () => {
   try {
-    const response = await fetch('https://cdn.marcusk.fun/featured.json')
+    const response = await fetch('https://cdn.marcusk.fun/featured2.json')
     const data = await response.json()
     featuredProjects.value = data.featured_projects
     return true

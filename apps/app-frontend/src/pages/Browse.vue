@@ -106,7 +106,7 @@ const featuredProjects = vueRef<FeaturedProject[]>([])
 
 async function fetchFeaturedProjects() {
   try {
-    const response = await fetch('https://cdn.marcusk.fun/featured.json')
+    const response = await fetch('https://cdn.marcusk.fun/featured2.json')
     const data: { featured_projects: FeaturedProject[] } = await response.json()
     featuredProjects.value = data.featured_projects
     return true
