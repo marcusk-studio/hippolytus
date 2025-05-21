@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.3](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.0.2...apps-v2.0.3) (2025-05-21)
+
+
+### 🐛 Bugfixes
+
+* update backgrounds ([5d42ec0](https://github.com/marcusk-studio/hippolytus/commit/5d42ec0a16d300a13860e5b84a8c098d87952f88))
+* update modpack facets ([5d4503e](https://github.com/marcusk-studio/hippolytus/commit/5d4503efabde421c48d6b8eabdb5f041c621787d))
+
 ## [2.0.2](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.0.1...apps-v2.0.2) (2025-04-24)
 
 
