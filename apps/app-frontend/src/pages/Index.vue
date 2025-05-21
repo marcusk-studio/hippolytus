@@ -69,7 +69,7 @@ const featuredProjects = ref([])
 
 const fetchFeaturedProjects = async () => {
   try {
-    const response = await fetch('https://cdn.marcusk.fun/featured2.json')
+    const response = await fetch('https://cdn.marcusk.fun/featured4.json')
     const data = await response.json()
     featuredProjects.value = data.featured_projects
     return true
@@ -83,13 +83,27 @@ const fetchFeaturedProjects = async () => {
 const getFeaturedModpacks = async () => {
   await fetchFeaturedProjects()
 
-  const projectIdFacet = featuredProjects.value.length > 0
-    ? `["project_id:${featuredProjects.value.map(p => p.id).join('"] OR ["project_id:')}"]`
-    : '["project_id:none"]'
-
-  const response = await get_search_results(
-    `?facets=[["project_type:modpack"],${projectIdFacet}]&limit=10&index=follows${filter.value ? `&filters=${filter.value}` : ''}`,
-  )
+  // Create structured filters exactly like in the browse file
+  const filters = []
+  
+  // Project type filter
+  filters.push(["project_type:modpack"])
+  
+  // Project ID filter - using the exact same approach as the browse file
+  if (featuredProjects.value.length > 0) {
+    const projectIdFilter = featuredProjects.value.map(p => `project_id:${p.id}`).join(' OR ')
+    filters.push([projectIdFilter])
+  } else {
+    filters.push(["project_id:none"])
+  }
+  
+  // Build the facets parameter in the format the API expects
+  const facetsParam = JSON.stringify(filters)
+  
+  // Construct the query with facets
+  const query = `?facets=${facetsParam}&limit=10&index=follows${filter.value ? `&query=${filter.value}` : ''}`
+  
+  const response = await get_search_results(query)
 
   if (response?.result?.hits) {
     const profiles = await list().catch(handleError)
@@ -320,7 +334,7 @@ const handleClickOutside = (event) => {
               <div class="flex items-center gap-4" v-if="selectedModpack">
                 <img v-if="selectedModpack.icon_url" :src="selectedModpack.icon_url" class="w-8 h-8 rounded"
                   :alt="selectedModpack.title" />
-                <span>{{ selectedModpack.title }}</span>
+                <span class="truncate max-w-[320px]">{{ selectedModpack.title }}</span>
               </div>
               <span v-else>Select a modpack</span>
               <svg class="w-5 h-5" :class="{ 'rotate-180': isDropdownOpen }" viewBox="0 0 24 24" fill="none"
@@ -334,15 +348,15 @@ const handleClickOutside = (event) => {
               class="absolute z-50 w-full bottom-full mb-2 bg-raised rounded-lg border border-[--brand-gradient-border] shadow-lg max-h-[60vh] overflow-y-auto">
               <div class="p-2">
                 <div v-for="modpack in featuredModpacks" :key="modpack.project_id"
-                  class="p-4 rounded-lg cursor-pointer hover:bg-[--color-button-bg]"
+                  class="p-4 rounded-lg cursor-pointer hover:bg-[--color-button-bg] mb-2 last:mb-0"
                   :class="{ 'bg-[--color-button-bg]': selectedModpackId === modpack.project_id }"
                   @click="selectedModpackId = modpack.project_id; isDropdownOpen = false">
                   <div class="flex items-center gap-4">
                     <img v-if="modpack.icon_url" :src="modpack.icon_url" class="w-12 h-12 rounded"
                       :alt="modpack.title" />
-                    <div class="flex-grow">
-                      <h3 class="text-lg font-bold m-0">{{ modpack.title }}</h3>
-                      <p class="text-sm text-gray-500 m-0">{{ modpack.author }}</p>
+                    <div class="flex-grow overflow-hidden">
+                      <h3 class="text-lg font-bold m-0 truncate">{{ modpack.title }}</h3>
+                      <p class="text-sm text-gray-500 m-0 truncate">{{ modpack.author }}</p>
                     </div>
                   </div>
                 </div>
@@ -407,6 +421,13 @@ const handleClickOutside = (event) => {
 /* Add smooth transition for dropdown arrow */
 svg {
   transition: transform 0.2s ease;
+}
+
+/* Add truncation styles */
+.truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .glassmorphism-play {

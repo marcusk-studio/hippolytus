@@ -106,7 +106,7 @@ const featuredProjects = vueRef<FeaturedProject[]>([])
 
 async function fetchFeaturedProjects() {
   try {
-    const response = await fetch('https://cdn.marcusk.fun/featured2.json')
+    const response = await fetch('https://cdn.marcusk.fun/featured4.json')
     const data: { featured_projects: FeaturedProject[] } = await response.json()
     featuredProjects.value = data.featured_projects
     return true
@@ -129,11 +129,11 @@ const instanceFilters = computed(() => {
   }[] = []
 
   if (fetchSuccessful.value && featuredProjects.value.length > 0) {
-    featuredProjects.value.forEach(project => {
-      filters.push({
-        type: 'project_id',
-        option: `project_id:${project.id}`
-      })
+    // Create a single filter with all project IDs joined with OR logic
+    const projectIdOptions = featuredProjects.value.map(project => `project_id:${project.id}`);
+    filters.push({
+      type: 'project_id',
+      option: projectIdOptions.join(' OR ')
     })
   } else {
     filters.push({
