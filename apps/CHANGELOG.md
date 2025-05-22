@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.4](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.0.3...apps-v2.0.4) (2025-05-22)
+
+
+### 🐛 Bugfixes
+
+* update pfp api ([4e81b71](https://github.com/marcusk-studio/hippolytus/commit/4e81b71ba4aea2fd31e9ebe3c0517dd0d0cea31d))
+
 ## [2.0.3](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.0.2...apps-v2.0.3) (2025-05-21)
 
 
