@@ -1,41 +1,25 @@
 <template>
   <div class="relative" style="width: 250px">
-    <div
-      v-if="mode !== 'isolated'"
-      ref="button"
+    <div v-if="mode !== 'isolated'" ref="button"
       class="flex overflow-hidden gap-3 px-4 py-3 bg-white rounded-3xl border-2 border-gray-700 border-solid shadow-2xl items-center justify-center w-full cursor-pointer"
-      role="article"
-      @click="toggleMenu"
-    >
-      <Avatar
-        size="64px"
-        class="rounded-2xl object-contain shrink-0"
-        :src="
-          selectedAccount
-            ? getCachedAvatarUrl(selectedAccount.username)
-            : 'https://launcher-files.modrinth.com/assets/steve_head.png'
-        "
-        :alt="selectedAccount ? selectedAccount.username : 'Default avatar'"
-      />
+      role="article" @click="toggleMenu">
+      <Avatar size="64px" class="object-contain shrink-0 noborder" :src="selectedAccount
+        ? getCachedAvatarUrl(selectedAccount.username)
+        : 'https://launcher-files.modrinth.com/assets/steve_head.png'
+        " :alt="selectedAccount ? selectedAccount.username : 'Default avatar'" />
       <div class="flex flex-col justify-center">
         <p class="text-xs font-light text-gray-600 leading-none">Playing as</p>
-        <h2 class="text-lg font-bold leading-none text-black truncate">{{ selectedAccount ? selectedAccount.username : 'Select account' }}</h2>
+        <h2 class="text-lg font-bold leading-none text-black truncate">{{ selectedAccount ? selectedAccount.username :
+          'Select account' }}</h2>
       </div>
-      <DropdownIcon
-        class="w-4 h-4 text-gray-600 ml-2 transition-transform"
-        :class="{ 'rotate-180': showCard }"
-      />
+      <DropdownIcon class="w-4 h-4 text-gray-600 ml-2 transition-transform" :class="{ 'rotate-180': showCard }" />
     </div>
 
     <transition name="fade">
-      <Card
-        v-if="showCard || mode === 'isolated'"
-        ref="card"
-        class="account-card"
-        :class="{ expanded: mode === 'expanded', isolated: mode === 'isolated' }"
-      >
+      <Card v-if="showCard || mode === 'isolated'" ref="card" class="account-card"
+        :class="{ expanded: mode === 'expanded', isolated: mode === 'isolated' }">
         <div v-if="selectedAccount" class="selected account">
-          <Avatar size="xs" :src="`https://crafatar.com/avatars/${selectedAccount.id}`" />
+          <Avatar size="xs" class="noborder" :src="`https://crafatar.com/avatars/${selectedAccount.id}`" />
           <div class="flex-1 min-w-0">
             <h4 class="truncate">{{ selectedAccount.username }}</h4>
             <p>Selected</p>
@@ -122,7 +106,7 @@ const selectedAccount = computed(() =>
 function cleanupOldCaches() {
   const oneWeek = 7 * 24 * 60 * 60 * 1000
   const now = Date.now()
-  
+
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i)
     if (key.startsWith('avatar_') || key.startsWith('crafatar_')) {
@@ -210,35 +194,11 @@ onUnmounted(() => {
 })
 
 function getCachedAvatarUrl(username) {
-  const cached = localStorage.getItem(`avatar_${username}`)
-  if (cached) {
-    const { url, timestamp } = JSON.parse(cached)
-    if (Date.now() - timestamp < 24 * 60 * 60 * 1000) { // Cache for 24 hours
-      return url
-    }
-  }
-  const newUrl = `https://minecraftpfp.com/api/pfp/${username}.png`
-  localStorage.setItem(`avatar_${username}`, JSON.stringify({
-    url: newUrl,
-    timestamp: Date.now()
-  }))
-  return newUrl
+  return `https://pfp.arcticbd.net/api/pfp/normal/${username}.png?gradient=e66a3e-e08a54`
 }
 
 function getCachedCrafatarUrl(uuid) {
-  const cached = localStorage.getItem(`crafatar_${uuid}`)
-  if (cached) {
-    const { url, timestamp } = JSON.parse(cached)
-    if (Date.now() - timestamp < 24 * 60 * 60 * 1000) {
-      return url
-    }
-  }
-  const newUrl = `https://crafatar.com/avatars/${uuid}`
-  localStorage.setItem(`crafatar_${uuid}`, JSON.stringify({
-    url: newUrl,
-    timestamp: Date.now()
-  }))
-  return newUrl
+  return `https://crafatar.com/avatars/${uuid}`
 }
 
 const login = async () => {
@@ -257,14 +217,17 @@ const login = async () => {
   position: absolute;
   display: flex;
   flex-direction: column;
-  align-items: center; /* Center items horizontally */
-  justify-content: center; /* Center items vertically */
+  align-items: center;
+  /* Center items horizontally */
+  justify-content: center;
+  /* Center items vertically */
   top: calc(100% + 0.5rem);
   left: 0;
   z-index: 11;
   gap: 0.5rem;
   padding: 1rem;
-  width: 100%; /* Matches the parent container's width */
+  width: 100%;
+  /* Matches the parent container's width */
   user-select: none;
   max-height: 98vh;
   overflow-y: auto;
@@ -283,6 +246,10 @@ const login = async () => {
     left: 0;
     top: 0;
   }
+}
+
+.noborder {
+  border: none !important;
 }
 
 .selected {
