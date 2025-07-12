@@ -319,6 +319,26 @@ const handleClickOutside = (event) => {
   }
 }
 
+const selectModpack = (projectId) => {
+  selectedModpackId.value = projectId
+  
+  setTimeout(() => {
+    isDropdownOpen.value = false
+  }, 150)
+}
+
+const handleModpackSelection = (projectId) => {
+  const selectedElement = document.querySelector(`[data-modpack-id="${projectId}"]`)
+  if (selectedElement) {
+    selectedElement.style.transform = 'scale(0.95)'
+    setTimeout(() => {
+      selectedElement.style.transform = 'scale(1)'
+    }, 100)
+  }
+  
+  selectModpack(projectId)
+}
+
 </script>
 
 <template>
@@ -330,62 +350,96 @@ const handleClickOutside = (event) => {
         <div class="flex items-center gap-4">
           <div class="relative" ref="dropdownRef">
             <button @click="isDropdownOpen = !isDropdownOpen"
-              class="w-[435px] p-4 bg-raised rounded-lg flex items-center justify-between border border-[--brand-gradient-border]">
+              class="w-[435px] p-4 bg-raised rounded-lg flex items-center justify-between border border-[--brand-gradient-border] transition-all duration-200 ease-out hover:bg-[--color-button-bg] hover:shadow-lg active:scale-[0.98] relative overflow-hidden">
               <div class="flex items-center gap-4" v-if="selectedModpack">
-                <img v-if="selectedModpack.icon_url" :src="selectedModpack.icon_url" class="w-8 h-8 rounded"
+                <img v-if="selectedModpack.icon_url" :src="selectedModpack.icon_url" class="w-8 h-8 rounded transition-transform duration-200 hover:scale-110"
                   :alt="selectedModpack.title" />
-                <span class="truncate max-w-[320px]">{{ selectedModpack.title }}</span>
+                <span class="truncate max-w-[320px] transition-colors duration-200">{{ selectedModpack.title }}</span>
               </div>
-              <span v-else>Select a modpack</span>
-              <svg class="w-5 h-5" :class="{ 'rotate-180': isDropdownOpen }" viewBox="0 0 24 24" fill="none"
+              <span v-else class="transition-colors duration-200">Select a modpack</span>
+              <svg class="w-5 h-5 transition-all duration-200" :class="{ 'rotate-180': isDropdownOpen }" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor">
                 <polyline points="6 9 12 15 18 9"></polyline>
               </svg>
             </button>
 
             <!-- Dropdown content -->
-            <div v-if="isDropdownOpen"
-              class="absolute z-50 w-full bottom-full mb-2 bg-raised rounded-lg border border-[--brand-gradient-border] shadow-lg max-h-[60vh] overflow-y-auto">
-              <div class="p-2">
-                <div v-for="modpack in featuredModpacks" :key="modpack.project_id"
-                  class="p-4 rounded-lg cursor-pointer hover:bg-[--color-button-bg] mb-2 last:mb-0"
-                  :class="{ 'bg-[--color-button-bg]': selectedModpackId === modpack.project_id }"
-                  @click="selectedModpackId = modpack.project_id; isDropdownOpen = false">
-                  <div class="flex items-center gap-4">
-                    <img v-if="modpack.icon_url" :src="modpack.icon_url" class="w-12 h-12 rounded"
-                      :alt="modpack.title" />
-                    <div class="flex-grow overflow-hidden">
-                      <h3 class="text-lg font-bold m-0 truncate">{{ modpack.title }}</h3>
-                      <p class="text-sm text-gray-500 m-0 truncate">{{ modpack.author }}</p>
+            <Transition
+              enter-active-class="transition-all duration-200 ease-out"
+              enter-from-class="opacity-0 transform scale-95 translate-y-2"
+              enter-to-class="opacity-100 transform scale-100 translate-y-0"
+              leave-active-class="transition-all duration-150 ease-in"
+              leave-from-class="opacity-100 transform scale-100 translate-y-0"
+              leave-to-class="opacity-0 transform scale-95 translate-y-2"
+            >
+              <div v-if="isDropdownOpen"
+                class="absolute z-50 w-full bottom-full mb-2 bg-raised rounded-lg border border-[--brand-gradient-border] shadow-lg max-h-[60vh] overflow-y-auto">
+                <div class="p-2">
+                  <TransitionGroup
+                    name="modpack-item"
+                    tag="div"
+                    appear
+                  >
+                    <div v-for="modpack in featuredModpacks" :key="modpack.project_id"
+                      :data-modpack-id="modpack.project_id"
+                      class="p-4 rounded-lg cursor-pointer hover:bg-[--color-button-bg] mb-2 last:mb-0 transition-all duration-200 ease-out hover:scale-[1.02] hover:shadow-md"
+                      :class="{ 'bg-[--color-button-bg]': selectedModpackId === modpack.project_id }"
+                      @click="handleModpackSelection(modpack.project_id)">
+                      <div class="flex items-center gap-4">
+                        <img v-if="modpack.icon_url" :src="modpack.icon_url" class="w-12 h-12 rounded transition-transform duration-200"
+                          :alt="modpack.title" />
+                        <div class="flex-grow overflow-hidden">
+                          <h3 class="text-lg font-bold m-0 truncate transition-colors duration-200">{{ modpack.title }}</h3>
+                          <p class="text-sm text-gray-500 m-0 truncate transition-colors duration-200">{{ modpack.author }}</p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  </TransitionGroup>
                 </div>
               </div>
-            </div>
+            </Transition>
           </div>
         </div>
 
         <!-- Action buttons -->
-        <div v-if="selectedModpack" class="flex-shrink-0 !w-[300px]">
+        <Transition
+          enter-active-class="transition-all duration-300 ease-out"
+          enter-from-class="opacity-0 transform scale-95 translate-x-10"
+          enter-to-class="opacity-100 transform scale-100 translate-x-0"
+          leave-active-class="transition-all duration-200 ease-in"
+          leave-from-class="opacity-100 transform scale-100 translate-x-0"
+          leave-to-class="opacity-0 transform scale-95 translate-x-10"
+        >
+          <div v-if="selectedModpack" class="flex-shrink-0 !w-[300px]">
           <template v-if="installed[selectedModpack.project_id]">
             <div class="glassmorphism-play">
               <ButtonStyled size="2xlarge" color="transparent" class="!h-[300px] !w-[300px] !min-w-[300px]">
                 <button
                   @click="selectedModpackHasUpdate ? updateModpack(selectedModpack.project_id) : play(selectedModpack.project_id)"
                   :disabled="playing[selectedModpack.project_id]"
-                  class="flex items-center justify-center gap-3 !h-full !w-full text-3xl font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed">
-                  <template v-if="updating[selectedModpack.project_id]">
-                    <span class="loader"></span>
-                    Updating...
-                  </template>
-                  <template v-else-if="selectedModpackHasUpdate">
-                    <DownloadIcon class="w-16 h-16" />
-                    Update
-                  </template>
-                  <template v-else>
-                    <PlayIcon class="w-16 h-16" />
-                    {{ playing[selectedModpack.project_id] ? 'Playing...' : 'Play' }}
-                  </template>
+                  class="flex flex-col items-center justify-center gap-3 !h-full !w-full text-3xl font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed">
+                  <div class="flex items-center justify-center w-16 h-16">
+                    <template v-if="updating[selectedModpack.project_id]">
+                      <span class="loader"></span>
+                    </template>
+                    <template v-else-if="selectedModpackHasUpdate">
+                      <DownloadIcon class="w-16 h-16" />
+                    </template>
+                    <template v-else>
+                      <PlayIcon class="w-16 h-16" />
+                    </template>
+                  </div>
+                  <div class="text-center min-h-[1.5rem] flex items-center justify-center">
+                    <template v-if="updating[selectedModpack.project_id]">
+                      Updating...
+                    </template>
+                    <template v-else-if="selectedModpackHasUpdate">
+                      Update
+                    </template>
+                    <template v-else>
+                      {{ playing[selectedModpack.project_id] ? 'Playing...' : 'Play' }}
+                    </template>
+                  </div>
                 </button>
               </ButtonStyled>
             </div>
@@ -396,18 +450,19 @@ const handleClickOutside = (event) => {
                 <button v-tooltip="installed[selectedModpack.project_id] ? `This project is already installed` : null"
                   :disabled="installing[selectedModpack.project_id]" @click="install(selectedModpack.project_id)"
                   class="flex flex-col items-center justify-center gap-3 !h-full !w-full text-3xl font-bold text-white">
-                  <div class="flex items-center justify-center">
+                  <div class="flex items-center justify-center w-16 h-16">
                     <DownloadIcon v-if="!installing[selectedModpack.project_id]" class="w-16 h-16" />
-                    <div v-else class="w-16 h-16 flex items-center justify-center">
-                      <span class="loader"></span>
-                    </div>
+                    <span v-else class="loader"></span>
                   </div>
-                  <div>{{ installing[selectedModpack.project_id] ? 'Installing...' : 'Install' }}</div>
+                  <div class="text-center min-h-[1.5rem] flex items-center justify-center">
+                    {{ installing[selectedModpack.project_id] ? 'Installing...' : 'Install' }}
+                  </div>
                 </button>
               </ButtonStyled>
             </div>
           </template>
         </div>
+      </Transition>
       </div>
     </div>
   </div>
@@ -428,6 +483,61 @@ svg {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.modpack-item-enter-active,
+.modpack-item-leave-active {
+  transition: all 0.3s ease;
+}
+
+.modpack-item-enter-from {
+  opacity: 0;
+  transform: translateX(-20px) scale(0.95);
+}
+
+.modpack-item-leave-to {
+  opacity: 0;
+  transform: translateX(20px) scale(0.95);
+}
+
+.modpack-item-move {
+  transition: transform 0.3s ease;
+}
+
+button {
+  transition: all 0.2s ease;
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+.modpack-item-enter-active .p-4:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+img:hover {
+  transform: scale(1.05);
+}
+
+.bg-\[--color-button-bg\] {
+  animation: selectedPulse 0.3s ease-out;
+}
+
+@keyframes selectedPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(var(--color-brand), 0.4);
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow: 0 0 0 8px rgba(var(--color-brand), 0.2);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(var(--color-brand), 0);
+  }
 }
 
 .glassmorphism-play {

@@ -362,6 +362,35 @@ function handleAuxClick(e) {
     e.target.dispatchEvent(event)
   }
 }
+
+function getTransitionKey(route) {
+  return route.path;
+}
+
+function shouldApplyTransition(route) {
+  const mainSection = route.path.split('/')[1] || 'home'
+  
+  if (mainSection === 'project' || mainSection === 'instance') {
+    return false
+  }
+  
+  return route.path === '/' || 
+         route.path === '/browse' || 
+         route.path.startsWith('/browse/') ||
+         route.path === '/library'
+}
+
+function getTransitionType(route) {
+  if (route.path === '/') {
+    return 'main-page-transition' 
+  } else if (route.path.startsWith('/browse')) {
+    return 'discover-transition' 
+  } else if (route.path === '/library') {
+    return 'library-transition'
+  } else {
+    return 'main-page-transition' 
+  }
+}
 </script>
 
 <template>
@@ -488,10 +517,23 @@ function handleAuxClick(e) {
   }">
         <div v-if="route.path !== '/'" class="backdrop-blur-md absolute inset-0 z-0"></div>
         <div class="relative z-10 h-full overflow-auto">
-          <RouterView v-slot="{ Component }">
+          <RouterView v-slot="{ Component, route }">
             <template v-if="Component">
               <Suspense @pending="loading.startLoading()" @resolve="loading.stopLoading()">
-                <component :is="Component"></component>
+                <template v-if="shouldApplyTransition(route)">
+                  <div class="transition-container">
+                    <Transition
+                      :name="getTransitionType(route)"
+                      mode="out-in"
+                      appear
+                    >
+                      <component :is="Component" :key="getTransitionKey(route)"></component>
+                    </Transition>
+                  </div>
+                </template>
+                <template v-else>
+                  <component :is="Component" :key="getTransitionKey(route)"></component>
+                </template>
               </Suspense>
             </template>
           </RouterView>
@@ -697,6 +739,116 @@ function handleAuxClick(e) {
 
 .sidebar-teleport-content:empty+.sidebar-default-content.sidebar-enabled {
   display: contents;
+}
+
+/* Page Transition Styles */
+/* Main page transitions - bigger effects for Home, Browse, Library */
+.main-page-transition-enter-active {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.main-page-transition-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.main-page-transition-enter-from {
+  opacity: 0;
+  transform: translateY(20px) scale(0.98);
+  filter: blur(2px);
+}
+
+.main-page-transition-leave-to {
+  opacity: 0;
+  transform: translateY(-20px) scale(0.98);
+  filter: blur(2px);
+}
+
+.main-page-transition-enter-to,
+.main-page-transition-leave-from {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  filter: blur(0);
+}
+
+.discover-transition-enter-active {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.discover-transition-leave-active {
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.discover-transition-enter-from {
+  opacity: 0;
+  transform: translateX(-20px);
+}
+
+.discover-transition-leave-to {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+.discover-transition-enter-to,
+.discover-transition-leave-from {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.library-transition-enter-active {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.library-transition-leave-active {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.library-transition-enter-from {
+  opacity: 0;
+  transform: translateY(15px) scale(0.98);
+}
+
+.library-transition-leave-to {
+  opacity: 0;
+  transform: translateY(-15px) scale(0.98);
+}
+
+.library-transition-enter-to,
+.library-transition-leave-from {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.page-transition-enter-active {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.page-transition-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.page-transition-enter-from {
+  opacity: 0;
+  transform: translateY(20px) scale(0.98);
+  filter: blur(2px);
+}
+
+.page-transition-leave-to {
+  opacity: 0;
+  transform: translateY(-20px) scale(0.98);
+  filter: blur(2px);
+}
+
+.page-transition-enter-to,
+.page-transition-leave-from {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  filter: blur(0);
+}
+
+.transition-container {
+  overflow: hidden;
+  height: 100%;
+  width: 100%;
 }
 </style>
 <style>

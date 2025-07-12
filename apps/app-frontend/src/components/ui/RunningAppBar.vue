@@ -13,9 +13,9 @@
     </div>
     <div 
       v-if="selectedProcess" 
-      class="flex h-8 overflow-hidden gap-3 justify-center items-center px-2 rounded-[9px] shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] bg-gradient-to-r from-[#F05B32] to-[#E59256] [box-shadow:_0_0_10px_rgba(249,115,22,0.7)]"
+      class="instance-status-indicator running-state flex h-8 overflow-hidden gap-3 justify-center items-center px-2 rounded-[9px] shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] bg-gradient-to-r from-[#FF6B35] via-[#F05B32] to-[#E59256] [box-shadow:_0_0_20px_rgba(249,115,22,0.9)] animate-pulse"
     >
-      <span class="circle running w-4 h-4 rounded-full m-0" />
+      <span class="circle running w-4 h-4 rounded-full m-0 [box-shadow:_0_0_12px_rgba(34,197,94,0.9)] animate-pulse" />
       <div ref="profileButton" class="self-stretch my-auto flex items-center gap-1">
         <router-link 
           :to="`/instance/${encodeURIComponent(selectedProcess.profile.path)}`"
@@ -51,11 +51,11 @@
     </div>
     <div 
       v-else 
-      class="flex h-8 overflow-hidden gap-3 justify-center items-center px-2 rounded-[9px] shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] bg-gradient-to-r from-[#F05B32] to-[#E59256] [box-shadow:_0_0_10px_rgba(249,115,22,0.7)]"
+      class="instance-status-indicator stopped-state flex h-8 overflow-hidden gap-3 justify-center items-center px-2 rounded-[9px] shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] bg-gradient-to-r from-gray-400 via-gray-500 to-gray-600"
       role="status"
       aria-live="polite"
     >
-      <span class="circle stopped w-4 h-4 bg-gray-500 rounded-full m-0" />
+      <span class="circle stopped w-4 h-4 bg-gray-300 rounded-full m-0" />
       <div class="self-stretch my-auto flex items-center">
         <span class="text-sm leading-4 font-medium text-white">No instances running</span>
       </div>
@@ -290,6 +290,87 @@ onBeforeUnmount(() => {
   gap: var(--gap-md);
 }
 
+.instance-status-indicator {
+  transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  transform-origin: center;
+  
+  &.running-state {
+    animation: runningGlow 2s ease-in-out infinite alternate;
+    
+    &:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 25px rgba(249, 115, 22, 1);
+    }
+  }
+  
+  &.stopped-state {
+    animation: stoppedGlow 3s ease-in-out infinite;
+    
+    &:hover {
+      transform: scale(1.02);
+    }
+  }
+}
+
+@keyframes runningGlow {
+  0% {
+    box-shadow: 0 0 20px rgba(249, 115, 22, 0.7);
+  }
+  100% {
+    box-shadow: 0 0 25px rgba(249, 115, 22, 0.8), 0 0 30px rgba(255, 107, 53, 0.4);
+  }
+}
+
+@keyframes stoppedGlow {
+  0%, 100% {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  }
+  50% {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1), 0 0 10px rgba(156, 163, 175, 0.2);
+  }
+}
+
+.circle {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 0.25rem;
+  transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+  &.running {
+    background-color: #22C55E;
+    animation: greenPulse 1.5s ease-in-out infinite alternate;
+  }
+
+  &.stopped {
+    display: block;
+    animation: grayPulse 2s ease-in-out infinite;
+  }
+}
+
+@keyframes greenPulse {
+  0% {
+    box-shadow: 0 0 12px rgba(34, 197, 94, 0.7);
+    transform: scale(1);
+  }
+  100% {
+    box-shadow: 0 0 15px rgba(34, 197, 94, 0.8), 0 0 20px rgba(34, 197, 94, 0.4);
+    transform: scale(1.05);
+  }
+}
+
+@keyframes grayPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.02);
+    opacity: 1;
+  }
+}
+
 .arrow {
   transition: transform 0.2s ease-in-out;
   display: flex;
@@ -329,28 +410,13 @@ onBeforeUnmount(() => {
   }
 }
 
-.circle {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  display: inline-block;
-  margin-right: 0.25rem;
-
-  &.running {
-    background-color: #22C55E;
-  }
-
-  &.stopped {
-    display: block;
-  }
-}
-
 .icon-button {
   background-color: transparent;
   box-shadow: none;
   width: 1.25rem !important;
   height: 1.25rem !important;
   padding: 0;
+  transition: all 0.2s ease-in-out;
 
   svg {
     min-width: 1.25rem;
@@ -358,6 +424,15 @@ onBeforeUnmount(() => {
 
   &.stop {
     color: var(--color-red);
+    
+    &:hover {
+      transform: scale(1.1);
+      color: #dc2626;
+    }
+  }
+  
+  &:hover {
+    transform: scale(1.05);
   }
 }
 
@@ -455,9 +530,15 @@ onBeforeUnmount(() => {
   width: 100%;
   background-color: var(--color-raised-bg);
   box-shadow: none;
+  transition: all 0.2s ease-in-out;
 
   .text {
     margin-right: auto;
+  }
+  
+  &:hover {
+    transform: translateX(2px);
+    background-color: var(--color-raised-bg-hover);
   }
 }
 

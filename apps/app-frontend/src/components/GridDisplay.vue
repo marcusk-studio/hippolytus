@@ -11,6 +11,8 @@ import {
   EyeIcon,
   SearchIcon,
   XIcon,
+  FilterIcon,
+  SortAscendingIcon,
 } from '@modrinth/assets'
 import { Button, DropdownSelect } from '@modrinth/ui'
 import { formatCategoryHeader } from '@modrinth/utils'
@@ -218,156 +220,327 @@ const filteredResults = computed(() => {
 })
 </script>
 <template>
-  <div class="flex gap-2">
-    <div class="iconified-input flex-1">
-      <SearchIcon />
-      <input v-model="search" type="text" placeholder="Search" />
-      <Button class="r-btn" @click="() => (search = '')">
-        <XIcon />
-      </Button>
+  <div class="grid-display-container">
+    <div class="controls-section">
+      <div class="controls-row">
+        <div class="search-section">
+          <div class="search-container">
+            <SearchIcon class="search-icon" />
+            <input 
+              v-model="search" 
+              type="text" 
+              placeholder="Search instances..." 
+              class="search-input"
+            />
+            <Button 
+              v-if="search" 
+              class="clear-search-btn" 
+              @click="() => (search = '')"
+            >
+              <XIcon />
+            </Button>
+          </div>
+        </div>
+        
+        <div class="filter-section">
+          <div class="filter-group">
+            <SortAscendingIcon class="filter-icon" />
+            <DropdownSelect
+              v-slot="{ selected }"
+              v-model="sortBy"
+              name="Sort Dropdown"
+              class="filter-dropdown"
+              :options="['Name', 'Last played', 'Date created', 'Date modified', 'Game version']"
+              placeholder="Sort by..."
+            >
+              <span class="filter-label">Sort: </span>
+              <span class="filter-value">{{ selected }}</span>
+            </DropdownSelect>
+          </div>
+        </div>
+      </div>
     </div>
-    <DropdownSelect
-      v-slot="{ selected }"
-      v-model="sortBy"
-      name="Sort Dropdown"
-      class="max-w-[16rem]"
-      :options="['Name', 'Last played', 'Date created', 'Date modified', 'Game version']"
-      placeholder="Select..."
-    >
-      <span class="font-semibold text-primary">Sort by: </span>
-      <span class="font-semibold text-secondary">{{ selected }}</span>
-    </DropdownSelect>
-    <DropdownSelect
-      v-slot="{ selected }"
-      v-model="group"
-      class="max-w-[16rem]"
-      name="Group Dropdown"
-      :options="['Group', 'Loader', 'Game version', 'None']"
-      placeholder="Select..."
-    >
-      <span class="font-semibold text-primary">Group by: </span>
-      <span class="font-semibold text-secondary">{{ selected }}</span>
-    </DropdownSelect>
-  </div>
-  <div
-    v-for="instanceSection in Array.from(filteredResults, ([key, value]) => ({
-      key,
-      value,
-    }))"
-    :key="instanceSection.key"
-    class="row"
-  >
-    <div v-if="instanceSection.key !== 'None'" class="divider">
-      <p>{{ instanceSection.key }}</p>
-      <hr aria-hidden="true" />
+
+    <div class="instances-container">
+      <div
+        v-for="instanceSection in Array.from(filteredResults, ([key, value]) => ({
+          key,
+          value,
+        }))"
+        :key="instanceSection.key"
+        class="instance-section"
+      >
+        <div v-if="instanceSection.key !== 'None'" class="section-header">
+          <h3 class="section-title">{{ instanceSection.key }}</h3>
+        </div>
+        <div class="instances-grid">
+          <Instance
+            v-for="instance in instanceSection.value"
+            ref="instanceComponents"
+            :key="instance.path + instance.install_stage"
+            :instance="instance"
+            @contextmenu.prevent.stop="(event) => handleRightClick(event, instance.path)"
+          />
+        </div>
+      </div>
     </div>
-    <section class="instances">
-      <Instance
-        v-for="instance in instanceSection.value"
-        ref="instanceComponents"
-        :key="instance.path + instance.install_stage"
-        :instance="instance"
-        @contextmenu.prevent.stop="(event) => handleRightClick(event, instance.path)"
-      />
-    </section>
+
+    <ConfirmModalWrapper
+      ref="confirmModal"
+      title="Are you sure you want to delete this instance?"
+      description="If you proceed, all data for your instance will be removed. You will not be able to recover it."
+      :has-to-type="false"
+      proceed-label="Delete"
+      @proceed="deleteProfile"
+    />
+    <ContextMenu ref="instanceOptions" @option-clicked="handleOptionsClick">
+      <template #play> <PlayIcon /> Play </template>
+      <template #stop> <StopCircleIcon /> Stop </template>
+      <template #add_content> <PlusIcon /> Add content </template>
+      <template #edit> <EyeIcon /> View instance </template>
+      <template #duplicate> <ClipboardCopyIcon /> Duplicate instance</template>
+      <template #delete> <TrashIcon /> Delete </template>
+      <template #open> <FolderOpenIcon /> Open folder </template>
+      <template #copy> <ClipboardCopyIcon /> Copy path </template>
+    </ContextMenu>
   </div>
-  <ConfirmModalWrapper
-    ref="confirmModal"
-    title="Are you sure you want to delete this instance?"
-    description="If you proceed, all data for your instance will be removed. You will not be able to recover it."
-    :has-to-type="false"
-    proceed-label="Delete"
-    @proceed="deleteProfile"
-  />
-  <ContextMenu ref="instanceOptions" @option-clicked="handleOptionsClick">
-    <template #play> <PlayIcon /> Play </template>
-    <template #stop> <StopCircleIcon /> Stop </template>
-    <template #add_content> <PlusIcon /> Add content </template>
-    <template #edit> <EyeIcon /> View instance </template>
-    <template #duplicate> <ClipboardCopyIcon /> Duplicate instance</template>
-    <template #delete> <TrashIcon /> Delete </template>
-    <template #open> <FolderOpenIcon /> Open folder </template>
-    <template #copy> <ClipboardCopyIcon /> Copy path </template>
-  </ContextMenu>
 </template>
+
 <style lang="scss" scoped>
-.row {
+.grid-display-container {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  width: 100%;
+  gap: 1rem;
+  height: 100%;
+}
 
-  .divider {
+.controls-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: #0a0101;
+  border-radius: 1rem;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
+}
+
+.controls-row {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.search-section {
+  flex: 1;
+  min-width: 200px;
+  
+  .search-container {
+    position: relative;
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    width: 100%;
-    gap: 1rem;
-    margin-bottom: 1rem;
-
-    p {
-      margin: 0;
-      font-size: 1rem;
-      white-space: nowrap;
-      color: var(--color-contrast);
+    height: 100%;
+    
+    .search-icon {
+      position: absolute;
+      left: 0.5rem;
+      color: var(--color-secondary);
+      width: 0.875rem;
+      height: 0.875rem;
+      z-index: 1;
     }
-
-    hr {
-      background-color: var(--color-gray);
-      height: 1px;
+    
+    .search-input {
       width: 100%;
+      height: 100%;
+      padding: 0.5rem 0.5rem 0.5rem 2rem;
       border: none;
+      border-radius: 0.5rem;
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--color-contrast);
+      font-size: 0.8125rem;
+      transition: all 0.2s ease;
+      
+      &:focus {
+        outline: none;
+        background: rgba(255, 255, 255, 0.15);
+        box-shadow: 0 0 0 3px rgba(var(--color-brand-rgb), 0.1);
+      }
+      
+      &::placeholder {
+        color: var(--color-secondary);
+      }
+    }
+    
+    .clear-search-btn {
+      position: absolute;
+      right: 0.25rem;
+      padding: 0.25rem;
+      border-radius: 0.25rem;
     }
   }
 }
 
-.header {
+.filter-section {
   display: flex;
-  flex-direction: row;
+  gap: 0.5rem;
   flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: inherit;
-  margin: 1rem 1rem 0 !important;
-  padding: 1rem;
-  width: calc(100% - 2rem);
-
-  .iconified-input {
-    flex-grow: 1;
-
-    input {
-      min-width: 100%;
-    }
-  }
-
-  .sort-dropdown {
-    width: 10rem;
-  }
-
-  .filter-dropdown {
-    width: 15rem;
-  }
-
-  .group-dropdown {
-    width: 10rem;
-  }
-
-  .labeled_button {
+  flex-shrink: 0;
+  height: 100%;
+  
+  .filter-group {
     display: flex;
-    flex-direction: row;
     align-items: center;
     gap: 0.5rem;
-    white-space: nowrap;
+    padding: 0.5rem 0.75rem;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 0.5rem;
+    transition: all 0.2s ease;
+    max-width: 250px;
+    height: 100%;
+    
+    &:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+    
+    .filter-icon {
+      width: 1rem;
+      height: 1rem;
+      color: var(--color-secondary);
+    }
+    
+    .filter-dropdown {
+      min-width: 5rem;
+      max-width: 150px;
+    }
+    
+    .filter-label {
+      font-weight: 600;
+      color: var(--color-contrast);
+      font-size: 0.875rem;
+    }
+    
+    .filter-value {
+      font-weight: 500;
+      color: var(--color-brand);
+      font-size: 0.875rem;
+    }
   }
 }
 
-.instances {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
-  width: 100%;
-  gap: 0.75rem;
-  margin-right: auto;
-  scroll-behavior: smooth;
+.instances-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  padding-right: 0.5rem;
+  max-height: 100%;
+  
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    
+    &:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+  }
+  
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.05);
+}
+
+.instance-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  
+  .section-header {
+    display: flex;
+    align-items: center;
+    
+    .section-title {
+      margin: 0;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--color-contrast);
+      white-space: nowrap;
+      padding: 0.5rem 1rem;
+      background: var(--color-brand);
+      border-radius: 0.5rem;
+      color: white;
+    }
+  }
+}
+
+.instances-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.5rem;
+  width: 100%;
+}
+
+// Responsive adjustments
+@media (max-width: 768px) {
+  .controls-section {
+    padding: 0.5rem;
+  }
+  
+  .controls-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+  
+  .search-section {
+    min-width: unset;
+  }
+  
+  .filter-section {
+    justify-content: center;
+    
+    .filter-group {
+      width: 100%;
+      max-width: 250px;
+    }
+  }
+  
+  .instances-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .section-title {
+    font-size: 1.25rem !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .grid-display-container {
+    gap: 0.75rem;
+  }
+  
+  .controls-section {
+    gap: 0.5rem;
+  }
+  
+  .search-input {
+    padding: 0.375rem 0.375rem 0.375rem 1.75rem !important;
+  }
+  
+  .filter-group {
+    padding: 0.25rem 0.375rem !important;
+  }
 }
 </style>
