@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.0.4...apps-v2.1.0) (2025-07-12)
+
+
+### ✨ Features
+
+* add animations ([50d227e](https://github.com/marcusk-studio/hippolytus/commit/50d227edf64ef208d5038f82c75d6379e7490d0c))
+
 ## [2.0.4](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.0.3...apps-v2.0.4) (2025-05-22)
 
 
