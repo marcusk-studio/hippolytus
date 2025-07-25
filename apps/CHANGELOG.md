@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.1](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.2.0...apps-v2.2.1) (2025-07-25)
+
+
+### 🐛 Bugfixes
+
+* add rss feed to csp whitelist ([52d0144](https://github.com/marcusk-studio/hippolytus/commit/52d014404e55c218fcb0fc365aa52b09bc573c15))
+
 ## [2.2.0](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.1.0...apps-v2.2.0) (2025-07-25)
 
 
