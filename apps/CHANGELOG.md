@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.0](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.1.0...apps-v2.2.0) (2025-07-25)
+
+
+### ✨ Features
+
+* add news section ([5c46539](https://github.com/marcusk-studio/hippolytus/commit/5c46539940ce8a7a3e8172219e44de86947d032b))
+
 ## [2.1.0](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.0.4...apps-v2.1.0) (2025-07-12)
 
 
