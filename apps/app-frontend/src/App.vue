@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import {
   ArrowBigUpDashIcon,
+  BellIcon,
   CompassIcon,
   DownloadIcon,
   HomeIcon,
@@ -54,6 +55,7 @@ import NavButton from '@/components/ui/NavButton.vue'
 import { get as getCreds, login, logout } from '@/helpers/mr_auth.js'
 import { get_user } from '@/helpers/cache.js'
 import AppSettingsModal from '@/components/ui/modal/AppSettingsModal.vue'
+import UpdatesModal from '@/components/ui/UpdatesModal.vue'
 import dayjs from 'dayjs'
 import PromotionWrapper from '@/components/ui/PromotionWrapper.vue'
 import { hide_ads_window, init_ads_window } from '@/helpers/ads.js'
@@ -66,6 +68,7 @@ const themeStore = useTheming()
 const news = ref([])
 
 const urlModal = ref(null)
+const updatesModal = ref(null)
 
 const offline = ref(!navigator.onLine)
 window.addEventListener('offline', () => {
@@ -499,7 +502,14 @@ function getTransitionType(route) {
           </nav>
         </div>
         <div class="flex flex-grow"></div>
-        <nav class="flex flex-col justify-center items-start px-5 py-2.5 rounded-3xl bg-zinc-800 bg-opacity-50">
+        <nav class="flex flex-col justify-center items-start px-5 py-2.5 rounded-3xl bg-zinc-800 bg-opacity-50 gap-3">
+          <NavButton
+            class="flex gap-4 justify-center items-center px-2 py-1.5 rounded-xl min-h-[45px] w-full hover:bg-zinc-700 focus:outline-none"
+            v-tooltip.right="'News'" :to="() => $refs.updatesModal.show()">
+            <BellIcon />
+            <span class="self-stretch my-auto">News</span>
+          </NavButton>
+          
           <NavButton
             class="flex gap-4 justify-center items-center px-2 py-1.5 rounded-xl min-h-[45px] w-full hover:bg-zinc-700 focus:outline-none"
             v-tooltip.right="'Settings'" :to="() => $refs.settingsModal.show()">
@@ -543,6 +553,9 @@ function getTransitionType(route) {
     </div>
   </div>
   <URLConfirmModal ref="urlModal" />
+  <Suspense>
+    <UpdatesModal ref="updatesModal" />
+  </Suspense>
   <Notifications ref="notificationsWrapper" sidebar />
   <ErrorModal ref="errorModal" />
   <ModInstallModal ref="modInstallModal" />

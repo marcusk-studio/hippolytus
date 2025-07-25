@@ -25,17 +25,21 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  class: {
+    type: [String, Array, Object],
+    default: '',
+  },
 })
-const modal = ref(null)
+const modal = ref<any>(null)
 
 defineExpose({
   show: () => {
     hide_ads_window()
-    modal.value.show()
+    modal.value?.show()
   },
   hide: () => {
     onModalHide()
-    modal.value.hide()
+    modal.value?.hide()
   },
 })
 
@@ -49,8 +53,14 @@ function onModalHide() {
 
 <template>
   <Teleport to="body">
-    <Modal ref="modal" :header="header" :noblur="!themeStore.advancedRendering" :class="['modal-wrapper']"
-      @hide="onModalHide">
+    <Modal 
+      ref="modal" 
+      :header="header" 
+      :noblur="!themeStore.advancedRendering" 
+      :class="['modal-wrapper', props.class]"
+      v-bind="$attrs"
+      @hide="onModalHide"
+    >
       <template #title>
         <slot name="title" />
       </template>
