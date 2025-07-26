@@ -68,6 +68,9 @@ async function fetchUpdates() {
     const lastBuildDateElement = xmlDoc.querySelector('lastBuildDate')
     if (lastBuildDateElement) {
       lastBuildDate.value = lastBuildDateElement.textContent
+      console.log('Parsed lastBuildDate:', lastBuildDate.value)
+    } else {
+      console.log('No lastBuildDate found in RSS feed')
     }
     
     const items = xmlDoc.querySelectorAll('item')
@@ -162,6 +165,8 @@ async function fetchUpdates() {
 async function shouldShowModal() {
   try {
     const settings = await get()
+    console.log('Retrieved settings:', settings)
+    
     const lastCheck = settings.last_update_check || null
     const lastId = settings.last_update_id || null
     const lastBuildDateStored = settings.last_build_date || null
@@ -169,15 +174,33 @@ async function shouldShowModal() {
     lastUpdateCheck.value = lastCheck
     lastUpdateId.value = lastId
     
+    console.log('News modal check:', {
+      lastBuildDate: lastBuildDate.value,
+      lastBuildDateStored,
+      updatesCount: updates.value.length,
+      lastId,
+      latestUpdateId: updates.value[0]?.id
+    })
+    
     if (lastBuildDate.value && lastBuildDateStored) {
-      return lastBuildDate.value !== lastBuildDateStored
+      const shouldShow = lastBuildDate.value !== lastBuildDateStored
+      console.log('Comparing build dates:', { shouldShow, current: lastBuildDate.value, stored: lastBuildDateStored })
+      return shouldShow
     }
     
-    if (updates.value.length > 0) {
+    if (updates.value.length > 0 && lastId) {
       const latestUpdate = updates.value[0]
-      return latestUpdate.id !== lastId
+      const shouldShow = latestUpdate.id !== lastId
+      console.log('Comparing update IDs:', { shouldShow, current: latestUpdate.id, stored: lastId })
+      return shouldShow
     }
     
+    if (updates.value.length > 0 && !lastId && lastBuildDate.value) {
+      console.log('First time with updates, showing modal')
+      return true
+    }
+    
+    console.log('No conditions met, not showing modal')
     return false
   } catch (error) {
     console.error('Failed to check update status:', error)
@@ -197,7 +220,20 @@ async function markUpdatesAsSeen() {
       if (lastBuildDate.value) {
         settings.last_build_date = lastBuildDate.value
       }
-      await set(settings)
+      
+      console.log('Marking updates as seen:', {
+        last_update_check: settings.last_update_check,
+        last_update_id: settings.last_update_id,
+        last_build_date: settings.last_build_date
+      })
+      
+      console.log('About to save settings:', settings)
+      try {
+        await set(settings)
+        console.log('Settings saved successfully')
+      } catch (error) {
+        console.error('Failed to save settings:', error)
+      }
     }
   } catch (error) {
     console.error('Failed to mark updates as seen:', error)
@@ -209,7 +245,6 @@ function show() {
 }
 
 function hide() {
-  markUpdatesAsSeen()
   showDetailView.value = false
   selectedUpdate.value = null
   modal.value?.hide()
@@ -251,7 +286,6 @@ defineExpose({
 })
 
 onMounted(() => {
-  checkAndShowModal()
   document.addEventListener('keydown', handleKeydown)
 })
 
@@ -261,7 +295,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <ModalWrapper ref="modal" :show-ad-on-close="false" class="updates-modal-wrapper">
+  <ModalWrapper ref="modal" :show-ad-on-close="false" class="updates-modal-wrapper" :on-hide="markUpdatesAsSeen">
     <template #title>
       <div class="modal-title">
         <h1 class="title-text">Latest News & Updates</h1>

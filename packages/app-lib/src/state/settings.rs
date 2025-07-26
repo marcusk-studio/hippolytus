@@ -37,6 +37,11 @@ pub struct Settings {
 
     pub developer_mode: bool,
     pub feature_flags: HashMap<FeatureFlag, bool>,
+    
+    // News update tracking
+    pub last_update_check: Option<String>,
+    pub last_update_id: Option<String>,
+    pub last_build_date: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Eq, Hash, PartialEq)]
@@ -60,7 +65,8 @@ impl Settings {
                 json(extra_launch_args) extra_launch_args, json(custom_env_vars) custom_env_vars,
                 mc_memory_max, mc_force_fullscreen, mc_game_resolution_x, mc_game_resolution_y, hide_on_process_start,
                 hook_pre_launch, hook_wrapper, hook_post_exit,
-                custom_dir, prev_custom_dir, migrated, json(feature_flags) feature_flags, toggle_sidebar
+                custom_dir, prev_custom_dir, migrated, json(feature_flags) feature_flags, toggle_sidebar,
+                last_update_check, last_update_id, last_build_date
             FROM settings
             "
         )
@@ -113,6 +119,9 @@ impl Settings {
                 .as_ref()
                 .and_then(|x| serde_json::from_str(x).ok())
                 .unwrap_or_default(),
+            last_update_check: res.last_update_check,
+            last_update_id: res.last_update_id,
+            last_build_date: res.last_build_date,
         })
     }
 
@@ -148,8 +157,8 @@ impl Settings {
 
                 onboarded = $12,
 
-                extra_launch_args = jsonb($13),
-                custom_env_vars = jsonb($14),
+                extra_launch_args = json($13),
+                custom_env_vars = json($14),
                 mc_memory_max = $15,
                 mc_force_fullscreen = $16,
                 mc_game_resolution_x = $17,
@@ -165,7 +174,11 @@ impl Settings {
                 migrated = $25,
 
                 toggle_sidebar = $26,
-                feature_flags = $27
+                feature_flags = json($27),
+                
+                last_update_check = $28,
+                last_update_id = $29,
+                last_build_date = $30
             ",
             max_concurrent_writes,
             max_concurrent_downloads,
@@ -193,7 +206,10 @@ impl Settings {
             self.prev_custom_dir,
             self.migrated,
             self.toggle_sidebar,
-            feature_flags
+            feature_flags,
+            self.last_update_check,
+            self.last_update_id,
+            self.last_build_date
         )
         .execute(exec)
         .await?;

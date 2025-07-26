@@ -194,6 +194,12 @@ async function setupApp() {
   get_opening_command().then(handleCommand)
   checkUpdates()
   fetchCredentials()
+  
+  setTimeout(() => {
+    if (updatesModal.value) {
+      updatesModal.value.checkAndShowModal()
+    }
+  }, 1000) 
 }
 
 const stateFailed = ref(false)
