@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.2](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.2.1...apps-v2.2.2) (2025-07-26)
+
+
+### 🐛 Bugfixes
+
+* news show only on first view ([afac144](https://github.com/marcusk-studio/hippolytus/commit/afac144ace0ed006cf697db7e3e52685c9646678))
+
 ## [2.2.1](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.2.0...apps-v2.2.1) (2025-07-25)
 
 
