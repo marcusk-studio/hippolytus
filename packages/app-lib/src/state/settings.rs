@@ -37,7 +37,7 @@ pub struct Settings {
 
     pub developer_mode: bool,
     pub feature_flags: HashMap<FeatureFlag, bool>,
-    
+
     // News update tracking
     pub last_update_check: Option<String>,
     pub last_update_id: Option<String>,
