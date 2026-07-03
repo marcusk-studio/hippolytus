@@ -181,6 +181,7 @@ pub enum LoadingBarType {
     },
 }
 
+#[cfg(feature = "tauri")]
 #[derive(Serialize, Clone)]
 pub struct LoadingPayload {
     pub event: LoadingBarType,
@@ -189,11 +190,7 @@ pub struct LoadingPayload {
     pub message: String,
 }
 
-#[derive(Serialize, Clone)]
-pub struct OfflinePayload {
-    pub offline: bool,
-}
-
+#[cfg(feature = "tauri")]
 #[derive(Serialize, Clone)]
 pub struct WarningPayload {
     pub message: String,
@@ -217,6 +214,7 @@ pub enum CommandPayload {
     },
 }
 
+#[cfg(feature = "tauri")]
 #[derive(Serialize, Clone)]
 pub struct ProcessPayload {
     pub profile_path_id: String,
@@ -231,6 +229,7 @@ pub enum ProcessPayloadType {
     Finished,
 }
 
+#[cfg(feature = "tauri")]
 #[derive(Serialize, Clone)]
 pub struct ProfilePayload {
     pub profile_path_id: String,
