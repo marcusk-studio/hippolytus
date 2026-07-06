@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { Combobox, defineMessages, ThemeSelector, Toggle, useVIntl } from '@modrinth/ui'
+import { Combobox, defineMessages, Toggle, useVIntl } from '@modrinth/ui'
 import { ref, watch } from 'vue'
 
 import { get, set } from '@/helpers/settings.ts'
 import { getOS } from '@/helpers/utils'
 import { useTheming } from '@/store/state'
-import type { ColorTheme, FeatureFlag } from '@/store/theme.ts'
+import type { FeatureFlag } from '@/store/theme.ts'
 
 const themeStore = useTheming()
 const { formatMessage } = useVIntl()
@@ -16,14 +16,6 @@ const skipUnknownPackWarningFlag: FeatureFlag = 'skip_unknown_pack_warning'
 const showPlayTimeFlag: FeatureFlag = 'show_instance_play_time'
 
 const messages = defineMessages({
-	colorThemeTitle: {
-		id: 'app.appearance-settings.color-theme.title',
-		defaultMessage: 'Color theme',
-	},
-	colorThemeDescription: {
-		id: 'app.appearance-settings.color-theme.description',
-		defaultMessage: 'Select your preferred color theme for Modrinth App.',
-	},
 	advancedRenderingTitle: {
 		id: 'app.appearance-settings.advanced-rendering.title',
 		defaultMessage: 'Advanced rendering',
@@ -133,23 +125,6 @@ watch(
 )
 </script>
 <template>
-	<h2 class="m-0 text-lg font-semibold text-contrast">
-		{{ formatMessage(messages.colorThemeTitle) }}
-	</h2>
-	<p class="m-0 mt-1">{{ formatMessage(messages.colorThemeDescription) }}</p>
-
-	<ThemeSelector
-		:update-color-theme="
-			(theme: ColorTheme) => {
-				themeStore.setThemeState(theme)
-				settings.theme = theme
-			}
-		"
-		:current-theme="settings.theme"
-		:theme-options="themeStore.getThemeOptions()"
-		system-theme-color="system"
-	/>
-
 	<div class="mt-6 flex items-center justify-between">
 		<div>
 			<h2 class="m-0 text-lg font-semibold text-contrast">

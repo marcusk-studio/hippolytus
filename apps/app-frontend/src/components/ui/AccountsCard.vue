@@ -14,25 +14,28 @@
 	</div>
 	<Accordion
 		v-else
-		class="w-full mt-2 bg-button-bg border border-solid border-surface-5 rounded-xl overflow-clip"
+		class="w-full mt-2 bg-white border-2 border-solid border-gray-700 rounded-3xl shadow-2xl overflow-clip"
 		button-class="button-base w-full bg-transparent px-3 py-2 border-0 cursor-pointer"
 		:open-by-default="false"
 	>
 		<template #title>
-			<div class="flex gap-2 w-full min-w-0">
+			<div class="flex gap-3 w-full min-w-0 items-center">
 				<Avatar
 					size="36px"
+					class="shrink-0"
 					:src="
 						selectedAccount
 							? avatarUrl
 							: 'https://launcher-files.modrinth.com/assets/steve_head.png'
 					"
 				/>
-				<div class="flex flex-col items-start w-full min-w-0">
-					<span class="truncate w-full text-left">{{
+				<div class="flex flex-col items-start w-full min-w-0 justify-center">
+					<span class="text-xs font-light text-gray-600 leading-none">{{
+						formatMessage(messages.playingAs)
+					}}</span>
+					<span class="truncate w-full text-left text-lg font-bold leading-none text-black">{{
 						selectedAccount ? selectedAccount.profile.name : formatMessage(messages.selectAccount)
 					}}</span>
-					<span class="text-secondary text-xs">{{ formatMessage(messages.minecraftAccount) }}</span>
 				</div>
 			</div>
 		</template>
@@ -278,6 +281,10 @@ const messages = defineMessages({
 	minecraftAccount: {
 		id: 'minecraft-account.label',
 		defaultMessage: 'Minecraft account',
+	},
+	playingAs: {
+		id: 'minecraft-account.playing-as',
+		defaultMessage: 'Playing as',
 	},
 	signInToMinecraft: {
 		id: 'minecraft-account.sign-in',

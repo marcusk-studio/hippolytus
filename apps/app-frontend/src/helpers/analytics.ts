@@ -47,9 +47,8 @@ let initialized = false
 
 export const initAnalytics = () => {
 	if (initialized) return
-	posthog.init('phc_9Iqi6lFs9sr5BSqh9RRNRSJ0mATS9PSgirDiX3iOYJ', {
+	posthog.init('phc_POpL1yZ9chHj2zRqMu4GCofU5PDXeKIyUEfwXp7NCZ9', {
 		persistence: 'localStorage',
-		api_host: 'https://posthog.modrinth.com',
 	})
 	initialized = true
 }

@@ -16,7 +16,12 @@
 		</div>
 		<AppUpdateButton />
 		<div
-			class="flex border-solid border-surface-5 text-sm items-center gap-2 py-1.5 px-3 rounded-xl border"
+			class="flex text-sm items-center gap-2 py-1.5 px-3 rounded-xl"
+			:class="
+				selectedProcess
+					? 'bg-gradient-to-r from-[#FF6B35] via-[#F05B32] to-[#E59256] [box-shadow:_0_0_20px_rgba(249,115,22,0.9)] animate-pulse text-white'
+					: 'bg-gradient-to-r from-gray-400 via-gray-500 to-gray-600'
+			"
 		>
 			<template v-if="selectedProcess">
 				<OnlineIndicatorIcon />
@@ -108,8 +113,8 @@
 				</button>
 			</template>
 			<template v-else>
-				<span class="size-2 rounded-full bg-secondary" />
-				<span class="text-secondary"> {{ formatMessage(messages.noInstancesRunning) }} </span>
+				<span class="size-2 rounded-full bg-gray-200" />
+				<span class="text-white"> {{ formatMessage(messages.noInstancesRunning) }} </span>
 			</template>
 		</div>
 	</div>

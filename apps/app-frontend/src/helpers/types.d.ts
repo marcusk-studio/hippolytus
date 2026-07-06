@@ -176,4 +176,9 @@ type AppSettings = {
 	custom_dir?: string
 	prev_custom_dir?: string
 	migrated: boolean
+
+	// News update tracking
+	last_update_check?: string
+	last_update_id?: string
+	last_build_date?: string
 }

@@ -1,13 +1,6 @@
 <script setup lang="ts">
 import type { Labrinth } from '@modrinth/api-client'
-import {
-	CheckIcon,
-	ClipboardCopyIcon,
-	ExternalIcon,
-	GlobeIcon,
-	PlusIcon,
-	SpinnerIcon,
-} from '@modrinth/assets'
+import { CheckIcon, PlusIcon, SpinnerIcon } from '@modrinth/assets'
 import type { BrowseInstallContentType, CardAction, ProjectType, Tags } from '@modrinth/ui'
 import {
 	BrowsePageLayout,
@@ -35,7 +28,6 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { LocationQuery } from 'vue-router'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 
-import ContextMenu from '@/components/ui/ContextMenu.vue'
 import { useAppServerBrowse } from '@/composables/browse/use-app-server-browse'
 import {
 	get_project,
@@ -247,8 +239,50 @@ async function initInstanceContext() {
 	}
 }
 
+type FeaturedProject = {
+	id: string
+	name: string
+}
+
+const featuredProjects = ref<FeaturedProject[]>([])
+
+async function fetchFeaturedProjects() {
+	try {
+		const response = await fetch('https://cdn.marcusk.fun/featured4.json')
+		const data: { featured_projects: FeaturedProject[] } = await response.json()
+		featuredProjects.value = data.featured_projects
+		return true
+	} catch (error) {
+		handleError(error)
+		featuredProjects.value = []
+		return false
+	}
+}
+
+const fetchSuccessful = ref(false)
+
+fetchSuccessful.value = await fetchFeaturedProjects()
+
 const instanceFilters = computed(() => {
-	const filters = []
+	const filters: {
+		type: string
+		option: string
+		negative?: boolean
+	}[] = []
+
+	if (fetchSuccessful.value && featuredProjects.value.length > 0) {
+		// Create a single filter with all project IDs joined with OR logic
+		const projectIdOptions = featuredProjects.value.map((project) => `project_id:${project.id}`)
+		filters.push({
+			type: 'project_id',
+			option: projectIdOptions.join(' OR '),
+		})
+	} else {
+		filters.push({
+			type: 'project_id',
+			option: 'project_id:none',
+		})
+	}
 
 	if (instance.value) {
 		const gameVersion = instance.value.game_version
@@ -344,25 +378,18 @@ const combinedProvidedFilters = computed(() =>
 	isServerContext.value ? serverContextFilters.value : instanceFilters.value,
 )
 
-const {
-	serverPings,
-	contextMenuRef,
-	updateServerHits,
-	getServerModpackContent,
-	getServerCardActions,
-	handleRightClick,
-	handleOptionsClick,
-} = useAppServerBrowse({
-	instance,
-	isFromWorlds,
-	allInstalledIds,
-	newlyInstalled,
-	installingServerProjects,
-	playServerProject,
-	showAddServerToInstanceModal,
-	handleError,
-	router,
-})
+const { serverPings, updateServerHits, getServerModpackContent, getServerCardActions } =
+	useAppServerBrowse({
+		instance,
+		isFromWorlds,
+		allInstalledIds,
+		newlyInstalled,
+		installingServerProjects,
+		playServerProject,
+		showAddServerToInstanceModal,
+		handleError,
+		router,
+	})
 
 const offline = ref(!navigator.onLine)
 window.addEventListener('offline', () => {
@@ -511,28 +538,7 @@ watch(
 )
 
 const selectableProjectTypes = computed(() => {
-	let dataPacks = false,
-		mods = false,
-		modpacks = false
-
-	if (instance.value) {
-		if (
-			availableGameVersions.value &&
-			availableGameVersions.value.findIndex((x) => x.version === instance.value?.game_version) <=
-				availableGameVersions.value.findIndex((x) => x.version === '1.13') &&
-			!isServerInstance.value
-		) {
-			dataPacks = true
-		}
-
-		if (instance.value.loader !== 'vanilla') {
-			mods = true
-		}
-	} else {
-		dataPacks = true
-		mods = true
-		modpacks = true
-	}
+	const modpacks = !instance.value
 
 	const params: LocationQuery = {}
 
@@ -557,11 +563,7 @@ const selectableProjectTypes = computed(() => {
 
 	return [
 		{ label: 'Modpacks', href: `/browse/modpack${suffix}`, shown: modpacks },
-		{ label: 'Mods', href: `/browse/mod${suffix}`, shown: mods },
 		{ label: 'Resource Packs', href: `/browse/resourcepack${suffix}` },
-		{ label: 'Data Packs', href: `/browse/datapack${suffix}`, shown: dataPacks },
-		{ label: 'Shaders', href: `/browse/shader${suffix}` },
-		{ label: 'Servers', href: `/browse/server${suffix}`, shown: !instance.value },
 	]
 })
 
@@ -1090,7 +1092,7 @@ provideBrowseManager({
 	onInstalled: onSearchResultInstalled,
 	serverPings,
 	getServerModpackContent,
-	onContextMenu: handleRightClick,
+	onContextMenu: () => {},
 	offline,
 	lockedFilterMessages,
 })
@@ -1098,18 +1100,7 @@ provideBrowseManager({
 
 <template>
 	<div class="flex flex-col gap-3 p-6">
-		<BrowsePageLayout>
-			<template #after>
-				<ContextMenu ref="contextMenuRef" @option-clicked="handleOptionsClick">
-					<template #open_link>
-						<GlobeIcon /> {{ formatMessage(commonMessages.openInModrinthButton) }} <ExternalIcon />
-					</template>
-					<template #copy_link>
-						<ClipboardCopyIcon /> {{ formatMessage(commonMessages.copyLinkButton) }}
-					</template>
-				</ContextMenu>
-			</template>
-		</BrowsePageLayout>
+		<BrowsePageLayout />
 		<CreationFlowModal
 			v-if="isServerContext && projectType === 'modpack'"
 			ref="serverSetupModalRef"

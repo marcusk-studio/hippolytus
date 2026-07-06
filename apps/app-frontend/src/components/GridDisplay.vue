@@ -6,6 +6,7 @@ import {
 	PlayIcon,
 	PlusIcon,
 	SearchIcon,
+	SortAscIcon,
 	StopCircleIcon,
 	TrashIcon,
 } from '@modrinth/assets'
@@ -271,87 +272,263 @@ const filteredResults = computed(() => {
 })
 </script>
 <template>
-	<div class="flex gap-2">
-		<StyledInput
-			v-model="search"
-			:icon="SearchIcon"
-			type="text"
-			placeholder="Search"
-			clearable
-			wrapper-class="flex-1"
-		/>
-		<DropdownSelect
-			v-slot="{ selected }"
-			v-model="state.sortBy"
-			name="Sort Dropdown"
-			class="max-w-[16rem]"
-			:options="['Name', 'Last played', 'Date created', 'Date modified', 'Game version']"
-			placeholder="Select..."
-		>
-			<span class="font-semibold text-primary">Sort by: </span>
-			<span class="font-semibold text-secondary">{{ selected }}</span>
-		</DropdownSelect>
-		<DropdownSelect
-			v-slot="{ selected }"
-			v-model="state.group"
-			class="max-w-[16rem]"
-			name="Group Dropdown"
-			:options="['Group', 'Loader', 'Game version', 'None']"
-			placeholder="Select..."
-		>
-			<span class="font-semibold text-primary">Group by: </span>
-			<span class="font-semibold text-secondary">{{ selected }}</span>
-		</DropdownSelect>
+	<div class="grid-display-container">
+		<div class="controls-section">
+			<div class="controls-row">
+				<div class="search-section">
+					<StyledInput
+						v-model="search"
+						:icon="SearchIcon"
+						type="text"
+						placeholder="Search instances..."
+						clearable
+						wrapper-class="flex-1"
+					/>
+				</div>
+
+				<div class="filter-section">
+					<div class="filter-group">
+						<SortAscIcon class="filter-icon" />
+						<DropdownSelect
+							v-slot="{ selected }"
+							v-model="state.sortBy"
+							name="Sort Dropdown"
+							class="filter-dropdown"
+							:options="['Name', 'Last played', 'Date created', 'Date modified', 'Game version']"
+							placeholder="Sort by..."
+						>
+							<span class="filter-label">Sort: </span>
+							<span class="filter-value">{{ selected }}</span>
+						</DropdownSelect>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="instances-container">
+			<Accordion
+				v-for="instanceSection in Array.from(filteredResults, ([key, value]) => ({
+					key,
+					value,
+				}))"
+				:key="instanceSection.key"
+				:divider="false"
+				:open-by-default="!isSectionCollapsed(instanceSection.key)"
+				class="instance-section"
+				@on-open="setSectionCollapsed(instanceSection.key, false)"
+				@on-close="setSectionCollapsed(instanceSection.key, true)"
+			>
+				<template v-if="instanceSection.key !== 'None'" #title>
+					<span class="section-title">{{ instanceSection.key }}</span>
+				</template>
+				<section class="instances-grid">
+					<Instance
+						v-for="instance in instanceSection.value"
+						ref="instanceComponents"
+						:key="instance.id + instance.install_stage"
+						:instance="instance"
+						@contextmenu.prevent.stop="(event) => handleRightClick(event, instance.id)"
+					/>
+				</section>
+			</Accordion>
+		</div>
+
+		<ConfirmDeleteInstanceModal ref="confirmModal" @delete="deleteInstance" />
+		<ContextMenu ref="instanceOptions" @option-clicked="handleOptionsClick">
+			<template #play> <PlayIcon /> Play </template>
+			<template #stop> <StopCircleIcon /> Stop </template>
+			<template #add_content> <PlusIcon /> Add content </template>
+			<template #edit> <EyeIcon /> View instance </template>
+			<template #duplicate> <ClipboardCopyIcon /> Duplicate instance</template>
+			<template #delete> <TrashIcon /> Delete </template>
+			<template #open> <FolderOpenIcon /> Open folder </template>
+			<template #copy> <ClipboardCopyIcon /> Copy path </template>
+		</ContextMenu>
 	</div>
-	<Accordion
-		v-for="instanceSection in Array.from(filteredResults, ([key, value]) => ({
-			key,
-			value,
-		}))"
-		:key="instanceSection.key"
-		:divider="instanceSection.key !== 'None'"
-		:open-by-default="!isSectionCollapsed(instanceSection.key)"
-		class="row"
-		@on-open="setSectionCollapsed(instanceSection.key, false)"
-		@on-close="setSectionCollapsed(instanceSection.key, true)"
-	>
-		<template v-if="instanceSection.key !== 'None'" #title>
-			<span class="text-base">{{ instanceSection.key }}</span>
-		</template>
-		<section class="instances">
-			<Instance
-				v-for="instance in instanceSection.value"
-				ref="instanceComponents"
-				:key="instance.id + instance.install_stage"
-				:instance="instance"
-				@contextmenu.prevent.stop="(event) => handleRightClick(event, instance.id)"
-			/>
-		</section>
-	</Accordion>
-	<ConfirmDeleteInstanceModal ref="confirmModal" @delete="deleteInstance" />
-	<ContextMenu ref="instanceOptions" @option-clicked="handleOptionsClick">
-		<template #play> <PlayIcon /> Play </template>
-		<template #stop> <StopCircleIcon /> Stop </template>
-		<template #add_content> <PlusIcon /> Add content </template>
-		<template #edit> <EyeIcon /> View instance </template>
-		<template #duplicate> <ClipboardCopyIcon /> Duplicate instance</template>
-		<template #delete> <TrashIcon /> Delete </template>
-		<template #open> <FolderOpenIcon /> Open folder </template>
-		<template #copy> <ClipboardCopyIcon /> Copy path </template>
-	</ContextMenu>
 </template>
+
 <style lang="scss" scoped>
-.row {
+.grid-display-container {
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+	height: 100%;
+}
+
+.controls-section {
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+	padding: 0.75rem;
+	background: #0a0101;
+	border-radius: 1rem;
+	box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+	flex-shrink: 0;
+}
+
+.controls-row {
+	display: flex;
+	gap: 1rem;
+	align-items: center;
+	flex-wrap: wrap;
+}
+
+.search-section {
+	flex: 1;
+	min-width: 200px;
+	display: flex;
+}
+
+.filter-section {
+	display: flex;
+	gap: 0.5rem;
+	flex-wrap: wrap;
+	flex-shrink: 0;
+	height: 100%;
+
+	.filter-group {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 0.75rem;
+		background: rgba(255, 255, 255, 0.1);
+		border-radius: 0.5rem;
+		transition: all 0.2s ease;
+		max-width: 250px;
+		height: 100%;
+
+		&:hover {
+			background: rgba(255, 255, 255, 0.15);
+		}
+
+		.filter-icon {
+			width: 1rem;
+			height: 1rem;
+			color: var(--color-secondary);
+		}
+
+		.filter-dropdown {
+			min-width: 5rem;
+			max-width: 150px;
+		}
+
+		.filter-label {
+			font-weight: 600;
+			color: var(--color-contrast);
+			font-size: 0.875rem;
+		}
+
+		.filter-value {
+			font-weight: 500;
+			color: var(--color-brand);
+			font-size: 0.875rem;
+		}
+	}
+}
+
+.instances-container {
+	display: flex;
+	flex-direction: column;
+	gap: 2rem;
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	padding-right: 0.5rem;
+	max-height: 100%;
+
+	&::-webkit-scrollbar {
+		width: 8px;
+	}
+
+	&::-webkit-scrollbar-track {
+		background: rgba(255, 255, 255, 0.05);
+		border-radius: 4px;
+	}
+
+	&::-webkit-scrollbar-thumb {
+		background: rgba(255, 255, 255, 0.2);
+		border-radius: 4px;
+
+		&:hover {
+			background: rgba(255, 255, 255, 0.3);
+		}
+	}
+
+	scrollbar-width: thin;
+	scrollbar-color: rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.05);
+}
+
+.instance-section {
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+	width: 100%;
+
+	.section-title {
+		margin: 0;
+		font-size: 1.5rem;
+		font-weight: 700;
+		white-space: nowrap;
+		padding: 0.5rem 1rem;
+		background: var(--color-brand);
+		border-radius: 0.5rem;
+		color: white;
+	}
+}
+
+.instances-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+	gap: 1.5rem;
 	width: 100%;
 }
 
-.instances {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
-	width: 100%;
-	gap: 0.75rem;
-	margin-right: auto;
-	scroll-behavior: smooth;
-	overflow-y: auto;
+// Responsive adjustments
+@media (max-width: 768px) {
+	.controls-section {
+		padding: 0.5rem;
+	}
+
+	.controls-row {
+		flex-direction: column;
+		align-items: stretch;
+		gap: 0.75rem;
+	}
+
+	.search-section {
+		min-width: unset;
+	}
+
+	.filter-section {
+		justify-content: center;
+
+		.filter-group {
+			width: 100%;
+			max-width: 250px;
+		}
+	}
+
+	.instances-grid {
+		grid-template-columns: 1fr;
+		gap: 1rem;
+	}
+
+	.section-title {
+		font-size: 1.25rem !important;
+	}
+}
+
+@media (max-width: 480px) {
+	.grid-display-container {
+		gap: 0.75rem;
+	}
+
+	.controls-section {
+		gap: 0.5rem;
+	}
+
+	.filter-group {
+		padding: 0.25rem 0.375rem !important;
+	}
 }
 </style>

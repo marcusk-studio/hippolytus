@@ -13,7 +13,7 @@
 				@unlinked="fetchInstance"
 			/>
 			<UpdateToPlayModal ref="updateToPlayModal" :instance="instance" />
-			<ContentPageHeader>
+			<ContentPageHeader class="bg-[#0a0101] rounded-3xl pt-4 pr-4 pl-4 mr-2 mb-6">
 				<template #icon>
 					<Avatar
 						:src="icon ? icon : undefined"
@@ -246,7 +246,6 @@
 		<ContextMenu ref="options" @option-clicked="handleOptionsClick">
 			<template #play> <PlayIcon /> Play </template>
 			<template #stop> <StopCircleIcon /> Stop </template>
-			<template #add_content> <PlusIcon /> Add content </template>
 			<template #edit> <EditIcon /> Edit </template>
 			<template #copy_path> <ClipboardCopyIcon /> Copy path </template>
 			<template #open_folder> <FolderOpenIcon /> Open folder </template>
@@ -283,7 +282,6 @@ import {
 	MoreVerticalIcon,
 	PackageIcon,
 	PlayIcon,
-	PlusIcon,
 	ServerIcon,
 	SettingsIcon,
 	StopCircleIcon,
@@ -657,7 +655,6 @@ const createShortcut = async () => {
 
 const handleRightClick = (event: MouseEvent) => {
 	const baseOptions = [
-		{ name: 'add_content' },
 		{ type: 'divider' },
 		{ name: 'edit' },
 		{ name: 'open_folder' },
@@ -692,12 +689,6 @@ const handleOptionsClick = async (args: { option: string; item: unknown }) => {
 			break
 		case 'stop':
 			await stopInstance('InstancePageContextMenu')
-			break
-		case 'add_content':
-			await router.push({
-				path: `/browse/${instance.value?.loader === 'vanilla' ? 'datapack' : 'mod'}`,
-				query: { i: route.params.id },
-			})
 			break
 		case 'edit':
 			await router.push({

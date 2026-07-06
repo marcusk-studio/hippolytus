@@ -180,6 +180,7 @@ defineExpose({ show, hide })
 <template>
 	<TabbedModal
 		ref="tabbedModal"
+		class="z-[1000]"
 		:tabs="tabs"
 		:max-width="'min(928px, calc(95vw - 10rem))'"
 		:width="'min(928px, calc(95vw - 10rem))'"

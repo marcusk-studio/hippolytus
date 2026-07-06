@@ -9,29 +9,23 @@ import {
 	VerboseLoggingFeature,
 } from '@modrinth/api-client'
 import {
-	ArrowBigUpDashIcon,
+	BellIcon,
 	ChangeSkinIcon,
 	CompassIcon,
-	ExternalIcon,
 	HomeIcon,
 	LeftArrowIcon,
 	LibraryIcon,
-	LogInIcon,
-	LogOutIcon,
-	NewspaperIcon,
 	NotepadTextIcon,
 	PlusIcon,
 	RefreshCwIcon,
 	RightArrowIcon,
 	ServerStackIcon,
 	SettingsIcon,
-	UserIcon,
 	WorldIcon,
 	XIcon,
 } from '@modrinth/assets'
 import {
 	Admonition,
-	Avatar,
 	ButtonStyled,
 	commonMessages,
 	ContentInstallModal,
@@ -40,9 +34,7 @@ import {
 	defineMessages,
 	I18nDebugPanel,
 	LoadingBar,
-	NewsArticleCard,
 	NotificationPanel,
-	OverflowMenu,
 	PopupNotificationPanel,
 	provideModalBehavior,
 	provideModrinthClient,
@@ -72,7 +64,6 @@ import AccountsCard from '@/components/ui/AccountsCard.vue'
 import AppActionBar from '@/components/ui/AppActionBar.vue'
 import Breadcrumbs from '@/components/ui/Breadcrumbs.vue'
 import ErrorModal from '@/components/ui/ErrorModal.vue'
-import FriendsList from '@/components/ui/friends/FriendsList.vue'
 import AddServerToInstanceModal from '@/components/ui/install_flow/AddServerToInstanceModal.vue'
 import UnknownPackWarningModal from '@/components/ui/install_flow/UnknownPackWarningModal.vue'
 import MinecraftAuthErrorModal from '@/components/ui/minecraft-auth-error-modal/MinecraftAuthErrorModal.vue'
@@ -83,9 +74,9 @@ import ModpackAlreadyInstalledModal from '@/components/ui/modal/ModpackAlreadyIn
 import UpdateToPlayModal from '@/components/ui/modal/UpdateToPlayModal.vue'
 import NavButton from '@/components/ui/NavButton.vue'
 import PrideFundraiserBanner from '@/components/ui/PrideFundraiserBanner.vue'
-import PromotionWrapper from '@/components/ui/PromotionWrapper.vue'
 import QuickInstanceSwitcher from '@/components/ui/QuickInstanceSwitcher.vue'
 import SplashScreen from '@/components/ui/SplashScreen.vue'
+import UpdatesModal from '@/components/ui/UpdatesModal.vue'
 import WindowControls from '@/components/ui/WindowControls.vue'
 import { useCheckDisableMouseover } from '@/composables/macCssFix.js'
 import { config } from '@/config'
@@ -100,7 +91,6 @@ import { cancelLogin, get as getCreds, login, logout } from '@/helpers/mr_auth.t
 import { mergeUrlQuery, parseModrinthLink } from '@/helpers/project-links.ts'
 import { get as getSettings, set as setSettings } from '@/helpers/settings.ts'
 import { get_opening_command, initialize_state } from '@/helpers/state'
-import { hasActivePride26Midas, hasMidasBadge } from '@/helpers/user-campaigns.ts'
 import {
 	areUpdatesEnabled,
 	enqueueUpdateForInstallation,
@@ -207,12 +197,6 @@ const tauriApiClient = new TauriModrinthClient({
 	],
 })
 provideModrinthClient(tauriApiClient)
-const { data: authenticatedModrinthUser } = useQuery({
-	queryKey: computed(() => ['authenticated-user', 'campaigns', credentials.value?.user?.id]),
-	queryFn: () => tauriApiClient.labrinth.users_v3.getAuthenticated(),
-	enabled: () => !!credentials.value?.session,
-	retry: false,
-})
 providePageContext({
 	hierarchicalSidebarAvailable: ref(true),
 	showAds: ref(false),
@@ -248,8 +232,13 @@ const {
 	handleModpackDuplicateGoToInstance,
 } = setupProviders(notificationManager, popupNotificationManager)
 
-const news = ref([])
 const availableSurvey = ref(false)
+const updatesModal = ref(null)
+
+// Import all background images
+const backgrounds = import.meta.glob('@/assets/backgrounds/*')
+const backgroundKeys = Object.keys(backgrounds)
+const randomBackground = ref('')
 const displayedServerInviteNotifications = new Set()
 
 const offline = ref(!navigator.onLine)
@@ -300,6 +289,11 @@ onMounted(async () => {
 	document.querySelector('body').addEventListener('auxclick', handleAuxClick)
 
 	checkUpdates()
+
+	// Choose a random background
+	const randomKey = backgroundKeys[Math.floor(Math.random() * backgroundKeys.length)]
+	const imageModule = await backgrounds[randomKey]()
+	randomBackground.value = imageModule.default
 })
 
 onUnmounted(async () => {
@@ -407,7 +401,7 @@ async function setupApp() {
 		}),
 	)
 
-	fetch(`https://api.modrinth.com/appCriticalAnnouncement.json?version=${version}`)
+	fetch(`https://cdn.marcusk.fun/appCriticalAnnouncement_${version}.json`)
 		.then((response) => response.json())
 		.then((res) => {
 			if (res && res.header && res.body) {
@@ -416,28 +410,18 @@ async function setupApp() {
 		})
 		.catch(() => {
 			console.log(
-				`No critical announcement found at https://api.modrinth.com/appCriticalAnnouncement.json?version=${version}`,
+				`No critical announcement found at https://cdn.marcusk.fun/appCriticalAnnouncement_${version}.json`,
 			)
-		})
-
-	fetch(`https://modrinth.com/news/feed/articles.json`)
-		.then((response) => response.json())
-		.then((res) => {
-			if (res && res.articles) {
-				news.value = res.articles
-					.map((article) => ({
-						...article,
-						path: article.link,
-					}))
-					.slice(0, 4)
-			}
-		})
-		.catch((error) => {
-			console.error('Failed to fetch news articles', error)
 		})
 
 	get_opening_command().then(handleCommand)
 	fetchCredentials()
+
+	setTimeout(() => {
+		if (updatesModal.value) {
+			updatesModal.value.checkAndShowModal()
+		}
+	}, 1000)
 
 	try {
 		const skins = (await get_available_skins()) ?? []
@@ -698,17 +682,7 @@ async function signIn() {
 	}
 }
 
-async function logOut() {
-	await logout().catch(handleError)
-	await fetchCredentials()
-}
-
-const hasPlus = computed(
-	() =>
-		!!credentials.value?.user &&
-		(hasMidasBadge(credentials.value.user) ||
-			hasActivePride26Midas(authenticatedModrinthUser.value?.campaigns?.pride_26)),
-)
+const hasPlus = computed(() => true)
 
 const showAd = computed(
 	() => sidebarVisible.value && !hasPlus.value && credentials.value !== undefined,
@@ -1262,6 +1236,37 @@ function handleAuxClick(e) {
 	}
 }
 
+function getTransitionKey(route) {
+	return route.path
+}
+
+function shouldApplyTransition(route) {
+	const mainSection = route.path.split('/')[1] || 'home'
+
+	if (mainSection === 'project' || mainSection === 'instance') {
+		return false
+	}
+
+	return (
+		route.path === '/' ||
+		route.path === '/browse' ||
+		route.path.startsWith('/browse/') ||
+		route.path === '/library'
+	)
+}
+
+function getTransitionType(route) {
+	if (route.path === '/') {
+		return 'main-page-transition'
+	} else if (route.path.startsWith('/browse')) {
+		return 'discover-transition'
+	} else if (route.path === '/library') {
+		return 'library-transition'
+	} else {
+		return 'main-page-transition'
+	}
+}
+
 function cleanupOldSurveyDisplayData() {
 	const threeWeeksAgo = new Date()
 	threeWeeksAgo.setDate(threeWeeksAgo.getDate() - 21)
@@ -1468,45 +1473,14 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 				<PlusIcon />
 			</NavButton>
 			<div class="flex flex-grow"></div>
+			<NavButton v-tooltip.right="'News'" :to="() => updatesModal?.show()">
+				<BellIcon />
+			</NavButton>
 			<NavButton
 				v-tooltip.right="formatMessage(commonMessages.settingsLabel)"
 				:to="() => $refs.settingsModal.show()"
 			>
 				<SettingsIcon />
-			</NavButton>
-			<OverflowMenu
-				v-if="credentials?.user"
-				v-tooltip.right="`Modrinth account`"
-				class="w-12 h-12 text-primary rounded-full flex items-center justify-center text-2xl transition-all bg-transparent hover:bg-button-bg hover:text-contrast border-0 cursor-pointer"
-				:options="[
-					{
-						id: 'view-profile',
-						action: () => openUrl('https://modrinth.com/user/' + credentials.user.username),
-					},
-					{
-						id: 'sign-out',
-						action: () => logOut(),
-						color: 'danger',
-					},
-				]"
-				placement="right-end"
-			>
-				<Avatar :src="credentials?.user?.avatar_url" alt="" size="32px" circle />
-				<template #view-profile>
-					<UserIcon />
-					<span class="inline-flex items-center gap-1">
-						Signed in as
-						<span class="inline-flex items-center gap-1 text-contrast font-semibold">
-							<Avatar :src="credentials?.user?.avatar_url" alt="" size="20px" circle />
-							{{ credentials?.user?.username }}
-						</span>
-					</span>
-					<ExternalIcon />
-				</template>
-				<template #sign-out> <LogOutIcon /> Sign out </template>
-			</OverflowMenu>
-			<NavButton v-else v-tooltip.right="'Sign in to a Modrinth account'" :to="() => signIn()">
-				<LogInIcon class="text-brand" />
 			</NavButton>
 		</div>
 		<div data-tauri-drag-region class="app-grid-statusbar bg-bg-raised h-[--top-bar-height] flex">
@@ -1599,6 +1573,16 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 				{{ route.fullPath }}
 			</div>
 			<div
+				class="absolute inset-0 -z-10 rounded-tl-[--radius-xl] overflow-hidden"
+				:style="{
+					backgroundImage: randomBackground ? `url(${randomBackground})` : undefined,
+					backgroundSize: 'cover',
+					backgroundPosition: 'center',
+				}"
+			>
+				<div v-if="route.path !== '/'" class="backdrop-blur-md absolute inset-0"></div>
+			</div>
+			<div
 				id="background-teleport-target"
 				class="absolute h-full -z-10 rounded-tl-[--radius-xl] overflow-hidden"
 				:style="{
@@ -1624,10 +1608,19 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 			>
 				{{ formatMessage(messages.authUnreachableBody) }}
 			</Admonition>
-			<RouterView v-slot="{ Component }">
+			<RouterView v-slot="{ Component, route: viewRoute }">
 				<template v-if="Component">
 					<Suspense @pending="onSuspensePending" @resolve="onSuspenseResolve">
-						<component :is="Component"></component>
+						<template v-if="shouldApplyTransition(viewRoute)">
+							<div class="transition-container">
+								<Transition :name="getTransitionType(viewRoute)" mode="out-in" appear>
+									<component :is="Component" :key="getTransitionKey(viewRoute)"></component>
+								</Transition>
+							</div>
+						</template>
+						<template v-else>
+							<component :is="Component" :key="getTransitionKey(viewRoute)"></component>
+						</template>
 					</Suspense>
 				</template>
 			</RouterView>
@@ -1650,44 +1643,17 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 							<AccountsCard ref="accounts" />
 						</suspense>
 					</div>
-					<div class="p-4 border-0 border-b-[1px] border-[--brand-gradient-border] border-solid">
-						<suspense>
-							<FriendsList :credentials="credentials" :sign-in="() => signIn()" />
-						</suspense>
-					</div>
 					<PrideFundraiserBanner
 						v-if="prideFundraiserEnabled"
 						class="p-4 border-0 border-b-[1px] border-[--brand-gradient-border] border-solid"
 					/>
-					<div v-if="news && news.length > 0" class="p-4 flex flex-col items-center">
-						<h3 class="text-base mb-4 text-primary font-medium m-0 text-left w-full">News</h3>
-						<div class="space-y-4 flex flex-col items-center w-full">
-							<NewsArticleCard
-								v-for="(item, index) in news"
-								:key="`news-${index}`"
-								:article="item"
-							/>
-							<ButtonStyled color="brand" size="large">
-								<a href="https://modrinth.com/news" target="_blank" class="my-4">
-									<NewspaperIcon /> View all news
-								</a>
-							</ButtonStyled>
-						</div>
-					</div>
 				</div>
 			</div>
-			<template v-if="showAd">
-				<a
-					href="https://modrinth.plus?app"
-					class="absolute bottom-[250px] w-full flex justify-center items-center gap-1 px-4 py-3 text-purple font-medium hover:underline z-10"
-					target="_blank"
-				>
-					<ArrowBigUpDashIcon class="text-2xl" /> Upgrade to Modrinth+
-				</a>
-				<PromotionWrapper />
-			</template>
 		</div>
 	</div>
+	<Suspense>
+		<UpdatesModal ref="updatesModal" />
+	</Suspense>
 	<I18nDebugPanel />
 	<NotificationPanel :has-sidebar="sidebarVisible" />
 	<PopupNotificationPanel :has-sidebar="sidebarVisible" />
@@ -1910,6 +1876,89 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 .popup-survey-leave-to {
 	opacity: 0;
 	transform: translateY(10rem) scale(0.8) scaleY(1.6);
+}
+
+/* Page Transition Styles */
+/* Main page transitions - bigger effects for Home, Browse, Library */
+.main-page-transition-enter-active {
+	transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.main-page-transition-leave-active {
+	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.main-page-transition-enter-from {
+	opacity: 0;
+	transform: translateY(20px) scale(0.98);
+	filter: blur(2px);
+}
+
+.main-page-transition-leave-to {
+	opacity: 0;
+	transform: translateY(-20px) scale(0.98);
+	filter: blur(2px);
+}
+
+.main-page-transition-enter-to,
+.main-page-transition-leave-from {
+	opacity: 1;
+	transform: translateY(0) scale(1);
+	filter: blur(0);
+}
+
+.discover-transition-enter-active {
+	transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.discover-transition-leave-active {
+	transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.discover-transition-enter-from {
+	opacity: 0;
+	transform: translateX(-20px);
+}
+
+.discover-transition-leave-to {
+	opacity: 0;
+	transform: translateX(20px);
+}
+
+.discover-transition-enter-to,
+.discover-transition-leave-from {
+	opacity: 1;
+	transform: translateX(0);
+}
+
+.library-transition-enter-active {
+	transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.library-transition-leave-active {
+	transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.library-transition-enter-from {
+	opacity: 0;
+	transform: translateY(15px) scale(0.98);
+}
+
+.library-transition-leave-to {
+	opacity: 0;
+	transform: translateY(-15px) scale(0.98);
+}
+
+.library-transition-enter-to,
+.library-transition-leave-from {
+	opacity: 1;
+	transform: translateY(0) scale(1);
+}
+
+.transition-container {
+	overflow: hidden;
+	height: 100%;
+	width: 100%;
 }
 
 @media (prefers-reduced-motion: no-preference) {

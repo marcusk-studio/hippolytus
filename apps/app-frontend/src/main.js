@@ -13,6 +13,7 @@ import { overlayScrollbarsDirective } from '@/directives/overlayScrollbars'
 import i18nPlugin from '@/plugins/i18n'
 import i18nDebugPlugin from '@/plugins/i18n-debug'
 import router from '@/routes'
+import { useError } from '@/store/error.js'
 
 const vueScan = new VueScanPlugin({
 	enabled: false, // Enable or disable the tracker
@@ -27,7 +28,7 @@ let app = createApp(App)
 
 Sentry.init({
 	app,
-	dsn: 'https://9508775ee5034536bc70433f5f531dd4@o485889.ingest.us.sentry.io/4504579615227904',
+	dsn: 'https://03f2ad671fafdadbe2a4c11ae884f4c5@o4508388109451264.ingest.de.sentry.io/4508609682014288',
 	integrations: [Sentry.browserTracingIntegration({ router })],
 	tracesSampleRate: 0.1,
 })
@@ -55,3 +56,9 @@ app.use(i18nDebugPlugin)
 app.directive('overlay-scrollbars', overlayScrollbarsDirective)
 
 app.mount('#app')
+
+window.addEventListener('unhandledrejection', (event) => {
+	console.error('Unhandled promise rejection:', event.reason)
+	const error = useError()
+	error.showError(event.reason, 'Unhandled Promise Rejection')
+})

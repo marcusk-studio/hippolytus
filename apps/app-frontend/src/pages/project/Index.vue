@@ -1,49 +1,5 @@
 <template>
 	<div v-if="data">
-		<Teleport to="#sidebar-teleport-target">
-			<ProjectSidebarCompatibility
-				v-if="!isServerProject"
-				:project="data"
-				:tags="{ loaders: allLoaders, gameVersions: allGameVersions }"
-				:project-v3="projectV3"
-				class="project-sidebar-section"
-			/>
-			<ProjectSidebarServerInfo
-				v-if="isServerProject"
-				:project-v3="projectV3"
-				:tags="{ loaders: allLoaders, gameVersions: allGameVersions }"
-				:required-content="serverRequiredContent"
-				:recommended-version="serverRecommendedVersion"
-				:supported-versions="serverSupportedVersions"
-				:loaders="serverModpackLoaders"
-				:ping="serverPing"
-				:status-online="serverStatusOnline"
-				class="project-sidebar-section"
-			/>
-			<ProjectSidebarLinks
-				link-target="_blank"
-				:project="data"
-				:project-v3="projectV3"
-				class="project-sidebar-section"
-			/>
-			<ProjectSidebarTags :project="data" class="project-sidebar-section" />
-			<ProjectSidebarCreators
-				:organization="organization"
-				:members="members"
-				:org-link="(slug) => `https://modrinth.com/organization/${slug}`"
-				:user-link="(username) => `https://modrinth.com/user/${username}`"
-				link-target="_blank"
-				class="project-sidebar-section"
-			/>
-			<ProjectSidebarDetails
-				:project="data"
-				:has-versions="versions.length > 0"
-				:link-target="`_blank`"
-				:hide-license="isServerProject"
-				:show-followers="isServerProject"
-				class="project-sidebar-section"
-			/>
-		</Teleport>
 		<div class="flex flex-col gap-4 p-6">
 			<div
 				v-if="projectInstallContext"
@@ -61,6 +17,7 @@
 				</Teleport>
 				<ProjectHeader
 					v-else
+					class="bg-[#0a0101] rounded-3xl pt-4 pl-4 pr-10 mb-6"
 					:project="data"
 					:project-v3="projectV3"
 					:ping="serverPing"
@@ -94,32 +51,6 @@
 								<PlusIcon />
 							</button>
 						</ButtonStyled>
-						<ButtonStyled size="large" circular type="transparent">
-							<OverflowMenu
-								:tooltip="`More options`"
-								:options="[
-									{
-										id: 'open-in-browser',
-										link: `https://modrinth.com/project/${data.slug}`,
-										external: true,
-									},
-									{
-										divider: true,
-									},
-									{
-										id: 'report',
-										color: 'red',
-										hoverFilled: true,
-										link: `https://modrinth.com/report?item=project&itemID=${data.id}`,
-									},
-								]"
-								aria-label="More options"
-							>
-								<MoreVerticalIcon aria-hidden="true" />
-								<template #open-in-browser> <ExternalIcon /> Open in browser </template>
-								<template #report> <ReportIcon /> Report </template>
-							</OverflowMenu>
-						</ButtonStyled>
 					</template>
 					<template v-else #actions>
 						<ButtonStyled size="large" color="brand">
@@ -136,46 +67,6 @@
 								<CheckIcon v-else />
 								{{ installButtonLabel }}
 							</button>
-						</ButtonStyled>
-						<ButtonStyled size="large" circular type="transparent">
-							<OverflowMenu
-								:tooltip="`More options`"
-								:options="[
-									{
-										id: 'follow',
-										disabled: true,
-										tooltip: 'Coming soon',
-										action: () => {},
-									},
-									{
-										id: 'save',
-										disabled: true,
-										tooltip: 'Coming soon',
-										action: () => {},
-									},
-									{
-										id: 'open-in-browser',
-										link: `https://modrinth.com/${data.project_type}/${data.slug}`,
-										external: true,
-									},
-									{
-										divider: true,
-									},
-									{
-										id: 'report',
-										color: 'red',
-										hoverFilled: true,
-										link: `https://modrinth.com/report?item=project&itemID=${data.id}`,
-									},
-								]"
-								aria-label="More options"
-							>
-								<MoreVerticalIcon aria-hidden="true" />
-								<template #open-in-browser> <ExternalIcon /> Open in browser </template>
-								<template #follow> <HeartIcon /> Follow </template>
-								<template #save> <BookmarkIcon /> Save </template>
-								<template #report> <ReportIcon /> Report </template>
-							</OverflowMenu>
 						</ButtonStyled>
 					</template>
 				</ProjectHeader>
@@ -197,6 +88,7 @@
 							shown: data.gallery.length > 0,
 						},
 					]"
+					class="nav-spacing"
 				/>
 				<RouterView
 					v-if="route.path.startsWith('/project')"
@@ -219,12 +111,6 @@
 		<ContextMenu ref="options" @option-clicked="handleOptionsClick">
 			<template #install>
 				<DownloadIcon /> {{ formatMessage(commonMessages.installButton) }}
-			</template>
-			<template #open_link>
-				<GlobeIcon /> {{ formatMessage(commonMessages.openInModrinthButton) }} <ExternalIcon />
-			</template>
-			<template #copy_link>
-				<ClipboardCopyIcon /> {{ formatMessage(commonMessages.copyLinkButton) }}
 			</template>
 		</ContextMenu>
 		<CreationFlowModal
@@ -250,17 +136,10 @@
 
 <script setup>
 import {
-	BookmarkIcon,
 	CheckIcon,
-	ClipboardCopyIcon,
 	DownloadIcon,
-	ExternalIcon,
-	GlobeIcon,
-	HeartIcon,
-	MoreVerticalIcon,
 	PlayIcon,
 	PlusIcon,
-	ReportIcon,
 	SpinnerIcon,
 	StopCircleIcon,
 } from '@modrinth/assets'
@@ -273,15 +152,8 @@ import {
 	getTargetInstallPreferences,
 	injectNotificationManager,
 	NavTabs,
-	OverflowMenu,
 	ProjectBackgroundGradient,
 	ProjectHeader,
-	ProjectSidebarCompatibility,
-	ProjectSidebarCreators,
-	ProjectSidebarDetails,
-	ProjectSidebarLinks,
-	ProjectSidebarServerInfo,
-	ProjectSidebarTags,
 	requestInstall,
 	SelectedProjectsFloatingBar,
 	useVIntl,
@@ -520,7 +392,7 @@ const installButtonTooltip = computed(() => {
 	return null
 })
 
-const [allLoaders, allGameVersions] = await Promise.all([
+await Promise.all([
 	get_loaders().catch(handleError).then(ref),
 	get_game_versions().catch(handleError).then(ref),
 ])
@@ -774,29 +646,12 @@ const handleRightClick = (event) => {
 		{
 			name: 'install',
 		},
-		{
-			type: 'divider',
-		},
-		{
-			name: 'open_link',
-		},
-		{
-			name: 'copy_link',
-		},
 	])
 }
 const handleOptionsClick = (args) => {
 	switch (args.option) {
 		case 'install':
 			install(null)
-			break
-		case 'open_link':
-			openUrl(`https://modrinth.com/${args.item.project_type}/${args.item.slug}`)
-			break
-		case 'copy_link':
-			navigator.clipboard.writeText(
-				`https://modrinth.com/${args.item.project_type}/${args.item.slug}`,
-			)
 			break
 	}
 }
@@ -961,5 +816,16 @@ const handleOptionsClick = (args) => {
 
 .project-sidebar-section {
 	@apply p-4 flex flex-col gap-2 border-0 border-b-[1px] border-[--brand-gradient-border] border-solid;
+}
+
+.blurred-background {
+	position: absolute;
+	inset: 0;
+	backdrop-filter: blur(8px);
+	z-index: 0;
+}
+
+.nav-spacing {
+	margin-bottom: 1.5rem;
 }
 </style>
