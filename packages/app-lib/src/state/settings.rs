@@ -45,6 +45,11 @@ pub struct Settings {
     pub pending_update_toast_for_version: Option<String>,
     pub auto_download_updates: Option<bool>,
 
+    // News update tracking
+    pub last_update_check: Option<String>,
+    pub last_update_id: Option<String>,
+    pub last_build_date: Option<String>,
+
     pub version: usize,
 }
 
@@ -84,6 +89,7 @@ impl Settings {
                 hook_pre_launch, hook_wrapper, hook_post_exit,
                 custom_dir, prev_custom_dir, migrated, json(feature_flags) feature_flags, toggle_sidebar,
                 skipped_update, pending_update_toast_for_version, auto_download_updates,
+                last_update_check, last_update_id, last_build_date,
                 version
             FROM settings
             "
@@ -143,6 +149,9 @@ impl Settings {
             pending_update_toast_for_version: res
                 .pending_update_toast_for_version,
             auto_download_updates: res.auto_download_updates.map(|x| x == 1),
+            last_update_check: res.last_update_check,
+            last_update_id: res.last_update_id,
+            last_build_date: res.last_build_date,
             version: res.version as usize,
         })
     }
@@ -205,7 +214,11 @@ impl Settings {
                 pending_update_toast_for_version = $31,
                 auto_download_updates = $32,
 
-                version = $33
+                last_update_check = $33,
+                last_update_id = $34,
+                last_build_date = $35,
+
+                version = $36
             ",
             max_concurrent_writes,
             max_concurrent_downloads,
@@ -239,6 +252,9 @@ impl Settings {
             self.skipped_update,
             self.pending_update_toast_for_version,
             self.auto_download_updates,
+            self.last_update_check,
+            self.last_update_id,
+            self.last_build_date,
             version,
         )
         .execute(exec)

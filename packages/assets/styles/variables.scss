@@ -256,7 +256,7 @@ html {
 	--color-orange-800: #9d3a0f;
 	--color-orange-900: #7e3110;
 	--color-orange-950: #441606;
-	--color-orange: var(--color-orange-400);
+	--color-orange: #f05b32;
 
 	--color-green-50: #effef5;
 	--color-green-100: #dafee8;
@@ -316,12 +316,12 @@ html {
 
 	// ===
 
-	--color-bg: var(--surface-1);
-	--color-raised-bg: var(--surface-3);
+	--color-bg: #0b0101;
+	--color-raised-bg: #0b0101;
 	--color-super-raised-bg: var(--surface-4);
 
-	--color-button-bg: var(--surface-4);
-	--color-button-border: rgba(193, 190, 209, 0.12);
+	--color-button-bg: hsl(0, 0%, 14%);
+	--color-button-border: rgba(40, 0, 255, 0);
 	--color-scrollbar: var(--surface-5);
 
 	--color-divider: var(--color-button-bg);
@@ -345,9 +345,9 @@ html {
 	--color-blue-bg: rgba(79, 156, 255, 0.2);
 	--color-purple-bg: rgba(199, 138, 255, 0.2);
 
-	--color-brand: var(--color-green);
-	--color-brand-highlight: rgba(27, 217, 106, 0.25);
-	--color-brand-shadow: rgba(27, 217, 106, 0.7);
+	--color-brand: var(--color-orange);
+	--color-brand-highlight: rgba(230, 107, 66, 0.25);
+	--color-brand-shadow: rgba(230, 107, 66, 0.25);
 
 	--shadow-inset-lg: inset 0px -2px 2px hsla(221, 39%, 11%, 0.1);
 	--shadow-inset: inset 0px -2px 2px hsla(221, 39%, 11%, 0.05);

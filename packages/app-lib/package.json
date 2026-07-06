@@ -1,5 +1,6 @@
 {
 	"name": "@modrinth/app-lib",
+	"version": "1.9.0",
 	"scripts": {
 		"build": "cargo build --release",
 		"lint": "cargo fmt --check && cargo clippy --all-targets",
