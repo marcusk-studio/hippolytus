@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.3](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.2.2...apps-v2.2.3) (2026-07-06)
+
+
+### 🐛 Bugfixes
+
+* resolve frontend lint errors and missing useError import ([#41](https://github.com/marcusk-studio/hippolytus/issues/41)) ([9944da9](https://github.com/marcusk-studio/hippolytus/commit/9944da9382da8aefd1237d75da58794282a87dad))
+
 ## [2.2.2](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.2.1...apps-v2.2.2) (2025-07-26)
 
 
