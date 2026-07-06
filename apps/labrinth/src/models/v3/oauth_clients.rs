@@ -1,38 +1,23 @@
-use super::{
-    ids::{Base62Id, UserId},
-    pats::Scopes,
+use super::pats::Scopes;
+use crate::database::models::oauth_client_authorization_item::DBOAuthClientAuthorization;
+use crate::database::models::oauth_client_item::DBOAuthClient;
+use crate::database::models::oauth_client_item::DBOAuthRedirectUri;
+use crate::models::ids::{
+    OAuthClientAuthorizationId, OAuthClientId, OAuthRedirectUriId,
 };
+use ariadne::ids::UserId;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
-use crate::database::models::oauth_client_authorization_item::OAuthClientAuthorization as DBOAuthClientAuthorization;
-use crate::database::models::oauth_client_item::OAuthClient as DBOAuthClient;
-use crate::database::models::oauth_client_item::OAuthRedirectUri as DBOAuthRedirectUri;
-
-#[derive(Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(from = "Base62Id")]
-#[serde(into = "Base62Id")]
-pub struct OAuthClientId(pub u64);
-
-#[derive(Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(from = "Base62Id")]
-#[serde(into = "Base62Id")]
-pub struct OAuthClientAuthorizationId(pub u64);
-
-#[derive(Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(from = "Base62Id")]
-#[serde(into = "Base62Id")]
-pub struct OAuthRedirectUriId(pub u64);
-
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 pub struct OAuthRedirectUri {
     pub id: OAuthRedirectUriId,
     pub client_id: OAuthClientId,
     pub uri: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
 pub struct OAuthClientCreationResult {
     #[serde(flatten)]
     pub client: OAuthClient,
@@ -40,7 +25,7 @@ pub struct OAuthClientCreationResult {
     pub client_secret: String,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 pub struct OAuthClient {
     pub id: OAuthClientId,
     pub name: String,
@@ -63,7 +48,7 @@ pub struct OAuthClient {
     pub description: Option<String>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 pub struct OAuthClientAuthorization {
     pub id: OAuthClientAuthorizationId,
     pub app_id: OAuthClientId,
@@ -72,8 +57,8 @@ pub struct OAuthClientAuthorization {
     pub created: DateTime<Utc>,
 }
 
-#[serde_as]
 #[derive(Deserialize, Serialize)]
+#[serde_as]
 pub struct GetOAuthClientsRequest {
     #[serde_as(
         as = "serde_with::StringWithSeparator::<serde_with::formats::CommaSeparator, String>"

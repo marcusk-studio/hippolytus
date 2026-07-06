@@ -1,8 +1,8 @@
-//! Theseus profile management interface
+//! Theseus settings management interface
 
 pub use crate::{
-    state::{Hooks, MemorySettings, Profile, Settings, WindowSize},
     State,
+    state::{Hooks, MemorySettings, Settings, WindowSize},
 };
 
 /// Gets entire settings
@@ -23,8 +23,12 @@ pub async fn set(settings: Settings) -> crate::Result<()> {
 }
 
 #[tracing::instrument]
-pub async fn cancel_directory_change() -> crate::Result<()> {
-    let pool = crate::state::db::connect().await?;
+pub async fn cancel_directory_change(
+    app_identifier: &str,
+) -> crate::Result<()> {
+    // This is called to handle state initialization errors due to folder migrations
+    // failing, so fetching a DB connection pool from `State::get` is not reliable here
+    let pool = crate::state::db::connect(app_identifier).await?;
     let mut settings = Settings::get(&pool).await?;
 
     if let Some(prev_custom_dir) = settings.prev_custom_dir {

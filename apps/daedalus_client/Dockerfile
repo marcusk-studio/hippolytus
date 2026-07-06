@@ -1,21 +1,17 @@
-FROM rust:1.82.0 as build
-ENV PKG_CONFIG_ALLOW_CROSS=1
+# syntax=docker/dockerfile:1
 
-WORKDIR /usr/src/daedalus
-COPY . .
-RUN cargo build --release --package daedalus_client
+FROM debian:trixie-slim
 
-
-FROM debian:bookworm-slim
+LABEL org.opencontainers.image.source=https://github.com/modrinth/code
+LABEL org.opencontainers.image.title=daedalus
+LABEL org.opencontainers.image.description="Modrinth game metadata query client"
+LABEL org.opencontainers.image.licenses=MIT
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates openssl \
- && apt-get clean \
- && rm -rf /var/lib/apt/lists/*
+	&& apt-get install -y --no-install-recommends ca-certificates openssl \
+	&& rm -rf /var/lib/apt/lists/*
 
-RUN update-ca-certificates
+COPY daedalus_client /daedalus/daedalus_client
 
-COPY --from=build /usr/src/daedalus/target/release/daedalus_client /daedalus/daedalus_client
 WORKDIR /daedalus_client
-
-CMD /daedalus/daedalus_client
+CMD ["/daedalus/daedalus_client"]

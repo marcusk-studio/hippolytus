@@ -1,36 +1,29 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+use std::mem;
 
-use super::ids::{Base62Id, OrganizationId};
-use super::teams::TeamId;
-use super::users::UserId;
 use crate::database::models::loader_fields::VersionField;
-use crate::database::models::project_item::{LinkUrl, QueryProject};
-use crate::database::models::version_item::QueryVersion;
-use crate::models::threads::ThreadId;
+use crate::database::models::project_item::{LinkUrl, ProjectQueryResult};
+use crate::database::models::version_item::VersionQueryResult;
+use crate::models::exp;
+use crate::models::ids::{
+    FileId, OrganizationId, ProjectId, TeamId, ThreadId, VersionId,
+};
+use crate::routes::{FileHash, HashAlgorithm};
+use ariadne::ids::UserId;
 use chrono::{DateTime, Utc};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+use url::Url;
 use validator::Validate;
 
-/// The ID of a specific project, encoded as base62 for usage in the API
-#[derive(Copy, Clone, PartialEq, Eq, Serialize, Deserialize, Debug, Hash)]
-#[serde(from = "Base62Id")]
-#[serde(into = "Base62Id")]
-pub struct ProjectId(pub u64);
-
-/// The ID of a specific version of a project
-#[derive(Copy, Clone, PartialEq, Eq, Serialize, Deserialize, Hash, Debug)]
-#[serde(from = "Base62Id")]
-#[serde(into = "Base62Id")]
-pub struct VersionId(pub u64);
-
 /// A project returned from the API
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct Project {
     /// The ID of the project, encoded as a base62 string.
     pub id: ProjectId,
     /// The slug of a project, used for vanity URLs
     pub slug: Option<String>,
-    /// The aggregated project typs of the versions of this project
+    /// The aggregated project typos of the versions of this project
     pub project_types: Vec<String>,
     /// The aggregated games of the versions of this project
     pub games: Vec<String>,
@@ -59,7 +52,7 @@ pub struct Project {
 
     /// The status of the project
     pub status: ProjectStatus,
-    /// The requested status of this projct
+    /// The requested status of this project
     pub requested_status: Option<ProjectStatus>,
 
     /// DEPRECATED: moved to threads system
@@ -102,22 +95,14 @@ pub struct Project {
     /// The monetization status of this project
     pub monetization_status: MonetizationStatus,
 
+    /// The status of the manual review of the migration of side types of this project
+    pub side_types_migration_review_status: SideTypesMigrationReviewStatus,
+
+    #[serde(flatten)]
+    pub components: exp::ProjectQuery,
     /// Aggregated loader-fields across its myriad of versions
     #[serde(flatten)]
     pub fields: HashMap<String, Vec<serde_json::Value>>,
-}
-
-fn remove_duplicates(values: Vec<serde_json::Value>) -> Vec<serde_json::Value> {
-    let mut seen = HashSet::new();
-    values
-        .into_iter()
-        .filter(|value| {
-            // Convert the JSON value to a string for comparison
-            let as_string = value.to_string();
-            // Check if the string is already in the set
-            seen.insert(as_string)
-        })
-        .collect()
 }
 
 // This is a helper function to convert a list of VersionFields into a HashMap of field name to vecs of values
@@ -144,15 +129,15 @@ pub fn from_duplicate_version_fields(
         }
     }
 
-    // Remove duplicates by converting to string and back
-    for (_, v) in fields.iter_mut() {
-        *v = remove_duplicates(v.clone());
+    // Remove duplicates
+    for v in fields.values_mut() {
+        *v = mem::take(v).into_iter().unique().collect_vec();
     }
     fields
 }
 
-impl From<QueryProject> for Project {
-    fn from(data: QueryProject) -> Self {
+impl From<ProjectQueryResult> for Project {
+    fn from(data: ProjectQueryResult) -> Self {
         let fields =
             from_duplicate_version_fields(data.aggregate_version_fields);
         let m = data.inner;
@@ -186,10 +171,10 @@ impl From<QueryProject> for Project {
                     Ok(spdx_expr) => {
                         let mut vec: Vec<&str> = Vec::new();
                         for node in spdx_expr.iter() {
-                            if let spdx::expression::ExprNode::Req(req) = node {
-                                if let Some(id) = req.req.license.id() {
-                                    vec.push(id.full_name);
-                                }
+                            if let spdx::expression::ExprNode::Req(req) = node
+                                && let Some(id) = req.req.license.id()
+                            {
+                                vec.push(id.full_name);
                             }
                         }
                         // spdx crate returns AND/OR operations in postfix order
@@ -229,7 +214,10 @@ impl From<QueryProject> for Project {
             color: m.color,
             thread_id: data.thread_id.into(),
             monetization_status: m.monetization_status,
+            side_types_migration_review_status: m
+                .side_types_migration_review_status,
             fields,
+            components: data.components,
         }
     }
 }
@@ -388,7 +376,7 @@ impl Project {
     //     })
     // }
 }
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, utoipa::ToSchema)]
 pub struct GalleryItem {
     pub url: String,
     pub raw_url: String,
@@ -399,7 +387,7 @@ pub struct GalleryItem {
     pub ordering: i64,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, utoipa::ToSchema)]
 pub struct ModeratorMessage {
     pub message: String,
     pub body: Option<String>,
@@ -407,14 +395,23 @@ pub struct ModeratorMessage {
 
 pub const DEFAULT_LICENSE_ID: &str = "LicenseRef-All-Rights-Reserved";
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct License {
     pub id: String,
     pub name: String,
     pub url: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Validate, Clone, Eq, PartialEq)]
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Validate,
+    Eq,
+    PartialEq,
+    utoipa::ToSchema,
+)]
 pub struct Link {
     pub platform: String,
     pub donation: bool,
@@ -443,7 +440,9 @@ impl From<LinkUrl> for Link {
 /// Processing - Project is not displayed on search, and not accessible by URL (Temporary state, project under review)
 /// Scheduled - Project is scheduled to be released in the future
 /// Private - Project is approved, but is not viewable to the public
-#[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(
+    Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Debug, utoipa::ToSchema,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum ProjectStatus {
     Approved,
@@ -542,6 +541,13 @@ impl ProjectStatus {
     }
 
     // Project can be displayed in search
+    // IMPORTANT: if this is changed, make sure to:
+    // - update the `mods_searchable_ids_gist`
+    //   index in the DB to keep random project queries fast (see the
+    //   `20250609134334_spatial-random-project-index.sql` migration).
+    // - update the `is_visible_organization` function in
+    //   `apps/labrinth/src/auth/checks.rs`, which duplicates this logic
+    //   in a SQL query for efficiency.
     pub fn is_searchable(&self) -> bool {
         matches!(self, ProjectStatus::Approved | ProjectStatus::Archived)
     }
@@ -575,7 +581,9 @@ impl ProjectStatus {
     }
 }
 
-#[derive(Serialize, Deserialize, Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(
+    Serialize, Deserialize, Copy, Clone, Debug, Eq, PartialEq, utoipa::ToSchema,
+)]
 #[serde(rename_all = "kebab-case")]
 pub enum MonetizationStatus {
     ForceDemonetized,
@@ -608,8 +616,131 @@ impl MonetizationStatus {
     }
 }
 
+/// Represents the status of the manual review of the migration of side types of this
+/// project to the new environment field.
+#[derive(
+    Serialize, Deserialize, Copy, Clone, Debug, Eq, PartialEq, utoipa::ToSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum SideTypesMigrationReviewStatus {
+    /// The project has been reviewed to use the new environment side types appropriately.
+    Reviewed,
+    /// The project has been automatically migrated to the new environment side types, but
+    /// the appropriateness of such migration has not been reviewed.
+    Pending,
+}
+
+impl SideTypesMigrationReviewStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SideTypesMigrationReviewStatus::Reviewed => "reviewed",
+            SideTypesMigrationReviewStatus::Pending => "pending",
+        }
+    }
+
+    pub fn from_string(string: &str) -> SideTypesMigrationReviewStatus {
+        match string {
+            "reviewed" => SideTypesMigrationReviewStatus::Reviewed,
+            "pending" => SideTypesMigrationReviewStatus::Pending,
+            _ => SideTypesMigrationReviewStatus::Reviewed,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, utoipa::ToSchema)]
+pub struct MissingAttributionFile {
+    pub id: FileId,
+    pub override_source: Option<OverrideSource>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, utoipa::ToSchema)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OverrideSource {
+    Flame {
+        id: u32,
+        title: String,
+        url: String,
+        icon_url: String,
+    },
+    Unknown,
+}
+
+#[derive(
+    Debug, Serialize, Deserialize, Clone, PartialEq, Eq, utoipa::ToSchema,
+)]
+pub struct FlameProject {
+    pub id: u32,
+    pub title: String,
+    pub url: String,
+    pub icon_url: String,
+}
+
+#[derive(
+    Debug, Serialize, Deserialize, Clone, PartialEq, Eq, utoipa::ToSchema,
+)]
+#[serde(untagged)]
+pub enum AttributionLicense {
+    Spdx(String),
+    Custom { name: String },
+}
+
+#[derive(
+    Debug, Serialize, Deserialize, Clone, PartialEq, Eq, utoipa::ToSchema,
+)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AttributionResolutionKind {
+    License {
+        license: AttributionLicense,
+        link_to_work: Url,
+    },
+    GloballyAllowed {
+        link_to_work: Url,
+    },
+    MyProject {
+        license: AttributionLicense,
+    },
+    SpecialPermissions {
+        link_to_work: Url,
+    },
+    NoPermission {
+        link_to_work: Option<Url>,
+    },
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, utoipa::ToSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AttributionModerationStatusKind {
+    NotAllowed,
+    Approved,
+    BadProof,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, utoipa::ToSchema)]
+pub struct AttributionModerationStatus {
+    #[serde(flatten)]
+    pub kind: AttributionModerationStatusKind,
+    #[serde(default)]
+    pub reason: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub moderated_at: Option<DateTime<Utc>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub moderated_by: Option<UserId>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, utoipa::ToSchema)]
+pub struct AttributionResolution {
+    #[serde(flatten)]
+    pub kind: AttributionResolutionKind,
+    #[serde(default)]
+    pub moderation_status: Option<AttributionModerationStatus>,
+    #[serde(default)]
+    pub updated_by_moderator: bool,
+    pub notes: String,
+    pub image_urls: Vec<Url>,
+}
+
 /// A specific version of a project
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, utoipa::ToSchema)]
 pub struct Version {
     /// The ID of the version, encoded as a base62 string.
     pub id: VersionId,
@@ -628,7 +759,8 @@ pub struct Version {
     /// Games for which this version is compatible with, extracted from Loader/Project types
     pub games: Vec<String>,
     /// The changelog for this version of the project.
-    pub changelog: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub changelog: Option<String>,
 
     /// The date that this version was published.
     pub date_published: DateTime<Utc>,
@@ -636,13 +768,16 @@ pub struct Version {
     pub downloads: u32,
     /// The type of the release - `Alpha`, `Beta`, or `Release`.
     pub version_type: VersionType,
-    /// The status of tne version
+    /// The status of the version
     pub status: VersionStatus,
     /// The requested status of the version (used for scheduling)
     pub requested_status: Option<VersionStatus>,
 
     /// A list of files available for download for this version.
     pub files: Vec<VersionFile>,
+    /// Files in this version that contain override files not yet attributed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files_missing_attribution: Vec<MissingAttributionFile>,
     /// A list of projects that this version depends on.
     pub dependencies: Vec<Dependency>,
 
@@ -651,6 +786,8 @@ pub struct Version {
     /// Ordering override, lower is returned first
     pub ordering: Option<i32>,
 
+    #[serde(flatten)]
+    pub components: exp::VersionQuery,
     // All other fields are loader-specific VersionFields
     // These are flattened during serialization
     #[serde(deserialize_with = "skip_nulls")]
@@ -669,8 +806,8 @@ where
     Ok(map)
 }
 
-impl From<QueryVersion> for Version {
-    fn from(data: QueryVersion) -> Version {
+impl From<VersionQueryResult> for Version {
+    fn from(data: VersionQueryResult) -> Version {
         let v = data.inner;
         Version {
             id: v.id.into(),
@@ -681,7 +818,7 @@ impl From<QueryVersion> for Version {
             version_number: v.version_number,
             project_types: data.project_types,
             games: data.games,
-            changelog: v.changelog,
+            changelog: Some(v.changelog),
             date_published: v.date_published,
             downloads: v.downloads as u32,
             version_type: match v.version_type.as_str() {
@@ -698,6 +835,7 @@ impl From<QueryVersion> for Version {
                 .files
                 .into_iter()
                 .map(|f| VersionFile {
+                    id: Some(FileId(f.id.0 as u64)),
                     url: f.url,
                     filename: f.filename,
                     hashes: f.hashes,
@@ -716,6 +854,7 @@ impl From<QueryVersion> for Version {
                     dependency_type: DependencyType::from_string(
                         d.dependency_type.as_str(),
                     ),
+                    attribution: d.attribution,
                 })
                 .collect(),
             loaders: data.loaders.into_iter().map(Loader).collect(),
@@ -726,6 +865,8 @@ impl From<QueryVersion> for Version {
                 .into_iter()
                 .map(|vf| (vf.field_name, vf.value.serialize_internal()))
                 .collect(),
+            components: data.components,
+            files_missing_attribution: Vec::new(),
         }
     }
 }
@@ -736,7 +877,9 @@ impl From<QueryVersion> for Version {
 /// Draft - Version is not displayed on project, and not accessible by URL
 /// Unlisted - Version is not displayed on project, and accessible by URL
 /// Scheduled - Version is scheduled to be released in the future
-#[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(
+    Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Debug, utoipa::ToSchema,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum VersionStatus {
     Listed,
@@ -820,10 +963,15 @@ impl VersionStatus {
 }
 
 /// A single project file, with a url for the file and the file's hash
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, utoipa::ToSchema)]
 pub struct VersionFile {
+    /// The ID of the file. Every file has an ID once created, but it
+    /// is not known until it indeed has been created.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<FileId>,
     /// A map of hashes of the file.  The key is the hashing algorithm
     /// and the value is the string version of the hash.
+    #[schema(value_type = std::collections::HashMap<HashAlgorithm, FileHash>)]
     pub hashes: std::collections::HashMap<String, String>,
     /// A direct link to the file for downloading it.
     pub url: String,
@@ -839,7 +987,9 @@ pub struct VersionFile {
 
 /// A dendency which describes what versions are required, break support, or are optional to the
 /// version's functionality
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(
+    Serialize, Deserialize, Clone, Debug, PartialEq, Eq, utoipa::ToSchema,
+)]
 pub struct Dependency {
     /// The specific version id that the dependency uses
     pub version_id: Option<VersionId>,
@@ -849,9 +999,23 @@ pub struct Dependency {
     pub file_name: Option<String>,
     /// The type of the dependency
     pub dependency_type: DependencyType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attribution: Option<DependencyAttribution>,
 }
 
-#[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(
+    Serialize, Deserialize, Clone, Debug, PartialEq, Eq, utoipa::ToSchema,
+)]
+pub struct DependencyAttribution {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub flame_project: Option<FlameProject>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolution: Option<AttributionResolutionKind>,
+}
+
+#[derive(
+    Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Debug, utoipa::ToSchema,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum VersionType {
     Release,
@@ -866,7 +1030,6 @@ impl std::fmt::Display for VersionType {
 }
 
 impl VersionType {
-    // These are constant, so this can remove unneccessary allocations (`to_string`)
     pub fn as_str(&self) -> &'static str {
         match self {
             VersionType::Release => "release",
@@ -876,7 +1039,9 @@ impl VersionType {
     }
 }
 
-#[derive(Serialize, Deserialize, Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(
+    Serialize, Deserialize, Copy, Clone, Debug, PartialEq, Eq, utoipa::ToSchema,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum DependencyType {
     Required,
@@ -892,7 +1057,7 @@ impl std::fmt::Display for DependencyType {
 }
 
 impl DependencyType {
-    // These are constant, so this can remove unneccessary allocations (`to_string`)
+    // These are constant, so this can remove unnecessary allocations (`to_string`)
     pub fn as_str(&self) -> &'static str {
         match self {
             DependencyType::Required => "required",
@@ -913,11 +1078,17 @@ impl DependencyType {
     }
 }
 
-#[derive(Serialize, Deserialize, Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(
+    Serialize, Deserialize, Copy, Clone, Debug, PartialEq, Eq, utoipa::ToSchema,
+)]
 #[serde(rename_all = "kebab-case")]
 pub enum FileType {
     RequiredResourcePack,
     OptionalResourcePack,
+    SourcesJar,
+    DevJar,
+    JavadocJar,
+    Signature,
     Unknown,
 }
 
@@ -933,7 +1104,11 @@ impl FileType {
         match self {
             FileType::RequiredResourcePack => "required-resource-pack",
             FileType::OptionalResourcePack => "optional-resource-pack",
+            FileType::SourcesJar => "sources-jar",
+            FileType::DevJar => "dev-jar",
+            FileType::JavadocJar => "javadoc-jar",
             FileType::Unknown => "unknown",
+            FileType::Signature => "signature",
         }
     }
 
@@ -941,30 +1116,19 @@ impl FileType {
         match string {
             "required-resource-pack" => FileType::RequiredResourcePack,
             "optional-resource-pack" => FileType::OptionalResourcePack,
+            "sources-jar" => FileType::SourcesJar,
+            "dev-jar" => FileType::DevJar,
+            "javadoc-jar" => FileType::JavadocJar,
             "unknown" => FileType::Unknown,
+            "signature" => FileType::Signature,
             _ => FileType::Unknown,
         }
     }
 }
 
 /// A project loader
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(
+    Serialize, Deserialize, Clone, Debug, PartialEq, Eq, utoipa::ToSchema,
+)]
 #[serde(transparent)]
 pub struct Loader(pub String);
-
-// These fields must always succeed parsing; deserialize errors aren't
-// processed correctly (don't return JSON errors)
-#[derive(Serialize, Deserialize, Debug)]
-pub struct SearchRequest {
-    pub query: Option<String>,
-    pub offset: Option<String>,
-    pub index: Option<String>,
-    pub limit: Option<String>,
-
-    pub new_filters: Option<String>,
-
-    // TODO: Deprecated values below. WILL BE REMOVED V3!
-    pub facets: Option<String>,
-    pub filters: Option<String>,
-    pub version: Option<String>,
-}

@@ -1,22 +1,15 @@
-import { createConfigForNuxt } from '@nuxt/eslint-config/flat'
-import { fixupPluginRules } from '@eslint/compat'
-import turboPlugin from 'eslint-plugin-turbo'
+import baseConfig from '@modrinth/tooling-config/eslint/nuxt.mjs'
+import storybook from 'eslint-plugin-storybook'
 
-export default createConfigForNuxt().append([
-  {
-    name: 'turbo',
-    plugins: {
-      turbo: fixupPluginRules(turboPlugin),
-    },
-    rules: {
-      'turbo/no-undeclared-env-vars': 'error',
-    },
-  },
-  {
-    name: 'modrinth',
-    rules: {
-      'vue/html-self-closing': 'off',
-      'vue/multi-word-component-names': 'off',
-    },
-  },
+export default baseConfig.append([
+	{
+		name: 'storybook',
+		files: ['**/*.stories.@(js|jsx|ts|tsx)', '**/.storybook/**/*.@(js|ts)'],
+		plugins: {
+			storybook,
+		},
+		rules: {
+			...storybook.configs.recommended.rules,
+		},
+	},
 ])

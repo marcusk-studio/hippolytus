@@ -1,7 +1,7 @@
 use super::ids::*;
-use crate::database::models;
 use crate::database::models::DatabaseError;
 use crate::database::redis::RedisPool;
+use crate::database::{PgTransaction, models};
 use crate::models::collections::CollectionStatus;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
@@ -12,20 +12,20 @@ const COLLECTIONS_NAMESPACE: &str = "collections";
 
 #[derive(Clone)]
 pub struct CollectionBuilder {
-    pub collection_id: CollectionId,
-    pub user_id: UserId,
+    pub collection_id: DBCollectionId,
+    pub user_id: DBUserId,
     pub name: String,
     pub description: Option<String>,
     pub status: CollectionStatus,
-    pub projects: Vec<ProjectId>,
+    pub projects: Vec<DBProjectId>,
 }
 
 impl CollectionBuilder {
     pub async fn insert(
         self,
-        transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    ) -> Result<CollectionId, DatabaseError> {
-        let collection_struct = Collection {
+        transaction: &mut PgTransaction<'_>,
+    ) -> Result<DBCollectionId, DatabaseError> {
+        let collection_struct = DBCollection {
             id: self.collection_id,
             name: self.name,
             user_id: self.user_id,
@@ -44,9 +44,9 @@ impl CollectionBuilder {
     }
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Collection {
-    pub id: CollectionId,
-    pub user_id: UserId,
+pub struct DBCollection {
+    pub id: DBCollectionId,
+    pub user_id: DBUserId,
     pub name: String,
     pub description: Option<String>,
     pub created: DateTime<Utc>,
@@ -55,27 +55,27 @@ pub struct Collection {
     pub raw_icon_url: Option<String>,
     pub color: Option<u32>,
     pub status: CollectionStatus,
-    pub projects: Vec<ProjectId>,
+    pub projects: Vec<DBProjectId>,
 }
 
-impl Collection {
+impl DBCollection {
     pub async fn insert(
         &self,
-        transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        transaction: &mut PgTransaction<'_>,
     ) -> Result<(), DatabaseError> {
         sqlx::query!(
             "
             INSERT INTO collections (
-                id, user_id, name, description, 
+                id, user_id, name, description,
                 created, icon_url, raw_icon_url, status
             )
             VALUES (
-                $1, $2, $3, $4, 
+                $1, $2, $3, $4,
                 $5, $6, $7, $8
             )
             ",
-            self.id as CollectionId,
-            self.user_id as UserId,
+            self.id as DBCollectionId,
+            self.user_id as DBUserId,
             &self.name,
             self.description.as_ref(),
             self.created,
@@ -83,7 +83,7 @@ impl Collection {
             self.raw_icon_url.as_ref(),
             self.status.to_string(),
         )
-        .execute(&mut **transaction)
+        .execute(&mut *transaction)
         .await?;
 
         let (collection_ids, project_ids): (Vec<_>, Vec<_>) =
@@ -97,18 +97,18 @@ impl Collection {
             &collection_ids[..],
             &project_ids[..],
         )
-        .execute(&mut **transaction)
+        .execute(&mut *transaction)
         .await?;
 
         Ok(())
     }
 
     pub async fn remove(
-        id: CollectionId,
-        transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        id: DBCollectionId,
+        transaction: &mut PgTransaction<'_>,
         redis: &RedisPool,
     ) -> Result<Option<()>, DatabaseError> {
-        let collection = Self::get(id, &mut **transaction, redis).await?;
+        let collection = Self::get(id, &mut *transaction, redis).await?;
 
         if let Some(collection) = collection {
             sqlx::query!(
@@ -116,9 +116,9 @@ impl Collection {
                 DELETE FROM collections_mods
                 WHERE collection_id = $1
                 ",
-                id as CollectionId,
+                id as DBCollectionId,
             )
-            .execute(&mut **transaction)
+            .execute(&mut *transaction)
             .await?;
 
             sqlx::query!(
@@ -126,12 +126,12 @@ impl Collection {
                 DELETE FROM collections
                 WHERE id = $1
                 ",
-                id as CollectionId,
+                id as DBCollectionId,
             )
-            .execute(&mut **transaction)
+            .execute(&mut *transaction)
             .await?;
 
-            models::Collection::clear_cache(collection.id, redis).await?;
+            models::DBCollection::clear_cache(collection.id, redis).await?;
 
             Ok(Some(()))
         } else {
@@ -140,25 +140,25 @@ impl Collection {
     }
 
     pub async fn get<'a, 'b, E>(
-        id: CollectionId,
+        id: DBCollectionId,
         executor: E,
         redis: &RedisPool,
-    ) -> Result<Option<Collection>, DatabaseError>
+    ) -> Result<Option<DBCollection>, DatabaseError>
     where
-        E: sqlx::Executor<'a, Database = sqlx::Postgres>,
+        E: crate::database::Executor<'a, Database = sqlx::Postgres>,
     {
-        Collection::get_many(&[id], executor, redis)
+        DBCollection::get_many(&[id], executor, redis)
             .await
             .map(|x| x.into_iter().next())
     }
 
     pub async fn get_many<'a, E>(
-        collection_ids: &[CollectionId],
+        collection_ids: &[DBCollectionId],
         exec: E,
         redis: &RedisPool,
-    ) -> Result<Vec<Collection>, DatabaseError>
+    ) -> Result<Vec<DBCollection>, DatabaseError>
     where
-        E: sqlx::Executor<'a, Database = sqlx::Postgres>,
+        E: crate::database::Executor<'a, Database = sqlx::Postgres>,
     {
         let val = redis
             .get_cached_keys(
@@ -180,9 +180,9 @@ impl Collection {
                     )
                     .fetch(exec)
                     .try_fold(DashMap::new(), |acc, m| {
-                        let collection = Collection {
-                            id: CollectionId(m.id),
-                            user_id: UserId(m.user_id),
+                        let collection = DBCollection {
+                            id: DBCollectionId(m.id),
+                            user_id: DBUserId(m.user_id),
                             name: m.name.clone(),
                             description: m.description.clone(),
                             icon_url: m.icon_url.clone(),
@@ -195,7 +195,7 @@ impl Collection {
                                 .mods
                                 .unwrap_or_default()
                                 .into_iter()
-                                .map(ProjectId)
+                                .map(DBProjectId)
                                 .collect(),
                         };
 
@@ -213,7 +213,7 @@ impl Collection {
     }
 
     pub async fn clear_cache(
-        id: CollectionId,
+        id: DBCollectionId,
         redis: &RedisPool,
     ) -> Result<(), DatabaseError> {
         let mut redis = redis.connect().await?;

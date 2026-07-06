@@ -1,10 +1,10 @@
-# ![MARCUSK Launcher](/.github/assets/app_cover.png)
+# ![Modrinth App](/.github/assets/app_cover.png)
 
-## MARCUSK Launcher
+## Modrinth App
 
-The MARCUSK Launcher is a desktop application for managing your Minecraft mods. It is built with [Tauri](https://tauri.app/) and [Vue](https://vuejs.org/).
+The Modrinth App is a desktop application for managing your Minecraft mods. It is built with [Tauri](https://tauri.app/) and [Vue](https://vuejs.org/).
 
-If you're not a developer and you've stumbled upon this repository, you can download the latest release of the launcher from the [MARCUSK website](https://marcusk.com/app).
+If you're not a developer and you've stumbled upon this repository, you can download the latest release of the app from the [Modrinth website](https://modrinth.com/app).
 
 ## Development
 

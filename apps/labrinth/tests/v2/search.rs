@@ -5,13 +5,13 @@ use crate::common::api_common::ApiVersion;
 use crate::common::api_v2::ApiV2;
 
 use crate::common::database::*;
-use crate::common::dummy_data::TestFile;
 use crate::common::dummy_data::DUMMY_CATEGORIES;
-use crate::common::environment::with_test_environment;
+use crate::common::dummy_data::TestFile;
 use crate::common::environment::TestEnvironment;
+use crate::common::environment::with_test_environment;
 use actix_http::StatusCode;
+use ariadne::ids::base62_impl::parse_base62;
 use futures::stream::StreamExt;
-use labrinth::models::ids::base62_impl::parse_base62;
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -316,7 +316,7 @@ async fn search_projects() {
                 async move {
                     let projects = api
                         .search_deserialized(
-                            Some(&format!("\"&{test_name}\"")),
+                            Some(&format!("&{test_name}")),
                             Some(facets.clone()),
                             USER_USER_PAT,
                         )
@@ -328,7 +328,7 @@ async fn search_projects() {
                         .collect();
                     expected_project_ids.sort();
                     found_project_ids.sort();
-                    println!("Facets: {:?}", facets);
+                    println!("Facets: {facets:?}");
                     assert_eq!(found_project_ids, expected_project_ids);
                 }
             })
@@ -337,7 +337,7 @@ async fn search_projects() {
         // A couple additional tests for the search type returned, making sure it is properly translated back
         let client_side_required = api
             .search_deserialized(
-                Some(&format!("\"&{test_name}\"")),
+                Some(&format!("&{test_name}")),
                 Some(json!([["client_side:required"]])),
                 USER_USER_PAT,
             )
@@ -348,7 +348,7 @@ async fn search_projects() {
 
         let server_side_required = api
             .search_deserialized(
-                Some(&format!("\"&{test_name}\"")),
+                Some(&format!("&{test_name}")),
                 Some(json!([["server_side:required"]])),
                 USER_USER_PAT,
             )
@@ -359,7 +359,7 @@ async fn search_projects() {
 
         let client_side_unsupported = api
             .search_deserialized(
-                Some(&format!("\"&{test_name}\"")),
+                Some(&format!("&{test_name}")),
                 Some(json!([["client_side:unsupported"]])),
                 USER_USER_PAT,
             )
@@ -370,7 +370,7 @@ async fn search_projects() {
 
         let client_side_optional_server_side_optional = api
             .search_deserialized(
-                Some(&format!("\"&{test_name}\"")),
+                Some(&format!("&{test_name}")),
                 Some(json!([["client_side:optional"], ["server_side:optional"]])),
                 USER_USER_PAT,
             )
@@ -384,7 +384,7 @@ async fn search_projects() {
         // over all versions of a project
         let game_versions = api
             .search_deserialized(
-                Some(&format!("\"&{test_name}\"")),
+                Some(&format!("&{test_name}")),
                 Some(json!([["categories:forge"], ["versions:1.20.2"]])),
                 USER_USER_PAT,
             )

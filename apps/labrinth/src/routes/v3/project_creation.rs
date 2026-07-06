@@ -1,59 +1,63 @@
-use super::version_creation::{try_create_version_fields, InitialVersionData};
-use crate::auth::{get_user_from_headers, AuthenticationError};
+use super::version_creation::{InitialVersionData, try_create_version_fields};
+use crate::auth::{AuthenticationError, get_user_from_headers};
+use crate::database::PgPool;
+use crate::database::PgTransaction;
 use crate::database::models::loader_fields::{
     Loader, LoaderField, LoaderFieldEnumValue,
 };
 use crate::database::models::thread_item::ThreadBuilder;
-use crate::database::models::{self, image_item, User};
+use crate::database::models::{self, DBUser, image_item};
 use crate::database::redis::RedisPool;
-use crate::file_hosting::{FileHost, FileHostingError};
+use crate::file_hosting::{FileHost, FileHostPublicity, FileHostingError};
 use crate::models::error::ApiError;
-use crate::models::ids::base62_impl::to_base62;
-use crate::models::ids::{ImageId, OrganizationId};
+use crate::models::exp;
+use crate::models::ids::{ImageId, OrganizationId, ProjectId, VersionId};
 use crate::models::images::{Image, ImageContext};
 use crate::models::pats::Scopes;
 use crate::models::projects::{
-    License, Link, MonetizationStatus, ProjectId, ProjectStatus, VersionId,
-    VersionStatus,
+    License, Link, MonetizationStatus, Project, ProjectStatus,
+    SideTypesMigrationReviewStatus, VersionStatus,
 };
 use crate::models::teams::{OrganizationPermissions, ProjectPermissions};
 use crate::models::threads::ThreadType;
-use crate::models::users::UserId;
+use crate::models::v3::user_limits::UserLimits;
 use crate::queue::session::AuthQueue;
-use crate::search::indexing::IndexingError;
+use crate::search::SearchState;
+use crate::util::guards::admin_key_guard;
+use crate::util::http::HttpClient;
 use crate::util::img::upload_image_optimized;
 use crate::util::routes::read_from_field;
 use crate::util::validate::validation_errors_to_string;
 use actix_multipart::{Field, Multipart};
 use actix_web::http::StatusCode;
 use actix_web::web::{self, Data};
-use actix_web::{HttpRequest, HttpResponse};
+use actix_web::{HttpRequest, HttpResponse, post};
+use ariadne::ids::UserId;
+use ariadne::ids::base62_impl::to_base62;
 use chrono::Utc;
 use futures::stream::StreamExt;
 use image::ImageError;
 use itertools::Itertools;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::PgPool;
 use std::collections::HashMap;
-use std::sync::Arc;
 use thiserror::Error;
 use validator::Validate;
 
+pub mod new;
+
 pub fn config(cfg: &mut actix_web::web::ServiceConfig) {
-    cfg.route("project", web::post().to(project_create));
+    cfg.service(project_create)
+        .service(project_create_with_id)
+        .configure(new::config);
 }
 
 #[derive(Error, Debug)]
 pub enum CreateError {
-    #[error("Environment Error")]
-    EnvError(#[from] dotenvy::Error),
     #[error("An unknown database error occurred")]
     SqlxDatabaseError(#[from] sqlx::Error),
     #[error("Database Error: {0}")]
     DatabaseError(#[from] models::DatabaseError),
-    #[error("Indexing Error: {0}")]
-    IndexingError(#[from] IndexingError),
     #[error("Error while parsing multipart payload: {0}")]
     MultipartError(#[from] actix_multipart::MultipartError),
     #[error("Error while parsing JSON: {0}")]
@@ -86,19 +90,41 @@ pub enum CreateError {
     CustomAuthenticationError(String),
     #[error("Image Parsing Error: {0}")]
     ImageError(#[from] ImageError),
-    #[error("Reroute Error: {0}")]
-    RerouteError(#[from] reqwest::Error),
+    #[error("Project limit reached")]
+    LimitReached,
+}
+
+impl From<crate::routes::ApiError> for CreateError {
+    fn from(value: crate::routes::ApiError) -> Self {
+        match value {
+            crate::routes::ApiError::Database(err) => Self::DatabaseError(err),
+            crate::routes::ApiError::SqlxDatabase(err) => {
+                Self::SqlxDatabaseError(err)
+            }
+            crate::routes::ApiError::Authentication(err) => {
+                Self::Unauthorized(err)
+            }
+            crate::routes::ApiError::CustomAuthentication(err) => {
+                Self::CustomAuthenticationError(err)
+            }
+            crate::routes::ApiError::InvalidInput(err)
+            | crate::routes::ApiError::Validation(err) => {
+                Self::InvalidInput(err)
+            }
+            err => Self::DatabaseError(models::DatabaseError::SchemaError(
+                err.to_string(),
+            )),
+        }
+    }
 }
 
 impl actix_web::ResponseError for CreateError {
     fn status_code(&self) -> StatusCode {
         match self {
-            CreateError::EnvError(..) => StatusCode::INTERNAL_SERVER_ERROR,
             CreateError::SqlxDatabaseError(..) => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
             CreateError::DatabaseError(..) => StatusCode::INTERNAL_SERVER_ERROR,
-            CreateError::IndexingError(..) => StatusCode::INTERNAL_SERVER_ERROR,
             CreateError::FileHostingError(..) => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
@@ -119,17 +145,15 @@ impl actix_web::ResponseError for CreateError {
             CreateError::ValidationError(..) => StatusCode::BAD_REQUEST,
             CreateError::FileValidationError(..) => StatusCode::BAD_REQUEST,
             CreateError::ImageError(..) => StatusCode::BAD_REQUEST,
-            CreateError::RerouteError(..) => StatusCode::INTERNAL_SERVER_ERROR,
+            CreateError::LimitReached => StatusCode::BAD_REQUEST,
         }
     }
 
     fn error_response(&self) -> HttpResponse {
         HttpResponse::build(self.status_code()).json(ApiError {
             error: match self {
-                CreateError::EnvError(..) => "environment_error",
                 CreateError::SqlxDatabaseError(..) => "database_error",
                 CreateError::DatabaseError(..) => "database_error",
-                CreateError::IndexingError(..) => "indexing_error",
                 CreateError::FileHostingError(..) => "file_hosting_error",
                 CreateError::SerDeError(..) => "invalid_input",
                 CreateError::MultipartError(..) => "invalid_input",
@@ -146,9 +170,10 @@ impl actix_web::ResponseError for CreateError {
                 CreateError::ValidationError(..) => "invalid_input",
                 CreateError::FileValidationError(..) => "invalid_input",
                 CreateError::ImageError(..) => "invalid_image",
-                CreateError::RerouteError(..) => "reroute_error",
+                CreateError::LimitReached => "limit_reached",
             },
             description: self.to_string(),
+            details: None,
         })
     }
 }
@@ -172,7 +197,7 @@ pub struct ProjectCreateData {
     pub name: String,
     #[validate(
         length(min = 3, max = 64),
-        regex = "crate::util::validate::RE_URL_SAFE"
+        regex(path = *crate::util::validate::RE_URL_SAFE)
     )]
     #[serde(alias = "mod_slug")]
     /// The slug of a project, used for vanity URLs
@@ -186,8 +211,7 @@ pub struct ProjectCreateData {
     /// A long description of the project, in markdown.
     pub description: String,
 
-    #[validate(length(max = 32))]
-    #[validate]
+    #[validate(nested, length(max = 32))]
     /// A list of initial versions to upload with the created project
     pub initial_versions: Vec<InitialVersionData>,
     #[validate(length(max = 3))]
@@ -213,8 +237,7 @@ pub struct ProjectCreateData {
     /// The license id that the project follows
     pub license_id: String,
 
-    #[validate(length(max = 64))]
-    #[validate]
+    #[validate(nested, length(max = 64))]
     /// The multipart names of the gallery items to upload
     pub gallery_items: Option<Vec<NewGalleryItem>>,
     #[serde(default = "default_requested_status")]
@@ -246,47 +269,86 @@ pub struct NewGalleryItem {
 }
 
 pub struct UploadedFile {
-    pub file_id: String,
-    pub file_name: String,
+    pub name: String,
+    pub publicity: FileHostPublicity,
 }
 
 pub async fn undo_uploads(
     file_host: &dyn FileHost,
     uploaded_files: &[UploadedFile],
-) -> Result<(), CreateError> {
+) -> Result<(), FileHostingError> {
     for file in uploaded_files {
-        file_host
-            .delete_file_version(&file.file_id, &file.file_name)
-            .await?;
+        file_host.delete_file(&file.name, file.publicity).await?;
     }
     Ok(())
 }
 
+/// Create a project.  
+#[utoipa::path(
+	context_path = "/project",
+	tag = "projects",
+	request_body(
+		content(("multipart/form-data")),
+		description = "Multipart payload containing project metadata and files"
+	),
+	responses((status = OK, body = Project))
+)]
+#[post("")]
 pub async fn project_create(
+    req: HttpRequest,
+    payload: Multipart,
+    client: Data<PgPool>,
+    redis: Data<RedisPool>,
+    file_host: Data<dyn FileHost>,
+    session_queue: Data<AuthQueue>,
+    http: Data<HttpClient>,
+    search_state: Data<SearchState>,
+) -> Result<HttpResponse, CreateError> {
+    project_create_internal(
+        req,
+        payload,
+        client,
+        redis,
+        file_host,
+        session_queue,
+        http,
+        search_state,
+    )
+    .await
+}
+
+pub async fn project_create_internal(
     req: HttpRequest,
     mut payload: Multipart,
     client: Data<PgPool>,
     redis: Data<RedisPool>,
-    file_host: Data<Arc<dyn FileHost + Send + Sync>>,
+    file_host: Data<dyn FileHost>,
     session_queue: Data<AuthQueue>,
+    http: Data<HttpClient>,
+    search_state: Data<SearchState>,
 ) -> Result<HttpResponse, CreateError> {
     let mut transaction = client.begin().await?;
     let mut uploaded_files = Vec::new();
+
+    let project_id: ProjectId =
+        models::generate_project_id(&mut transaction).await?.into();
 
     let result = project_create_inner(
         req,
         &mut payload,
         &mut transaction,
-        &***file_host,
+        &**file_host,
         &mut uploaded_files,
         &client,
         &redis,
         &session_queue,
+        &http,
+        project_id,
     )
     .await;
 
     if result.is_err() {
-        let undo_result = undo_uploads(&***file_host, &uploaded_files).await;
+        let undo_result = undo_uploads(&**file_host, &uploaded_files).await;
         let rollback_result = transaction.rollback().await;
 
         undo_result?;
@@ -295,15 +357,92 @@ pub async fn project_create(
         }
     } else {
         transaction.commit().await?;
+        super::projects::clear_project_cache_and_queue_search(
+            &redis,
+            &search_state,
+            project_id.into(),
+            None,
+            None,
+        )
+        .await?;
     }
 
     result
 }
+
+/// Create a project with a specific ID.  
+///
+/// This is a testing endpoint only accessible behind an admin key.
+#[utoipa::path(
+	context_path = "/project",
+	tag = "projects",
+	request_body(
+		content(("multipart/form-data")),
+		description = "Multipart payload containing project metadata and files"
+	),
+	responses((status = OK, body = Project))
+)]
+#[post("/{id}", guard = "admin_key_guard")]
+pub async fn project_create_with_id(
+    req: HttpRequest,
+    mut payload: Multipart,
+    client: Data<PgPool>,
+    redis: Data<RedisPool>,
+    file_host: Data<dyn FileHost>,
+    session_queue: Data<AuthQueue>,
+    http: Data<HttpClient>,
+    search_state: Data<SearchState>,
+    path: web::Path<(ProjectId,)>,
+) -> Result<HttpResponse, CreateError> {
+    let mut transaction = client.begin().await?;
+    let mut uploaded_files = Vec::new();
+
+    let (project_id,) = path.into_inner();
+
+    let result = project_create_inner(
+        req,
+        &mut payload,
+        &mut transaction,
+        &**file_host,
+        &mut uploaded_files,
+        &client,
+        &redis,
+        &session_queue,
+        &http,
+        project_id,
+    )
+    .await;
+
+    if result.is_err() {
+        let undo_result = undo_uploads(&**file_host, &uploaded_files).await;
+        let rollback_result = transaction.rollback().await;
+
+        undo_result?;
+        if let Err(e) = rollback_result {
+            return Err(e.into());
+        }
+    } else {
+        transaction.commit().await?;
+        super::projects::clear_project_cache_and_queue_search(
+            &redis,
+            &search_state,
+            project_id.into(),
+            None,
+            None,
+        )
+        .await?;
+    }
+
+    result
+}
+
 /*
 
 Project Creation Steps:
-Get logged in user
+- Get logged in user
     Must match the author in the version creation
+
+- Check they have not exceeded their project limit
 
 1. Data
     - Gets "data" field from multipart form; must be first
@@ -315,13 +454,13 @@ Get logged in user
 
 2. Upload
     - Icon: check file format & size
-        - Upload to backblaze & record URL
+        - Upload to S3 & record URL
     - Project files
         - Check for matching version
         - File size limits?
         - Check file type
             - Eventually, malware scan
-        - Upload to backblaze & create VersionFileBuilder
+        - Upload to S3 & create VersionFileBuilder
     -
 
 3. Creation
@@ -333,31 +472,32 @@ Get logged in user
 async fn project_create_inner(
     req: HttpRequest,
     payload: &mut Multipart,
-    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    transaction: &mut PgTransaction<'_>,
     file_host: &dyn FileHost,
     uploaded_files: &mut Vec<UploadedFile>,
     pool: &PgPool,
     redis: &RedisPool,
     session_queue: &AuthQueue,
+    http: &reqwest::Client,
+    project_id: ProjectId,
 ) -> Result<HttpResponse, CreateError> {
-    // The base URL for files uploaded to backblaze
-    let cdn_url = dotenvy::var("CDN_URL")?;
-
     // The currently logged in user
-    let current_user = get_user_from_headers(
+    let (_, current_user) = get_user_from_headers(
         &req,
         pool,
         redis,
         session_queue,
-        Some(&[Scopes::PROJECT_CREATE]),
+        Scopes::PROJECT_CREATE,
     )
-    .await?
-    .1;
+    .await?;
 
-    let project_id: ProjectId =
-        models::generate_project_id(transaction).await?.into();
+    let limits = UserLimits::get_for_projects(&current_user, pool).await?;
+    if limits.current >= limits.max {
+        return Err(CreateError::LimitReached);
+    }
+
     let all_loaders =
-        models::loader_fields::Loader::list(&mut **transaction, redis).await?;
+        models::loader_fields::Loader::list(&mut *transaction, redis).await?;
 
     let project_create_data: ProjectCreateData;
     let mut versions;
@@ -367,18 +507,16 @@ async fn project_create_inner(
         // The first multipart field must be named "data" and contain a
         // JSON `ProjectCreateData` object.
 
-        let mut field = payload
-            .next()
-            .await
-            .map(|m| m.map_err(CreateError::MultipartError))
-            .unwrap_or_else(|| {
+        let mut field = payload.next().await.map_or_else(
+            || {
                 Err(CreateError::MissingValueError(String::from(
                     "No `data` field in multipart upload",
                 )))
-            })?;
+            },
+            |m| m.map_err(CreateError::MultipartError),
+        )?;
 
-        let content_disposition = field.content_disposition();
-        let name = content_disposition.get_name().ok_or_else(|| {
+        let name = field.name().ok_or_else(|| {
             CreateError::MissingValueError(String::from("Missing content name"))
         })?;
 
@@ -400,19 +538,21 @@ async fn project_create_inner(
             CreateError::InvalidInput(validation_errors_to_string(err, None))
         })?;
 
-        let slug_project_id_option: Option<ProjectId> =
-            serde_json::from_str(&format!("\"{}\"", create_data.slug)).ok();
+        let slug_project_id_option: Option<ProjectId> = serde_json::from_str(
+            &format!("\"{}\"", create_data.slug.to_lowercase()),
+        )
+        .ok();
 
         if let Some(slug_project_id) = slug_project_id_option {
-            let slug_project_id: models::ids::ProjectId =
+            let slug_project_id: models::ids::DBProjectId =
                 slug_project_id.into();
             let results = sqlx::query!(
                 "
                 SELECT EXISTS(SELECT 1 FROM mods WHERE id=$1)
                 ",
-                slug_project_id as models::ids::ProjectId
+                slug_project_id as models::ids::DBProjectId
             )
-            .fetch_one(&mut **transaction)
+            .fetch_one(&mut *transaction)
             .await
             .map_err(|e| CreateError::DatabaseError(e.into()))?;
 
@@ -424,11 +564,16 @@ async fn project_create_inner(
         {
             let results = sqlx::query!(
                 "
-                SELECT EXISTS(SELECT 1 FROM mods WHERE slug = LOWER($1))
+                SELECT EXISTS(
+                    SELECT 1 FROM mods
+                    WHERE
+                        slug = LOWER($1)
+                        OR text_id_lower = LOWER($1)
+                )
                 ",
                 create_data.slug
             )
-            .fetch_one(&mut **transaction)
+            .fetch_one(&mut *transaction)
             .await
             .map_err(|e| CreateError::DatabaseError(e.into()))?;
 
@@ -476,7 +621,7 @@ async fn project_create_inner(
         }
 
         let result = async {
-            let content_disposition = field.content_disposition().clone();
+            let content_disposition = field.content_disposition().unwrap().clone();
 
             let name = content_disposition.get_name().ok_or_else(|| {
                 CreateError::MissingValueError("Missing content name".to_string())
@@ -513,8 +658,8 @@ async fn project_create_inner(
                 if let Some(item) = gallery_items.iter().find(|x| x.item == name) {
                     let data = read_from_field(
                         &mut field,
-                        2 * (1 << 20),
-                        "Gallery image exceeds the maximum of 2MiB.",
+                        5 * (1 << 20),
+                        "Gallery image exceeds the maximum of 5MiB.",
                     )
                     .await?;
 
@@ -524,6 +669,7 @@ async fn project_create_inner(
                     let url = format!("data/{project_id}/images");
                     let upload_result = upload_image_optimized(
                         &url,
+                        FileHostPublicity::Public,
                         data.freeze(),
                         file_extension,
                         Some(350),
@@ -534,8 +680,8 @@ async fn project_create_inner(
                     .map_err(|e| CreateError::InvalidIconFormat(e.to_string()))?;
 
                     uploaded_files.push(UploadedFile {
-                        file_id: upload_result.raw_url_path.clone(),
-                        file_name: upload_result.raw_url_path,
+                        name: upload_result.raw_url_path,
+                        publicity: FileHostPublicity::Public,
                     });
                     gallery_urls.push(crate::models::projects::GalleryItem {
                         url: upload_result.url,
@@ -558,8 +704,8 @@ async fn project_create_inner(
                 )));
             };
             // `index` is always valid for these lists
-            let created_version = versions.get_mut(index).unwrap();
-            let version_data = project_create_data.initial_versions.get(index).unwrap();
+            let created_version = &mut versions[index];
+            let version_data = &project_create_data.initial_versions[index];
             // TODO: maybe redundant is this calculation done elsewhere?
 
             let existing_file_names = created_version
@@ -575,7 +721,6 @@ async fn project_create_inner(
                 uploaded_files,
                 &mut created_version.files,
                 &mut created_version.dependencies,
-                &cdn_url,
                 &content_disposition,
                 project_id,
                 created_version.version_id.into(),
@@ -623,7 +768,7 @@ async fn project_create_inner(
         for category in &project_create_data.categories {
             let ids = models::categories::Category::get_ids(
                 category,
-                &mut **transaction,
+                &mut *transaction,
             )
             .await?;
             if ids.is_empty() {
@@ -640,7 +785,7 @@ async fn project_create_inner(
         for category in &project_create_data.additional_categories {
             let ids = models::categories::Category::get_ids(
                 category,
-                &mut **transaction,
+                &mut *transaction,
             )
             .await?;
             if ids.is_empty() {
@@ -654,7 +799,7 @@ async fn project_create_inner(
         let mut members = vec![];
 
         if let Some(organization_id) = project_create_data.organization_id {
-            let org = models::Organization::get_id(
+            let org = models::DBOrganization::get_id(
                 organization_id.into(),
                 pool,
                 redis,
@@ -666,7 +811,7 @@ async fn project_create_inner(
                 )
             })?;
 
-            let team_member = models::TeamMember::get_from_user_id(
+            let team_member = models::DBTeamMember::get_from_user_id(
                 org.team_id,
                 current_user.id.into(),
                 pool,
@@ -678,10 +823,9 @@ async fn project_create_inner(
                 &team_member,
             );
 
-            if !perms
-                .map(|x| x.contains(OrganizationPermissions::ADD_PROJECT))
-                .unwrap_or(false)
-            {
+            if !perms.is_some_and(|x| {
+                x.contains(OrganizationPermissions::ADD_PROJECT)
+            }) {
                 return Err(CreateError::CustomAuthenticationError(
                     "You do not have the permissions to create projects in this organization!"
                         .to_string(),
@@ -727,12 +871,12 @@ async fn project_create_inner(
         let mut link_urls = vec![];
 
         let link_platforms =
-            models::categories::LinkPlatform::list(&mut **transaction, redis)
+            models::categories::LinkPlatform::list(&mut *transaction, redis)
                 .await?;
         for (platform, url) in &project_create_data.link_urls {
             let platform_id = models::categories::LinkPlatform::get_id(
                 platform,
-                &mut **transaction,
+                &mut *transaction,
             )
             .await?
             .ok_or_else(|| {
@@ -781,7 +925,7 @@ async fn project_create_inner(
             link_urls,
             gallery_items: gallery_urls
                 .iter()
-                .map(|x| models::project_item::GalleryItem {
+                .map(|x| models::project_item::DBGalleryItem {
                     image_url: x.url.clone(),
                     raw_image_url: x.raw_url.clone(),
                     featured: x.featured,
@@ -793,18 +937,21 @@ async fn project_create_inner(
                 .collect(),
             color: icon_data.and_then(|x| x.2),
             monetization_status: MonetizationStatus::Monetized,
+            components: exp::ProjectSerial::default(),
         };
         let project_builder = project_builder_actual.clone();
 
         let now = Utc::now();
 
-        let id = project_builder_actual.insert(&mut *transaction).await?;
-        User::clear_project_cache(&[current_user.id.into()], redis).await?;
+        let id = project_builder_actual
+            .insert(&mut *transaction, redis, file_host, http)
+            .await?;
+        DBUser::clear_project_cache(&[current_user.id.into()], redis).await?;
 
         for image_id in project_create_data.uploaded_images {
-            if let Some(db_image) = image_item::Image::get(
+            if let Some(db_image) = image_item::DBImage::get(
                 image_id.into(),
-                &mut **transaction,
+                &mut *transaction,
                 redis,
             )
             .await?
@@ -814,8 +961,7 @@ async fn project_create_inner(
                     || image.context.inner_id().is_some()
                 {
                     return Err(CreateError::InvalidInput(format!(
-                        "Image {} is not unused and in the 'project' context",
-                        image_id
+                        "Image {image_id} is not unused and in the 'project' context"
                     )));
                 }
 
@@ -825,17 +971,17 @@ async fn project_create_inner(
                     SET mod_id = $1
                     WHERE id = $2
                     ",
-                    id as models::ids::ProjectId,
+                    id as models::ids::DBProjectId,
                     image_id.0 as i64
                 )
-                .execute(&mut **transaction)
+                .execute(&mut *transaction)
                 .await?;
 
-                image_item::Image::clear_cache(image.id.into(), redis).await?;
+                image_item::DBImage::clear_cache(image.id.into(), redis)
+                    .await?;
             } else {
                 return Err(CreateError::InvalidInput(format!(
-                    "Image {} does not exist",
-                    image_id
+                    "Image {image_id} does not exist"
                 )));
             }
         }
@@ -855,7 +1001,7 @@ async fn project_create_inner(
             .flat_map(|v| v.loaders.clone())
             .unique()
             .collect::<Vec<_>>();
-        let (project_types, games) = Loader::list(&mut **transaction, redis)
+        let (project_types, games) = Loader::list(&mut *transaction, redis)
             .await?
             .into_iter()
             .fold(
@@ -912,7 +1058,11 @@ async fn project_create_inner(
             color: project_builder.color,
             thread_id: thread_id.into(),
             monetization_status: MonetizationStatus::Monetized,
+            // New projects are considered reviewed with respect to side types migrations
+            side_types_migration_review_status:
+                SideTypesMigrationReviewStatus::Reviewed,
             fields: HashMap::new(), // Fields instantiate to empty
+            components: exp::ProjectQuery::default(),
         };
 
         Ok(HttpResponse::Ok().json(response))
@@ -924,7 +1074,7 @@ async fn create_initial_version(
     project_id: ProjectId,
     author: UserId,
     all_loaders: &[models::loader_fields::Loader],
-    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    transaction: &mut PgTransaction<'_>,
     redis: &RedisPool,
 ) -> Result<models::version_item::VersionBuilder, CreateError> {
     if version_data.project_id.is_some() {
@@ -954,11 +1104,11 @@ async fn create_initial_version(
         .collect::<Result<Vec<models::LoaderId>, CreateError>>()?;
 
     let loader_fields =
-        LoaderField::get_fields(&loaders, &mut **transaction, redis).await?;
+        LoaderField::get_fields(&loaders, &mut *transaction, redis).await?;
     let mut loader_field_enum_values =
         LoaderFieldEnumValue::list_many_loader_fields(
             &loader_fields,
-            &mut **transaction,
+            &mut *transaction,
             redis,
         )
         .await?;
@@ -997,6 +1147,7 @@ async fn create_initial_version(
         version_type: version_data.release_channel.to_string(),
         requested_status: None,
         ordering: version_data.ordering,
+        components: exp::VersionSerial::default(),
     };
 
     Ok(version)
@@ -1017,6 +1168,7 @@ async fn process_icon_upload(
     .await?;
     let upload_result = crate::util::img::upload_image_optimized(
         &format!("data/{}", to_base62(id)),
+        FileHostPublicity::Public,
         data.freeze(),
         file_extension,
         Some(96),
@@ -1027,13 +1179,13 @@ async fn process_icon_upload(
     .map_err(|e| CreateError::InvalidIconFormat(e.to_string()))?;
 
     uploaded_files.push(UploadedFile {
-        file_id: upload_result.raw_url_path.clone(),
-        file_name: upload_result.raw_url_path,
+        name: upload_result.raw_url_path,
+        publicity: FileHostPublicity::Public,
     });
 
     uploaded_files.push(UploadedFile {
-        file_id: upload_result.url_path.clone(),
-        file_name: upload_result.url_path,
+        name: upload_result.url_path,
+        publicity: FileHostPublicity::Public,
     });
 
     Ok((

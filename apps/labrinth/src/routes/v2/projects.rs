@@ -1,34 +1,31 @@
 use crate::database::models::categories::LinkPlatform;
 use crate::database::models::{project_item, version_item};
 use crate::database::redis::RedisPool;
+use crate::database::{PgPool, ReadOnlyPgPool};
 use crate::file_hosting::FileHost;
 use crate::models::projects::{
-    Link, MonetizationStatus, Project, ProjectStatus, SearchRequest, Version,
+    Link, MonetizationStatus, Project, ProjectStatus, Version,
 };
 use crate::models::v2::projects::{
     DonationLink, LegacyProject, LegacySideType, LegacyVersion,
 };
 use crate::models::v2::search::LegacySearchResults;
-use crate::queue::moderation::AutomatedModerationQueue;
 use crate::queue::session::AuthQueue;
 use crate::routes::v3::projects::ProjectIds;
-use crate::routes::{v2_reroute, v3, ApiError};
-use crate::search::{search_for_project, SearchConfig, SearchError};
-use actix_web::{delete, get, patch, post, web, HttpRequest, HttpResponse};
+use crate::routes::{ApiError, v2_reroute, v3};
+use crate::search::{SearchBackend, SearchRequest, SearchState};
+use actix_web::{HttpRequest, HttpResponse, delete, get, patch, post, web};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use std::collections::HashMap;
-use std::sync::Arc;
 use validator::Validate;
 
-pub fn config(cfg: &mut web::ServiceConfig) {
+pub fn config(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(project_search);
     cfg.service(projects_get);
     cfg.service(projects_edit);
     cfg.service(random_projects_get);
-
     cfg.service(
-        web::scope("project")
+        web::scope("/project")
             .service(project_get)
             .service(project_get_check)
             .service(project_delete)
@@ -42,7 +39,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .service(project_unfollow)
             .service(super::teams::team_members_get_project)
             .service(
-                web::scope("{project_id}")
+                web::scope("/{project_id}")
                     .service(super::versions::version_list)
                     .service(super::versions::version_project_get)
                     .service(dependency_list),
@@ -50,11 +47,34 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     );
 }
 
-#[get("search")]
+/// Search projects.  
+#[utoipa::path(
+	tag = "search",
+    get,
+    operation_id = "searchProjects",
+    params(
+        ("query" = Option<String>, Query, description = "The query to search for"),
+        ("facets" = Option<String>, Query, description = "Search facets JSON"),
+        ("index" = Option<String>, Query, description = "Search index to use"),
+        ("offset" = Option<String>, Query, description = "Search result offset"),
+        ("limit" = Option<String>, Query, description = "Maximum number of search results"),
+        ("show_metadata" = Option<bool>, Query, description = "Whether to include search metadata"),
+        ("typesense_config" = Option<String>, Query, description = "Typesense request configuration"),
+        ("new_filters" = Option<String>, Query, description = "Search filters"),
+        ("filters" = Option<String>, Query, description = "Legacy search filters"),
+        ("version" = Option<String>, Query, description = "Legacy search version")
+    ),
+    responses(
+        (status = 200, description = "Expected response to a valid request", body = LegacySearchResults),
+        (status = 400, description = "Request was invalid, see given error")
+    )
+)]
+#[get("/search")]
 pub async fn project_search(
     web::Query(info): web::Query<SearchRequest>,
-    config: web::Data<SearchConfig>,
-) -> Result<HttpResponse, SearchError> {
+    search_backend: web::Data<dyn SearchBackend>,
+    redis: web::Data<RedisPool>,
+) -> Result<HttpResponse, ApiError> {
     // Search now uses loader_fields instead of explicit 'client_side' and 'server_side' fields
     // While the backend for this has changed, it doesnt affect much
     // in the API calls except that 'versions:x' is now 'game_versions:x'
@@ -83,7 +103,7 @@ pub async fn project_search(
                                     val
                                 )
                             } else {
-                                facet.to_string()
+                                facet
                             }
                         })
                         .collect::<Vec<_>>()
@@ -99,7 +119,7 @@ pub async fn project_search(
         ..info
     };
 
-    let results = search_for_project(&info, &config).await?;
+    let results = search_backend.search_for_project(&info, &redis).await?;
 
     let results = LegacySearchResults::from(results);
 
@@ -140,13 +160,26 @@ fn parse_facet(facet: &str) -> Option<(String, String, String)> {
     None
 }
 
-#[derive(Deserialize, Validate)]
+#[derive(Deserialize, Validate, utoipa::ToSchema)]
 pub struct RandomProjects {
     #[validate(range(min = 1, max = 100))]
     pub count: u32,
 }
 
-#[get("projects_random")]
+/// Get random projects.  
+#[utoipa::path(
+	tag = "projects",
+    get,
+    operation_id = "randomProjects",
+    params(
+        ("count" = u32, Query, description = "Number of projects to return")
+    ),
+    responses(
+        (status = 200, description = "Expected response to a valid request", body = Vec<LegacyProject>),
+        (status = 400, description = "Request was invalid, see given error")
+    )
+)]
+#[get("/projects_random")]
 pub async fn random_projects_get(
     web::Query(count): web::Query<RandomProjects>,
     pool: web::Data<PgPool>,
@@ -173,7 +206,17 @@ pub async fn random_projects_get(
     }
 }
 
-#[get("projects")]
+/// Get multiple projects by ID or slug.  
+#[utoipa::path(
+	tag = "projects",
+    get,
+    operation_id = "getProjects",
+    params(
+        ("ids" = String, Query, description = "The JSON array of project IDs or slugs")
+    ),
+    responses((status = 200, description = "Expected response to a valid request", body = Vec<LegacyProject>))
+)]
+#[get("/projects")]
 pub async fn projects_get(
     req: HttpRequest,
     web::Query(ids): web::Query<ProjectIds>,
@@ -204,7 +247,24 @@ pub async fn projects_get(
     }
 }
 
-#[get("{id}")]
+/// Get a project by ID or slug.  
+#[utoipa::path(
+	context_path = "/project",
+	tag = "projects",
+    get,
+    operation_id = "getProject",
+    params(
+        ("id" = String, Path, description = "The ID or slug of the project")
+    ),
+    responses(
+        (status = 200, description = "Expected response to a valid request", body = LegacyProject),
+        (
+            status = 404,
+            description = "The requested item(s) were not found or no authorization to access the requested item(s)"
+        )
+    )
+)]
+#[get("/{id}")]
 pub async fn project_get(
     req: HttpRequest,
     info: web::Path<(String,)>,
@@ -214,7 +274,7 @@ pub async fn project_get(
 ) -> Result<HttpResponse, ApiError> {
     // Convert V2 data to V3 data
     // Call V3 project creation
-    let response = v3::projects::project_get(
+    let project = match v3::projects::project_get_internal(
         req,
         info,
         pool.clone(),
@@ -222,57 +282,91 @@ pub async fn project_get(
         session_queue,
     )
     .await
-    .or_else(v2_reroute::flatten_404_error)?;
+    {
+        Ok(resp) => resp.0,
+        Err(ApiError::NotFound) => return Ok(HttpResponse::NotFound().body("")),
+        Err(err) => return Err(err),
+    };
 
     // Convert response to V2 format
-    match v2_reroute::extract_ok_json::<Project>(response).await {
-        Ok(project) => {
-            let version_item = match project.versions.first() {
-                Some(vid) => {
-                    version_item::Version::get((*vid).into(), &**pool, &redis)
-                        .await?
-                }
-                None => None,
-            };
-            let project = LegacyProject::from(project, version_item);
-            Ok(HttpResponse::Ok().json(project))
+    let version_item = match project.versions.first() {
+        Some(vid) => {
+            version_item::DBVersion::get((*vid).into(), &**pool, &redis).await?
         }
-        Err(response) => Ok(response),
-    }
+        None => None,
+    };
+    let project = LegacyProject::from(project, version_item);
+    Ok(HttpResponse::Ok().json(project))
 }
 
 //checks the validity of a project id or slug
-#[get("{id}/check")]
+/// Check that a project ID or slug exists.  
+#[utoipa::path(
+	context_path = "/project",
+	tag = "projects",
+    get,
+    operation_id = "checkProjectValidity",
+    params(
+        ("id" = String, Path, description = "The ID or slug of the project")
+    ),
+    responses(
+        (status = 200, description = "Expected response to a valid request", body = v3::projects::ProjectCheckResponse),
+        (
+            status = 404,
+            description = "The requested item(s) were not found or no authorization to access the requested item(s)"
+        )
+    )
+)]
+#[get("/{id}/check")]
 pub async fn project_get_check(
     info: web::Path<(String,)>,
     pool: web::Data<PgPool>,
     redis: web::Data<RedisPool>,
 ) -> Result<HttpResponse, ApiError> {
     // Returns an id only, do not need to convert
-    v3::projects::project_get_check(info, pool, redis)
+    v3::projects::project_get_check_internal(info, pool, redis)
         .await
         .or_else(v2_reroute::flatten_404_error)
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 struct DependencyInfo {
     pub projects: Vec<LegacyProject>,
     pub versions: Vec<LegacyVersion>,
 }
 
-#[get("dependencies")]
+/// Get dependency projects and versions for a project.  
+#[utoipa::path(
+	context_path = "/project/{project_id}",
+	tag = "projects",
+    get,
+    operation_id = "getDependencies",
+    params(
+        ("id" = String, Path, description = "The ID or slug of the project")
+    ),
+    responses(
+        (status = 200, description = "Expected response to a valid request", body = DependencyInfo),
+        (
+            status = 404,
+            description = "The requested item(s) were not found or no authorization to access the requested item(s)"
+        )
+    )
+)]
+#[get("/dependencies")]
 pub async fn dependency_list(
     req: HttpRequest,
     info: web::Path<(String,)>,
     pool: web::Data<PgPool>,
+    ro_pool: web::Data<ReadOnlyPgPool>,
     redis: web::Data<RedisPool>,
     session_queue: web::Data<AuthQueue>,
 ) -> Result<HttpResponse, ApiError> {
     // TODO: tests, probably
-    let response = v3::projects::dependency_list(
+    let response = v3::projects::dependency_list_internal(
         req,
         info,
         pool.clone(),
+        ro_pool,
         redis.clone(),
         session_queue,
     )
@@ -306,7 +400,7 @@ pub async fn dependency_list(
     }
 }
 
-#[derive(Serialize, Deserialize, Validate)]
+#[derive(Serialize, Deserialize, Validate, utoipa::ToSchema)]
 pub struct EditProject {
     #[validate(
         length(min = 3, max = 64),
@@ -371,14 +465,14 @@ pub struct EditProject {
         length(max = 2048)
     )]
     pub discord_url: Option<Option<String>>,
-    #[validate]
+    #[validate(nested)]
     pub donation_urls: Option<Vec<DonationLink>>,
     pub license_id: Option<String>,
     pub client_side: Option<LegacySideType>,
     pub server_side: Option<LegacySideType>,
     #[validate(
         length(min = 3, max = 64),
-        regex = "crate::util::validate::RE_URL_SAFE"
+        regex(path = *crate::util::validate::RE_URL_SAFE)
     )]
     pub slug: Option<String>,
     pub status: Option<ProjectStatus>,
@@ -405,17 +499,39 @@ pub struct EditProject {
     pub monetization_status: Option<MonetizationStatus>,
 }
 
-#[patch("{id}")]
+/// Update a project.  
+#[utoipa::path(
+	context_path = "/project",
+	tag = "projects",
+    patch,
+    operation_id = "modifyProject",
+    params(
+        ("id" = String, Path, description = "The ID or slug of the project")
+    ),
+    request_body = EditProject,
+    responses(
+        (status = NO_CONTENT, description = "Expected response to a valid request"),
+        (
+            status = 401,
+            description = "Incorrect token scopes or no authorization to access the requested item(s)"
+        ),
+        (
+            status = 404,
+            description = "The requested item(s) were not found or no authorization to access the requested item(s)"
+        )
+    ),
+    security(("bearer_auth" = ["PROJECT_WRITE"]))
+)]
+#[patch("/{id}")]
 #[allow(clippy::too_many_arguments)]
 pub async fn project_edit(
     req: HttpRequest,
     info: web::Path<(String,)>,
     pool: web::Data<PgPool>,
-    search_config: web::Data<SearchConfig>,
     new_project: web::Json<EditProject>,
     redis: web::Data<RedisPool>,
     session_queue: web::Data<AuthQueue>,
-    moderation_queue: web::Data<AutomatedModerationQueue>,
+    search_state: web::Data<SearchState>,
 ) -> Result<HttpResponse, ApiError> {
     let v2_new_project = new_project.into_inner();
     let client_side = v2_new_project.client_side;
@@ -469,7 +585,7 @@ pub async fn project_edit(
     if let Some(donation_urls) = v2_new_project.donation_urls {
         // Fetch current donation links from project so we know what to delete
         let fetched_example_project =
-            project_item::Project::get(&info.0, &**pool, &redis).await?;
+            project_item::DBProject::get(&info.0, &**pool, &redis).await?;
         let donation_links = fetched_example_project
             .map(|x| {
                 x.urls
@@ -511,19 +627,24 @@ pub async fn project_edit(
         moderation_message: v2_new_project.moderation_message,
         moderation_message_body: v2_new_project.moderation_message_body,
         monetization_status: v2_new_project.monetization_status,
+        side_types_migration_review_status: None, // Not to be exposed in v2
+        // None of the below is present in v2
+        loader_fields: HashMap::new(),
+        minecraft_server: None,
+        minecraft_java_server: None,
+        minecraft_bedrock_server: None,
     };
 
     // This returns 204 or failure so we don't need to do anything with it
     let project_id = info.clone().0;
-    let mut response = v3::projects::project_edit(
+    let mut response = v3::projects::project_edit_internal(
         req.clone(),
         info,
         pool.clone(),
-        search_config,
         web::Json(new_project),
         redis.clone(),
         session_queue.clone(),
-        moderation_queue,
+        search_state.clone(),
     )
     .await
     .or_else(v2_reroute::flatten_404_error)?;
@@ -533,7 +654,7 @@ pub async fn project_edit(
     if response.status().is_success()
         && (client_side.is_some() || server_side.is_some())
     {
-        let project_item = project_item::Project::get(
+        let project_item = project_item::DBProject::get(
             &new_slug.unwrap_or(project_id),
             &**pool,
             &redis,
@@ -541,16 +662,18 @@ pub async fn project_edit(
         .await?;
         let version_ids = project_item.map(|x| x.versions).unwrap_or_default();
         let versions =
-            version_item::Version::get_many(&version_ids, &**pool, &redis)
+            version_item::DBVersion::get_many(&version_ids, &**pool, &redis)
                 .await?;
         for version in versions {
             let version = Version::from(version);
             let mut fields = version.fields;
             let (current_client_side, current_server_side) =
-                v2_reroute::convert_side_types_v2(&fields, None);
+                v2_reroute::convert_v3_side_types_to_v2_side_types(
+                    &fields, None,
+                );
             let client_side = client_side.unwrap_or(current_client_side);
             let server_side = server_side.unwrap_or(current_server_side);
-            fields.extend(v2_reroute::convert_side_types_v3(
+            fields.extend(v2_reroute::convert_v2_side_types_to_v3_side_types(
                 client_side,
                 server_side,
             ));
@@ -565,6 +688,7 @@ pub async fn project_edit(
                     ..Default::default()
                 },
                 session_queue.clone(),
+                search_state.clone(),
             )
             .await?;
         }
@@ -572,7 +696,7 @@ pub async fn project_edit(
     Ok(response)
 }
 
-#[derive(Deserialize, Validate)]
+#[derive(Deserialize, Validate, utoipa::ToSchema)]
 pub struct BulkEditProject {
     #[validate(length(max = 3))]
     pub categories: Option<Vec<String>>,
@@ -586,11 +710,11 @@ pub struct BulkEditProject {
     pub add_additional_categories: Option<Vec<String>>,
     pub remove_additional_categories: Option<Vec<String>>,
 
-    #[validate]
+    #[validate(nested)]
     pub donation_urls: Option<Vec<DonationLink>>,
-    #[validate]
+    #[validate(nested)]
     pub add_donation_urls: Option<Vec<DonationLink>>,
-    #[validate]
+    #[validate(nested)]
     pub remove_donation_urls: Option<Vec<DonationLink>>,
 
     #[serde(
@@ -635,7 +759,26 @@ pub struct BulkEditProject {
     pub discord_url: Option<Option<String>>,
 }
 
-#[patch("projects")]
+/// Bulk-edit multiple projects.  
+#[utoipa::path(
+	tag = "projects",
+    patch,
+    operation_id = "patchProjects",
+    params(
+        ("ids" = String, Query, description = "The JSON array of project IDs or slugs")
+    ),
+    request_body = BulkEditProject,
+    responses(
+        (status = NO_CONTENT, description = "Expected response to a valid request"),
+        (status = 400, description = "Request was invalid, see given error"),
+        (
+            status = 401,
+            description = "Incorrect token scopes or no authorization to access the requested item(s)"
+        )
+    ),
+    security(("bearer_auth" = ["PROJECT_WRITE"]))
+)]
+#[patch("/projects")]
 pub async fn projects_edit(
     req: HttpRequest,
     web::Query(ids): web::Query<ProjectIds>,
@@ -643,6 +786,7 @@ pub async fn projects_edit(
     bulk_edit_project: web::Json<BulkEditProject>,
     redis: web::Data<RedisPool>,
     session_queue: web::Data<AuthQueue>,
+    search_state: web::Data<SearchState>,
 ) -> Result<HttpResponse, ApiError> {
     let bulk_edit_project = bulk_edit_project.into_inner();
 
@@ -727,17 +871,44 @@ pub async fn projects_edit(
         }),
         redis,
         session_queue,
+        search_state,
     )
     .await
     .or_else(v2_reroute::flatten_404_error)
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
 pub struct Extension {
     pub ext: String,
 }
 
-#[patch("{id}/icon")]
+/// Change a project's icon.  
+#[utoipa::path(
+	context_path = "/project",
+	tag = "projects",
+    patch,
+    operation_id = "changeProjectIcon",
+    params(
+        ("id" = String, Path, description = "The ID or slug of the project"),
+        ("ext" = String, Query, description = "Image extension (png, jpg, jpeg, bmp, gif, webp, svg, svgz, rgb)")
+    ),
+    request_body(
+        content(
+            ("image/png"),
+            ("image/jpeg"),
+            ("image/bmp"),
+            ("image/gif"),
+            ("image/webp"),
+            ("image/svg+xml")
+        )
+    ),
+    responses(
+        (status = NO_CONTENT, description = "Expected response to a valid request"),
+        (status = 400, description = "Request was invalid, see given error")
+    ),
+    security(("bearer_auth" = ["PROJECT_WRITE"]))
+)]
+#[patch("/{id}/icon")]
 #[allow(clippy::too_many_arguments)]
 pub async fn project_icon_edit(
     web::Query(ext): web::Query<Extension>,
@@ -745,12 +916,13 @@ pub async fn project_icon_edit(
     info: web::Path<(String,)>,
     pool: web::Data<PgPool>,
     redis: web::Data<RedisPool>,
-    file_host: web::Data<Arc<dyn FileHost + Send + Sync>>,
+    file_host: web::Data<dyn FileHost>,
     payload: web::Payload,
     session_queue: web::Data<AuthQueue>,
+    search_state: web::Data<SearchState>,
 ) -> Result<HttpResponse, ApiError> {
     // Returns NoContent, so no need to convert
-    v3::projects::project_icon_edit(
+    v3::projects::project_icon_edit_internal(
         web::Query(v3::projects::Extension { ext: ext.ext }),
         req,
         info,
@@ -759,34 +931,56 @@ pub async fn project_icon_edit(
         file_host,
         payload,
         session_queue,
+        search_state,
     )
     .await
     .or_else(v2_reroute::flatten_404_error)
 }
 
-#[delete("{id}/icon")]
+/// Delete a project's icon.  
+#[utoipa::path(
+	context_path = "/project",
+	tag = "projects",
+    delete,
+    operation_id = "deleteProjectIcon",
+    params(
+        ("id" = String, Path, description = "The ID or slug of the project")
+    ),
+    responses(
+        (status = NO_CONTENT, description = "Expected response to a valid request"),
+        (status = 400, description = "Request was invalid, see given error"),
+        (
+            status = 401,
+            description = "Incorrect token scopes or no authorization to access the requested item(s)"
+        )
+    ),
+    security(("bearer_auth" = ["PROJECT_WRITE"]))
+)]
+#[delete("/{id}/icon")]
 pub async fn delete_project_icon(
     req: HttpRequest,
     info: web::Path<(String,)>,
     pool: web::Data<PgPool>,
     redis: web::Data<RedisPool>,
-    file_host: web::Data<Arc<dyn FileHost + Send + Sync>>,
+    file_host: web::Data<dyn FileHost>,
     session_queue: web::Data<AuthQueue>,
+    search_state: web::Data<SearchState>,
 ) -> Result<HttpResponse, ApiError> {
     // Returns NoContent, so no need to convert
-    v3::projects::delete_project_icon(
+    v3::projects::delete_project_icon_internal(
         req,
         info,
         pool,
         redis,
         file_host,
         session_queue,
+        search_state,
     )
     .await
     .or_else(v2_reroute::flatten_404_error)
 }
 
-#[derive(Serialize, Deserialize, Validate)]
+#[derive(Serialize, Deserialize, Validate, utoipa::ToSchema)]
 pub struct GalleryCreateQuery {
     pub featured: bool,
     #[validate(length(min = 1, max = 255))]
@@ -796,7 +990,45 @@ pub struct GalleryCreateQuery {
     pub ordering: Option<i64>,
 }
 
-#[post("{id}/gallery")]
+/// Add a gallery image to a project.  
+#[utoipa::path(
+	context_path = "/project",
+	tag = "projects",
+    post,
+    operation_id = "addGalleryImage",
+    params(
+        ("id" = String, Path, description = "The ID or slug of the project"),
+        ("ext" = String, Query, description = "Image extension (png, jpg, jpeg, bmp, gif, webp, svg, svgz, rgb)"),
+        ("featured" = bool, Query, description = "Whether this image is featured"),
+        ("title" = Option<String>, Query, description = "Image title"),
+        ("description" = Option<String>, Query, description = "Image description"),
+        ("ordering" = Option<i64>, Query, description = "Image ordering")
+    ),
+    request_body(
+        content(
+            ("image/png"),
+            ("image/jpeg"),
+            ("image/bmp"),
+            ("image/gif"),
+            ("image/webp"),
+            ("image/svg+xml")
+        )
+    ),
+    responses(
+        (status = NO_CONTENT, description = "Expected response to a valid request"),
+        (status = 400, description = "Request was invalid, see given error"),
+        (
+            status = 401,
+            description = "Incorrect token scopes or no authorization to access the requested item(s)"
+        ),
+        (
+            status = 404,
+            description = "The requested item(s) were not found or no authorization to access the requested item(s)"
+        )
+    ),
+    security(("bearer_auth" = ["PROJECT_WRITE"]))
+)]
+#[post("/{id}/gallery")]
 #[allow(clippy::too_many_arguments)]
 pub async fn add_gallery_item(
     web::Query(ext): web::Query<Extension>,
@@ -805,12 +1037,13 @@ pub async fn add_gallery_item(
     info: web::Path<(String,)>,
     pool: web::Data<PgPool>,
     redis: web::Data<RedisPool>,
-    file_host: web::Data<Arc<dyn FileHost + Send + Sync>>,
+    file_host: web::Data<dyn FileHost>,
     payload: web::Payload,
     session_queue: web::Data<AuthQueue>,
+    search_state: web::Data<SearchState>,
 ) -> Result<HttpResponse, ApiError> {
     // Returns NoContent, so no need to convert
-    v3::projects::add_gallery_item(
+    v3::projects::add_gallery_item_internal(
         web::Query(v3::projects::Extension { ext: ext.ext }),
         req,
         web::Query(v3::projects::GalleryCreateQuery {
@@ -825,12 +1058,13 @@ pub async fn add_gallery_item(
         file_host,
         payload,
         session_queue,
+        search_state,
     )
     .await
     .or_else(v2_reroute::flatten_404_error)
 }
 
-#[derive(Serialize, Deserialize, Validate)]
+#[derive(Serialize, Deserialize, Validate, utoipa::ToSchema)]
 pub struct GalleryEditQuery {
     /// The url of the gallery item to edit
     pub url: String,
@@ -852,16 +1086,44 @@ pub struct GalleryEditQuery {
     pub ordering: Option<i64>,
 }
 
-#[patch("{id}/gallery")]
+/// Update a gallery image.  
+#[utoipa::path(
+	context_path = "/project",
+	tag = "projects",
+    patch,
+    operation_id = "modifyGalleryImage",
+    params(
+        ("id" = String, Path, description = "The ID or slug of the project"),
+        ("url" = String, Query, description = "URL of the image to edit"),
+        ("featured" = Option<bool>, Query, description = "Whether this image is featured"),
+        ("title" = Option<Option<String>>, Query, description = "Image title"),
+        ("description" = Option<Option<String>>, Query, description = "Image description"),
+        ("ordering" = Option<i64>, Query, description = "Image ordering")
+    ),
+    responses(
+        (status = NO_CONTENT, description = "Expected response to a valid request"),
+        (
+            status = 401,
+            description = "Incorrect token scopes or no authorization to access the requested item(s)"
+        ),
+        (
+            status = 404,
+            description = "The requested item(s) were not found or no authorization to access the requested item(s)"
+        )
+    ),
+    security(("bearer_auth" = ["PROJECT_WRITE"]))
+)]
+#[patch("/{id}/gallery")]
 pub async fn edit_gallery_item(
     req: HttpRequest,
     web::Query(item): web::Query<GalleryEditQuery>,
     pool: web::Data<PgPool>,
     redis: web::Data<RedisPool>,
     session_queue: web::Data<AuthQueue>,
+    search_state: web::Data<SearchState>,
 ) -> Result<HttpResponse, ApiError> {
     // Returns NoContent, so no need to convert
-    v3::projects::edit_gallery_item(
+    v3::projects::edit_gallery_item_internal(
         req,
         web::Query(v3::projects::GalleryEditQuery {
             url: item.url,
@@ -873,61 +1135,123 @@ pub async fn edit_gallery_item(
         pool,
         redis,
         session_queue,
+        search_state,
     )
     .await
     .or_else(v2_reroute::flatten_404_error)
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
 pub struct GalleryDeleteQuery {
     pub url: String,
 }
 
-#[delete("{id}/gallery")]
+/// Delete a gallery image.  
+#[utoipa::path(
+	context_path = "/project",
+	tag = "projects",
+    delete,
+    operation_id = "deleteGalleryImage",
+    params(
+        ("id" = String, Path, description = "The ID or slug of the project"),
+        ("url" = String, Query, description = "URL of the image to delete")
+    ),
+    responses(
+        (status = NO_CONTENT, description = "Expected response to a valid request"),
+        (status = 400, description = "Request was invalid, see given error"),
+        (
+            status = 401,
+            description = "Incorrect token scopes or no authorization to access the requested item(s)"
+        )
+    ),
+    security(("bearer_auth" = ["PROJECT_WRITE"]))
+)]
+#[delete("/{id}/gallery")]
 pub async fn delete_gallery_item(
     req: HttpRequest,
     web::Query(item): web::Query<GalleryDeleteQuery>,
     pool: web::Data<PgPool>,
     redis: web::Data<RedisPool>,
-    file_host: web::Data<Arc<dyn FileHost + Send + Sync>>,
+    file_host: web::Data<dyn FileHost>,
     session_queue: web::Data<AuthQueue>,
+    search_state: web::Data<SearchState>,
 ) -> Result<HttpResponse, ApiError> {
     // Returns NoContent, so no need to convert
-    v3::projects::delete_gallery_item(
+    v3::projects::delete_gallery_item_internal(
         req,
         web::Query(v3::projects::GalleryDeleteQuery { url: item.url }),
         pool,
         redis,
         file_host,
         session_queue,
+        search_state,
     )
     .await
     .or_else(v2_reroute::flatten_404_error)
 }
 
-#[delete("{id}")]
+/// Delete a project by ID or slug.  
+#[utoipa::path(
+	context_path = "/project",
+	tag = "projects",
+    delete,
+    operation_id = "deleteProject",
+    params(
+        ("id" = String, Path, description = "The ID or slug of the project")
+    ),
+    responses(
+        (status = NO_CONTENT, description = "Expected response to a valid request"),
+        (status = 400, description = "Request was invalid, see given error"),
+        (
+            status = 401,
+            description = "Incorrect token scopes or no authorization to access the requested item(s)"
+        )
+    ),
+    security(("bearer_auth" = ["PROJECT_DELETE"]))
+)]
+#[delete("/{id}")]
 pub async fn project_delete(
     req: HttpRequest,
     info: web::Path<(String,)>,
     pool: web::Data<PgPool>,
     redis: web::Data<RedisPool>,
-    search_config: web::Data<SearchConfig>,
     session_queue: web::Data<AuthQueue>,
+    search_state: web::Data<SearchState>,
 ) -> Result<HttpResponse, ApiError> {
     // Returns NoContent, so no need to convert
-    v3::projects::project_delete(
+    v3::projects::project_delete_internal(
         req,
         info,
         pool,
         redis,
-        search_config,
         session_queue,
+        search_state,
     )
     .await
+    .map(|()| HttpResponse::NoContent().body(""))
     .or_else(v2_reroute::flatten_404_error)
 }
 
-#[post("{id}/follow")]
+/// Follow a project.  
+#[utoipa::path(
+	context_path = "/project",
+	tag = "projects",
+    post,
+    operation_id = "followProject",
+    params(
+        ("id" = String, Path, description = "The ID or slug of the project")
+    ),
+    responses(
+        (status = NO_CONTENT, description = "Expected response to a valid request"),
+        (status = 400, description = "Request was invalid, see given error"),
+        (
+            status = 401,
+            description = "Incorrect token scopes or no authorization to access the requested item(s)"
+        )
+    ),
+    security(("bearer_auth" = ["USER_WRITE"]))
+)]
+#[post("/{id}/follow")]
 pub async fn project_follow(
     req: HttpRequest,
     info: web::Path<(String,)>,
@@ -936,12 +1260,31 @@ pub async fn project_follow(
     session_queue: web::Data<AuthQueue>,
 ) -> Result<HttpResponse, ApiError> {
     // Returns NoContent, so no need to convert
-    v3::projects::project_follow(req, info, pool, redis, session_queue)
+    v3::projects::project_follow_internal(req, info, pool, redis, session_queue)
         .await
         .or_else(v2_reroute::flatten_404_error)
 }
 
-#[delete("{id}/follow")]
+/// Unfollow a project.  
+#[utoipa::path(
+	context_path = "/project",
+	tag = "projects",
+    delete,
+    operation_id = "unfollowProject",
+    params(
+        ("id" = String, Path, description = "The ID or slug of the project")
+    ),
+    responses(
+        (status = NO_CONTENT, description = "Expected response to a valid request"),
+        (status = 400, description = "Request was invalid, see given error"),
+        (
+            status = 401,
+            description = "Incorrect token scopes or no authorization to access the requested item(s)"
+        )
+    ),
+    security(("bearer_auth" = ["USER_WRITE"]))
+)]
+#[delete("/{id}/follow")]
 pub async fn project_unfollow(
     req: HttpRequest,
     info: web::Path<(String,)>,
@@ -950,7 +1293,13 @@ pub async fn project_unfollow(
     session_queue: web::Data<AuthQueue>,
 ) -> Result<HttpResponse, ApiError> {
     // Returns NoContent, so no need to convert
-    v3::projects::project_unfollow(req, info, pool, redis, session_queue)
-        .await
-        .or_else(v2_reroute::flatten_404_error)
+    v3::projects::project_unfollow_internal(
+        req,
+        info,
+        pool,
+        redis,
+        session_queue,
+    )
+    .await
+    .or_else(v2_reroute::flatten_404_error)
 }

@@ -1,45 +1,43 @@
 use crate::auth::checks::is_visible_collection;
 use crate::auth::{filter_visible_collections, get_user_from_headers};
+use crate::database::PgPool;
 use crate::database::models::{
     collection_item, generate_collection_id, project_item,
 };
 use crate::database::redis::RedisPool;
-use crate::file_hosting::FileHost;
+use crate::file_hosting::{FileHost, FileHostPublicity};
 use crate::models::collections::{Collection, CollectionStatus};
-use crate::models::ids::base62_impl::parse_base62;
 use crate::models::ids::{CollectionId, ProjectId};
 use crate::models::pats::Scopes;
+use crate::models::v3::user_limits::UserLimits;
 use crate::queue::session::AuthQueue;
-use crate::routes::v3::project_creation::CreateError;
 use crate::routes::ApiError;
+use crate::routes::v3::project_creation::CreateError;
+use crate::util::error::Context;
 use crate::util::img::delete_old_images;
-use crate::util::routes::read_from_payload;
+use crate::util::routes::read_limited_from_payload;
 use crate::util::validate::validation_errors_to_string;
 use crate::{database, models};
 use actix_web::web::Data;
-use actix_web::{web, HttpRequest, HttpResponse};
+use actix_web::{HttpRequest, HttpResponse, delete, get, patch, post, web};
+use ariadne::ids::base62_impl::parse_base62;
 use chrono::Utc;
+use eyre::eyre;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
-use std::sync::Arc;
 use validator::Validate;
 
-pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg.route("collections", web::get().to(collections_get));
-    cfg.route("collection", web::post().to(collection_create));
-
-    cfg.service(
-        web::scope("collection")
-            .route("{id}", web::get().to(collection_get))
-            .route("{id}", web::delete().to(collection_delete))
-            .route("{id}", web::patch().to(collection_edit))
-            .route("{id}/icon", web::patch().to(collection_icon_edit))
-            .route("{id}/icon", web::delete().to(delete_collection_icon)),
-    );
+pub fn config(cfg: &mut actix_web::web::ServiceConfig) {
+    cfg.service(collections_get)
+        .service(collection_create)
+        .service(collection_get)
+        .service(collection_delete)
+        .service(collection_edit)
+        .service(collection_icon_edit)
+        .service(delete_collection_icon);
 }
 
-#[derive(Serialize, Deserialize, Validate, Clone)]
+#[derive(Serialize, Deserialize, Validate, Clone, utoipa::ToSchema)]
 pub struct CollectionCreateData {
     #[validate(
         length(min = 3, max = 64),
@@ -50,12 +48,14 @@ pub struct CollectionCreateData {
     #[validate(length(min = 3, max = 255))]
     /// A short description of the collection.
     pub description: Option<String>,
-    #[validate(length(max = 32))]
+    #[validate(length(max = 1024))]
     #[serde(default = "Vec::new")]
     /// A list of initial projects to use with the created collection
     pub projects: Vec<String>,
 }
 
+#[utoipa::path(tag = "collections", responses((status = OK)))]
+#[post("/collection")]
 pub async fn collection_create(
     req: HttpRequest,
     collection_create_data: web::Json<CollectionCreateData>,
@@ -71,10 +71,16 @@ pub async fn collection_create(
         &**client,
         &redis,
         &session_queue,
-        Some(&[Scopes::COLLECTION_CREATE]),
+        Scopes::COLLECTION_CREATE,
     )
     .await?
     .1;
+
+    let limits =
+        UserLimits::get_for_collections(&current_user, &client).await?;
+    if limits.current >= limits.max {
+        return Err(CreateError::LimitReached);
+    }
 
     collection_create_data.validate().map_err(|err| {
         CreateError::InvalidInput(validation_errors_to_string(err, None))
@@ -85,12 +91,13 @@ pub async fn collection_create(
     let collection_id: CollectionId =
         generate_collection_id(&mut transaction).await?.into();
 
-    let initial_project_ids = project_item::Project::get_many(
+    let initial_project_ids = project_item::DBProject::get_many(
         &collection_create_data.projects,
-        &mut *transaction,
+        &mut transaction,
         &redis,
     )
-    .await?
+    .await
+    .wrap_internal_err("failed to fetch created projects")?
     .into_iter()
     .map(|x| x.inner.id.into())
     .collect::<Vec<ProjectId>>();
@@ -133,6 +140,12 @@ pub async fn collection_create(
 pub struct CollectionIds {
     pub ids: String,
 }
+#[utoipa::path(
+	tag = "collections",
+	params(("ids" = String, Query)),
+	responses((status = OK))
+)]
+#[get("/collections")]
 pub async fn collections_get(
     req: HttpRequest,
     web::Query(ids): web::Query<CollectionIds>,
@@ -144,30 +157,33 @@ pub async fn collections_get(
     let ids = ids
         .into_iter()
         .map(|x| {
-            parse_base62(x).map(|x| database::models::CollectionId(x as i64))
+            parse_base62(x).map(|x| database::models::DBCollectionId(x as i64))
         })
         .collect::<Result<Vec<_>, _>>()?;
 
     let collections_data =
-        database::models::Collection::get_many(&ids, &**pool, &redis).await?;
+        database::models::DBCollection::get_many(&ids, &**pool, &redis).await?;
 
     let user_option = get_user_from_headers(
         &req,
         &**pool,
         &redis,
         &session_queue,
-        Some(&[Scopes::COLLECTION_READ]),
+        Scopes::COLLECTION_READ,
     )
     .await
     .map(|x| x.1)
     .ok();
 
     let collections =
-        filter_visible_collections(collections_data, &user_option).await?;
+        filter_visible_collections(collections_data, &user_option, false)
+            .await?;
 
     Ok(HttpResponse::Ok().json(collections))
 }
 
+#[utoipa::path(tag = "collections", responses((status = OK)))]
+#[get("/collection/{id}")]
 pub async fn collection_get(
     req: HttpRequest,
     info: web::Path<(String,)>,
@@ -177,29 +193,29 @@ pub async fn collection_get(
 ) -> Result<HttpResponse, ApiError> {
     let string = info.into_inner().0;
 
-    let id = database::models::CollectionId(parse_base62(&string)? as i64);
+    let id = database::models::DBCollectionId(parse_base62(&string)? as i64);
     let collection_data =
-        database::models::Collection::get(id, &**pool, &redis).await?;
+        database::models::DBCollection::get(id, &**pool, &redis).await?;
     let user_option = get_user_from_headers(
         &req,
         &**pool,
         &redis,
         &session_queue,
-        Some(&[Scopes::COLLECTION_READ]),
+        Scopes::COLLECTION_READ,
     )
     .await
     .map(|x| x.1)
     .ok();
 
-    if let Some(data) = collection_data {
-        if is_visible_collection(&data, &user_option).await? {
-            return Ok(HttpResponse::Ok().json(Collection::from(data)));
-        }
+    if let Some(data) = collection_data
+        && is_visible_collection(&data, &user_option, false).await?
+    {
+        return Ok(HttpResponse::Ok().json(Collection::from(data)));
     }
     Err(ApiError::NotFound)
 }
 
-#[derive(Deserialize, Validate)]
+#[derive(Deserialize, Validate, utoipa::ToSchema)]
 pub struct EditCollection {
     #[validate(
         length(min = 3, max = 64),
@@ -213,11 +229,14 @@ pub struct EditCollection {
         with = "::serde_with::rust::double_option"
     )]
     pub description: Option<Option<String>>,
+    #[schema(value_type = Option<String>)]
     pub status: Option<CollectionStatus>,
     #[validate(length(max = 1024))]
     pub new_projects: Option<Vec<String>>,
 }
 
+#[utoipa::path(tag = "collections", responses((status = NO_CONTENT)))]
+#[patch("/collection/{id}")]
 pub async fn collection_edit(
     req: HttpRequest,
     info: web::Path<(String,)>,
@@ -231,7 +250,7 @@ pub async fn collection_edit(
         &**pool,
         &redis,
         &session_queue,
-        Some(&[Scopes::COLLECTION_WRITE]),
+        Scopes::COLLECTION_WRITE,
     )
     .await?
     .1;
@@ -241,8 +260,9 @@ pub async fn collection_edit(
     })?;
 
     let string = info.into_inner().0;
-    let id = database::models::CollectionId(parse_base62(&string)? as i64);
-    let result = database::models::Collection::get(id, &**pool, &redis).await?;
+    let id = database::models::DBCollectionId(parse_base62(&string)? as i64);
+    let result =
+        database::models::DBCollection::get(id, &**pool, &redis).await?;
 
     if let Some(collection_item) = result {
         if !can_modify_collection(&collection_item, &user) {
@@ -261,9 +281,9 @@ pub async fn collection_edit(
                 WHERE (id = $2)
                 ",
                 name.trim(),
-                id as database::models::ids::CollectionId,
+                id as database::models::ids::DBCollectionId,
             )
-            .execute(&mut *transaction)
+            .execute(&mut transaction)
             .await?;
         }
 
@@ -275,9 +295,9 @@ pub async fn collection_edit(
                 WHERE (id = $2)
                 ",
                 description.as_ref(),
-                id as database::models::ids::CollectionId,
+                id as database::models::ids::DBCollectionId,
             )
-            .execute(&mut *transaction)
+            .execute(&mut transaction)
             .await?;
         }
 
@@ -298,9 +318,9 @@ pub async fn collection_edit(
                 WHERE (id = $2)
                 ",
                 status.to_string(),
-                id as database::models::ids::CollectionId,
+                id as database::models::ids::DBCollectionId,
             )
-            .execute(&mut *transaction)
+            .execute(&mut transaction)
             .await?;
         }
 
@@ -311,9 +331,9 @@ pub async fn collection_edit(
                 DELETE FROM collections_mods
                 WHERE collection_id = $1
                 ",
-                collection_item.id as database::models::ids::CollectionId,
+                collection_item.id as database::models::ids::DBCollectionId,
             )
-            .execute(&mut *transaction)
+            .execute(&mut transaction)
             .await?;
 
             let collection_item_ids = new_project_ids
@@ -322,14 +342,13 @@ pub async fn collection_edit(
                 .collect_vec();
             let mut validated_project_ids = Vec::new();
             for project_id in new_project_ids {
-                let project =
-                    database::models::Project::get(project_id, &**pool, &redis)
-                        .await?
-                        .ok_or_else(|| {
-                            ApiError::InvalidInput(format!(
-                            "The specified project {project_id} does not exist!"
-                        ))
-                        })?;
+                let project = database::models::DBProject::get(
+                    project_id, &**pool, &redis,
+                )
+                .await?
+                .wrap_request_err_with(|| {
+                    eyre!("The specified project {project_id} does not exist!")
+                })?;
                 validated_project_ids.push(project.inner.id.0);
             }
             // Insert- don't throw an error if it already exists
@@ -342,7 +361,7 @@ pub async fn collection_edit(
                 &collection_item_ids[..],
                 &validated_project_ids[..],
             )
-            .execute(&mut *transaction)
+            .execute(&mut transaction)
             .await?;
 
             sqlx::query!(
@@ -351,14 +370,14 @@ pub async fn collection_edit(
                 SET updated = NOW()
                 WHERE id = $1
                 ",
-                collection_item.id as database::models::ids::CollectionId,
+                collection_item.id as database::models::ids::DBCollectionId,
             )
-            .execute(&mut *transaction)
+            .execute(&mut transaction)
             .await?;
         }
 
         transaction.commit().await?;
-        database::models::Collection::clear_cache(collection_item.id, &redis)
+        database::models::DBCollection::clear_cache(collection_item.id, &redis)
             .await?;
 
         Ok(HttpResponse::NoContent().body(""))
@@ -373,13 +392,20 @@ pub struct Extension {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[utoipa::path(
+	tag = "collections",
+	params(("ext" = String, Query)),
+	request_body(content = Vec<u8>, content_type = "application/octet-stream"),
+	responses((status = NO_CONTENT))
+)]
+#[patch("/collection/{id}/icon")]
 pub async fn collection_icon_edit(
     web::Query(ext): web::Query<Extension>,
     req: HttpRequest,
     info: web::Path<(String,)>,
     pool: web::Data<PgPool>,
     redis: web::Data<RedisPool>,
-    file_host: web::Data<Arc<dyn FileHost + Send + Sync>>,
+    file_host: web::Data<dyn FileHost>,
     mut payload: web::Payload,
     session_queue: web::Data<AuthQueue>,
 ) -> Result<HttpResponse, ApiError> {
@@ -388,15 +414,15 @@ pub async fn collection_icon_edit(
         &**pool,
         &redis,
         &session_queue,
-        Some(&[Scopes::COLLECTION_WRITE]),
+        Scopes::COLLECTION_WRITE,
     )
     .await?
     .1;
 
     let string = info.into_inner().0;
-    let id = database::models::CollectionId(parse_base62(&string)? as i64);
+    let id = database::models::DBCollectionId(parse_base62(&string)? as i64);
     let collection_item =
-        database::models::Collection::get(id, &**pool, &redis)
+        database::models::DBCollection::get(id, &**pool, &redis)
             .await?
             .ok_or_else(|| {
                 ApiError::InvalidInput(
@@ -411,11 +437,12 @@ pub async fn collection_icon_edit(
     delete_old_images(
         collection_item.icon_url,
         collection_item.raw_icon_url,
-        &***file_host,
+        FileHostPublicity::Public,
+        &**file_host,
     )
     .await?;
 
-    let bytes = read_from_payload(
+    let bytes = read_limited_from_payload(
         &mut payload,
         262144,
         "Icons must be smaller than 256KiB",
@@ -424,12 +451,13 @@ pub async fn collection_icon_edit(
 
     let collection_id: CollectionId = collection_item.id.into();
     let upload_result = crate::util::img::upload_image_optimized(
-        &format!("data/{}", collection_id),
+        &format!("data/{collection_id}"),
+        FileHostPublicity::Public,
         bytes.freeze(),
         &ext.ext,
         Some(96),
         Some(1.0),
-        &***file_host,
+        &**file_host,
     )
     .await?;
 
@@ -444,24 +472,26 @@ pub async fn collection_icon_edit(
         upload_result.url,
         upload_result.raw_url,
         upload_result.color.map(|x| x as i32),
-        collection_item.id as database::models::ids::CollectionId,
+        collection_item.id as database::models::ids::DBCollectionId,
     )
-    .execute(&mut *transaction)
+    .execute(&mut transaction)
     .await?;
 
     transaction.commit().await?;
-    database::models::Collection::clear_cache(collection_item.id, &redis)
+    database::models::DBCollection::clear_cache(collection_item.id, &redis)
         .await?;
 
     Ok(HttpResponse::NoContent().body(""))
 }
 
+#[utoipa::path(tag = "collections", responses((status = NO_CONTENT)))]
+#[delete("/collection/{id}/icon")]
 pub async fn delete_collection_icon(
     req: HttpRequest,
     info: web::Path<(String,)>,
     pool: web::Data<PgPool>,
     redis: web::Data<RedisPool>,
-    file_host: web::Data<Arc<dyn FileHost + Send + Sync>>,
+    file_host: web::Data<dyn FileHost>,
     session_queue: web::Data<AuthQueue>,
 ) -> Result<HttpResponse, ApiError> {
     let user = get_user_from_headers(
@@ -469,15 +499,15 @@ pub async fn delete_collection_icon(
         &**pool,
         &redis,
         &session_queue,
-        Some(&[Scopes::COLLECTION_WRITE]),
+        Scopes::COLLECTION_WRITE,
     )
     .await?
     .1;
 
     let string = info.into_inner().0;
-    let id = database::models::CollectionId(parse_base62(&string)? as i64);
+    let id = database::models::DBCollectionId(parse_base62(&string)? as i64);
     let collection_item =
-        database::models::Collection::get(id, &**pool, &redis)
+        database::models::DBCollection::get(id, &**pool, &redis)
             .await?
             .ok_or_else(|| {
                 ApiError::InvalidInput(
@@ -491,7 +521,8 @@ pub async fn delete_collection_icon(
     delete_old_images(
         collection_item.icon_url,
         collection_item.raw_icon_url,
-        &***file_host,
+        FileHostPublicity::Public,
+        &**file_host,
     )
     .await?;
     let mut transaction = pool.begin().await?;
@@ -502,18 +533,20 @@ pub async fn delete_collection_icon(
         SET icon_url = NULL, raw_icon_url = NULL, color = NULL
         WHERE (id = $1)
         ",
-        collection_item.id as database::models::ids::CollectionId,
+        collection_item.id as database::models::ids::DBCollectionId,
     )
-    .execute(&mut *transaction)
+    .execute(&mut transaction)
     .await?;
 
     transaction.commit().await?;
-    database::models::Collection::clear_cache(collection_item.id, &redis)
+    database::models::DBCollection::clear_cache(collection_item.id, &redis)
         .await?;
 
     Ok(HttpResponse::NoContent().body(""))
 }
 
+#[utoipa::path(tag = "collections", responses((status = NO_CONTENT)))]
+#[delete("/collection/{id}")]
 pub async fn collection_delete(
     req: HttpRequest,
     info: web::Path<(String,)>,
@@ -526,14 +559,14 @@ pub async fn collection_delete(
         &**pool,
         &redis,
         &session_queue,
-        Some(&[Scopes::COLLECTION_DELETE]),
+        Scopes::COLLECTION_DELETE,
     )
     .await?
     .1;
 
     let string = info.into_inner().0;
-    let id = database::models::CollectionId(parse_base62(&string)? as i64);
-    let collection = database::models::Collection::get(id, &**pool, &redis)
+    let id = database::models::DBCollectionId(parse_base62(&string)? as i64);
+    let collection = database::models::DBCollection::get(id, &**pool, &redis)
         .await?
         .ok_or_else(|| {
             ApiError::InvalidInput(
@@ -545,7 +578,7 @@ pub async fn collection_delete(
     }
     let mut transaction = pool.begin().await?;
 
-    let result = database::models::Collection::remove(
+    let result = database::models::DBCollection::remove(
         collection.id,
         &mut transaction,
         &redis,
@@ -553,7 +586,7 @@ pub async fn collection_delete(
     .await?;
 
     transaction.commit().await?;
-    database::models::Collection::clear_cache(collection.id, &redis).await?;
+    database::models::DBCollection::clear_cache(collection.id, &redis).await?;
 
     if result.is_some() {
         Ok(HttpResponse::NoContent().body(""))
@@ -563,7 +596,7 @@ pub async fn collection_delete(
 }
 
 fn can_modify_collection(
-    collection: &database::models::Collection,
+    collection: &database::models::DBCollection,
     user: &models::users::User,
 ) -> bool {
     collection.user_id == user.id.into() || user.role.is_mod()

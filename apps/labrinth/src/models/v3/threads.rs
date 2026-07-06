@@ -1,21 +1,14 @@
-use super::ids::{Base62Id, ImageId};
-use crate::models::ids::{ProjectId, ReportId};
+use crate::database::models::delphi_report_item::DelphiVerdict;
+use crate::models::ids::{
+    ImageId, ProjectId, ReportId, ThreadId, ThreadMessageId,
+};
 use crate::models::projects::ProjectStatus;
-use crate::models::users::{User, UserId};
+use crate::models::users::User;
+use ariadne::ids::UserId;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-#[derive(Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(from = "Base62Id")]
-#[serde(into = "Base62Id")]
-pub struct ThreadId(pub u64);
-
-#[derive(Copy, Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
-#[serde(from = "Base62Id")]
-#[serde(into = "Base62Id")]
-pub struct ThreadMessageId(pub u64);
-
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct Thread {
     pub id: ThreadId,
     #[serde(rename = "type")]
@@ -26,7 +19,7 @@ pub struct Thread {
     pub members: Vec<User>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ThreadMessage {
     pub id: ThreadMessageId,
     pub author_id: Option<UserId>,
@@ -35,7 +28,7 @@ pub struct ThreadMessage {
     pub hide_identity: bool,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum MessageBody {
     Text {
@@ -50,6 +43,11 @@ pub enum MessageBody {
         new_status: ProjectStatus,
         old_status: ProjectStatus,
     },
+    TechReview {
+        verdict: DelphiVerdict,
+    },
+    TechReviewEntered,
+    TechReviewExitFileDeleted,
     ThreadClosure,
     ThreadReopen,
     Deleted {
@@ -58,7 +56,23 @@ pub enum MessageBody {
     },
 }
 
-#[derive(Serialize, Deserialize, Eq, PartialEq, Copy, Clone)]
+impl MessageBody {
+    pub fn is_private(&self) -> bool {
+        match self {
+            Self::Text { private, .. } | Self::Deleted { private } => *private,
+            Self::TechReview { .. }
+            | Self::TechReviewEntered
+            | Self::TechReviewExitFileDeleted => true,
+            Self::StatusChange { .. }
+            | Self::ThreadClosure
+            | Self::ThreadReopen => false,
+        }
+    }
+}
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ThreadType {
     Report,
@@ -73,7 +87,7 @@ impl std::fmt::Display for ThreadType {
 }
 
 impl ThreadType {
-    // These are constant, so this can remove unneccessary allocations (`to_string`)
+    // These are constant, so this can remove unnecessary allocations (`to_string`)
     pub fn as_str(&self) -> &'static str {
         match self {
             ThreadType::Report => "report",
@@ -94,7 +108,7 @@ impl ThreadType {
 
 impl Thread {
     pub fn from(
-        data: crate::database::models::Thread,
+        data: crate::database::models::DBThread,
         users: Vec<User>,
         user: &User,
     ) -> Self {
@@ -108,16 +122,7 @@ impl Thread {
             messages: data
                 .messages
                 .into_iter()
-                .filter(|x| {
-                    if let MessageBody::Text { private, .. } = x.body {
-                        !private || user.role.is_mod()
-                    } else if let MessageBody::Deleted { private, .. } = x.body
-                    {
-                        !private || user.role.is_mod()
-                    } else {
-                        true
-                    }
-                })
+                .filter(|x| user.role.is_mod() || !x.body.is_private())
                 .map(|x| ThreadMessage::from(x, user))
                 .collect(),
             members: users,
@@ -127,7 +132,7 @@ impl Thread {
 
 impl ThreadMessage {
     pub fn from(
-        data: crate::database::models::ThreadMessage,
+        data: crate::database::models::DBThreadMessage,
         user: &User,
     ) -> Self {
         Self {

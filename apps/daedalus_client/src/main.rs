@@ -1,13 +1,13 @@
 use crate::util::{
-    format_url, upload_file_to_bucket, upload_url_to_bucket_mirrors,
-    REQWEST_CLIENT,
+    REQWEST_CLIENT, format_url, upload_file_to_bucket,
+    upload_url_to_bucket_mirrors,
 };
 use daedalus::get_path_from_artifact;
 use dashmap::{DashMap, DashSet};
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 use tracing_error::ErrorLayer;
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 mod error;
 mod fabric;
@@ -43,47 +43,64 @@ async fn main() -> Result<()> {
             .unwrap_or(10),
     ));
 
-    // path, upload file
-    let upload_files: DashMap<String, UploadFile> = DashMap::new();
-    // path, mirror artifact
-    let mirror_artifacts: DashMap<String, MirrorArtifact> = DashMap::new();
+    let mut fetch_result = FetchResult::default();
 
-    minecraft::fetch(semaphore.clone(), &upload_files, &mirror_artifacts)
-        .await?;
-    fabric::fetch_fabric(semaphore.clone(), &upload_files, &mirror_artifacts)
-        .await?;
-    fabric::fetch_quilt(semaphore.clone(), &upload_files, &mirror_artifacts)
-        .await?;
-    forge::fetch_neo(semaphore.clone(), &upload_files, &mirror_artifacts)
-        .await?;
-    forge::fetch_forge(semaphore.clone(), &upload_files, &mirror_artifacts)
-        .await?;
+    match minecraft::fetch(semaphore.clone()).await {
+        Ok(fetched) => merge_fetch_result(&mut fetch_result, fetched),
+        Err(err) => tracing::warn!(error = %err, "Minecraft fetch failed"),
+    }
 
-    futures::future::try_join_all(upload_files.iter().map(|x| {
+    match fabric::fetch_fabric(semaphore.clone()).await {
+        Ok(fetched) => merge_fetch_result(&mut fetch_result, fetched),
+        Err(err) => tracing::warn!(error = %err, "Fabric fetch failed"),
+    }
+
+    match fabric::fetch_quilt(semaphore.clone()).await {
+        Ok(fetched) => merge_fetch_result(&mut fetch_result, fetched),
+        Err(err) => tracing::warn!(error = %err, "Quilt fetch failed"),
+    }
+
+    match forge::fetch_neo(semaphore.clone()).await {
+        Ok(fetched) => merge_fetch_result(&mut fetch_result, fetched),
+        Err(err) => tracing::warn!(error = %err, "NeoForge fetch failed"),
+    }
+
+    match forge::fetch_forge(semaphore.clone()).await {
+        Ok(fetched) => merge_fetch_result(&mut fetch_result, fetched),
+        Err(err) => tracing::warn!(error = %err, "Forge fetch failed"),
+    }
+
+    let FetchResult {
+        upload_files,
+        mirror_artifacts,
+    } = fetch_result;
+
+    futures::future::try_join_all(upload_files.iter().map(|entry| {
         upload_file_to_bucket(
-            x.key().clone(),
-            x.value().file.clone(),
-            x.value().content_type.clone(),
+            entry.key().clone(),
+            entry.value().file.clone(),
+            entry.value().content_type.clone(),
             &semaphore,
         )
     }))
     .await?;
 
-    futures::future::try_join_all(mirror_artifacts.iter().map(|x| {
+    futures::future::try_join_all(mirror_artifacts.iter().map(|entry| {
         upload_url_to_bucket_mirrors(
-            format!("maven/{}", x.key()),
-            x.value()
+            format!("maven/{}", entry.key()),
+            entry
+                .value()
                 .mirrors
                 .iter()
                 .map(|mirror| {
                     if mirror.entire_url {
                         mirror.path.clone()
                     } else {
-                        format!("{}{}", mirror.path, x.key())
+                        format!("{}{}", mirror.path, entry.key())
                     }
                 })
                 .collect(),
-            x.sha1.clone(),
+            entry.value().sha1.clone(),
             &semaphore,
         )
     }))
@@ -93,22 +110,22 @@ async fn main() -> Result<()> {
         .ok()
         .and_then(|x| x.parse::<bool>().ok())
         .unwrap_or(false)
+        && let Ok(token) = dotenvy::var("CLOUDFLARE_TOKEN")
+        && let Ok(zone_id) = dotenvy::var("CLOUDFLARE_ZONE_ID")
     {
-        if let Ok(token) = dotenvy::var("CLOUDFLARE_TOKEN") {
-            if let Ok(zone_id) = dotenvy::var("CLOUDFLARE_ZONE_ID") {
-                let cache_clears = upload_files
+        let cache_clears = upload_files
+            .into_iter()
+            .map(|x| format_url(&x.0))
+            .chain(
+                mirror_artifacts
                     .into_iter()
-                    .map(|x| format_url(&x.0))
-                    .chain(
-                        mirror_artifacts
-                            .into_iter()
-                            .map(|x| format_url(&format!("maven/{}", x.0))),
-                    )
-                    .collect::<Vec<_>>();
+                    .map(|x| format_url(&format!("maven/{}", x.0))),
+            )
+            .collect::<Vec<_>>();
 
-                // Cloudflare ratelimits cache clears to 500 files per request
-                for chunk in cache_clears.chunks(500) {
-                    REQWEST_CLIENT.post(format!("https://api.cloudflare.com/client/v4/zones/{zone_id}/purge_cache"))
+        // Cloudflare ratelimits cache clears to 500 files per request
+        for chunk in cache_clears.chunks(500) {
+            REQWEST_CLIENT.post(format!("https://api.cloudflare.com/client/v4/zones/{zone_id}/purge_cache"))
                         .bearer_auth(&token)
                         .json(&serde_json::json!({
                         "files": chunk
@@ -128,8 +145,6 @@ async fn main() -> Result<()> {
                                 item: "cloudflare clear cache".to_string(),
                             }
                         })?;
-                }
-            }
         }
     }
 
@@ -141,15 +156,45 @@ pub struct UploadFile {
     content_type: Option<String>,
 }
 
+#[derive(Default)]
+pub struct FetchResult {
+    pub upload_files: DashMap<String, UploadFile>,
+    pub mirror_artifacts: DashMap<String, MirrorArtifact>,
+}
+
 pub struct MirrorArtifact {
     pub sha1: Option<String>,
     pub mirrors: DashSet<Mirror>,
 }
 
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash)]
 pub struct Mirror {
     path: String,
     entire_url: bool,
+}
+
+fn merge_fetch_result(fetch_result: &mut FetchResult, fetched: FetchResult) {
+    for (path, upload_file) in fetched.upload_files {
+        fetch_result.upload_files.insert(path, upload_file);
+    }
+
+    for (artifact_path, fetched_mirror_artifact) in fetched.mirror_artifacts {
+        let mut val = fetch_result
+            .mirror_artifacts
+            .entry(artifact_path)
+            .or_insert(MirrorArtifact {
+                sha1: fetched_mirror_artifact.sha1.clone(),
+                mirrors: DashSet::new(),
+            });
+
+        if val.sha1.is_none() {
+            val.sha1 = fetched_mirror_artifact.sha1;
+        }
+
+        for mirror in fetched_mirror_artifact.mirrors {
+            val.mirrors.insert(mirror);
+        }
+    }
 }
 
 #[tracing::instrument(skip(mirror_artifacts))]
@@ -160,12 +205,16 @@ pub fn insert_mirrored_artifact(
     entire_url: bool,
     mirror_artifacts: &DashMap<String, MirrorArtifact>,
 ) -> Result<()> {
-    let val = mirror_artifacts
+    let mut val = mirror_artifacts
         .entry(get_path_from_artifact(artifact)?)
         .or_insert(MirrorArtifact {
-            sha1,
+            sha1: sha1.clone(),
             mirrors: DashSet::new(),
         });
+
+    if val.sha1.is_none() {
+        val.sha1 = sha1;
+    }
 
     for mirror in mirrors {
         val.mirrors.insert(Mirror {

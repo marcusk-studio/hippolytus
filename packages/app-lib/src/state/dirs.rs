@@ -1,8 +1,9 @@
 //! Theseus directory information
-use crate::event::emit::{emit_loading, init_loading};
-use crate::state::{JavaVersion, Profile, Settings};
-use crate::util::fetch::IoSemaphore;
 use crate::LoadingBarType;
+use crate::event::emit::{emit_loading, init_loading};
+use crate::state::LAUNCHER_STATE;
+use crate::state::{JavaVersion, Settings};
+use crate::util::fetch::IoSemaphore;
 use dashmap::DashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -10,31 +11,42 @@ use tokio::fs;
 
 pub const CACHES_FOLDER_NAME: &str = "caches";
 pub const LAUNCHER_LOGS_FOLDER_NAME: &str = "launcher_logs";
-pub const PROFILES_FOLDER_NAME: &str = "profiles";
+pub const INSTANCES_FOLDER_NAME: &str = "profiles";
 pub const METADATA_FOLDER_NAME: &str = "meta";
 
 #[derive(Debug)]
 pub struct DirectoryInfo {
     pub settings_dir: PathBuf, // Base settings directory- app database
     pub config_dir: PathBuf, // Base config directory- instances, minecraft downloads, etc. Changeable as a setting.
+    pub app_identifier: String,
 }
 
 impl DirectoryInfo {
+    pub fn global_handle_if_ready() -> Option<&'static Self> {
+        LAUNCHER_STATE.get().map(|x| &x.directories)
+    }
+
+    pub fn get_initial_settings_dir(&self) -> Option<PathBuf> {
+        Self::initial_settings_dir_path(&self.app_identifier)
+    }
+
     // Get the settings directory
     // init() is not needed for this function
-    pub fn get_initial_settings_dir() -> Option<PathBuf> {
+    pub fn initial_settings_dir_path(app_identifier: &str) -> Option<PathBuf> {
         Self::env_path("THESEUS_CONFIG_DIR")
-            .or_else(|| Some(dirs::data_dir()?.join("MARCUSKLauncher")))
+            .or_else(|| Some(dirs::data_dir()?.join(app_identifier)))
     }
 
     /// Get all paths needed for Theseus to operate properly
     #[tracing::instrument]
-    pub async fn init(config_dir: Option<String>) -> crate::Result<Self> {
-        let settings_dir = Self::get_initial_settings_dir().ok_or(
-            crate::ErrorKind::FSError(
+    pub async fn init(
+        config_dir: Option<String>,
+        app_identifier: &str,
+    ) -> crate::Result<Self> {
+        let settings_dir = Self::initial_settings_dir_path(app_identifier)
+            .ok_or(crate::ErrorKind::FSError(
                 "Could not find valid settings dir".to_string(),
-            ),
-        )?;
+            ))?;
 
         fs::create_dir_all(&settings_dir).await.map_err(|err| {
             crate::ErrorKind::FSError(format!(
@@ -42,13 +54,13 @@ impl DirectoryInfo {
             ))
         })?;
 
-        let config_dir = config_dir
-            .map(PathBuf::from)
-            .unwrap_or_else(|| settings_dir.clone());
+        let config_dir =
+            config_dir.map_or_else(|| settings_dir.clone(), PathBuf::from);
 
         Ok(Self {
             settings_dir,
             config_dir,
+            app_identifier: app_identifier.to_owned(),
         })
     }
 
@@ -106,6 +118,12 @@ impl DirectoryInfo {
         self.objects_dir().join(&hash[..2]).join(hash)
     }
 
+    /// Get the Minecraft log config's directory
+    #[inline]
+    pub fn log_configs_dir(&self) -> PathBuf {
+        self.metadata_dir().join("log_configs")
+    }
+
     /// Get the Minecraft legacy assets metadata directory
     #[inline]
     pub fn legacy_assets_dir(&self) -> PathBuf {
@@ -130,27 +148,35 @@ impl DirectoryInfo {
         self.config_dir.join("icons")
     }
 
-    /// Get the profiles directory for created profiles
+    /// Get the instances directory
     #[inline]
-    pub fn profiles_dir(&self) -> PathBuf {
-        self.config_dir.join(PROFILES_FOLDER_NAME)
+    pub fn instances_dir(&self) -> PathBuf {
+        self.config_dir.join(INSTANCES_FOLDER_NAME)
     }
 
-    /// Gets the logs dir for a given profile
+    /// Gets the logs dir for a given instance path
     #[inline]
-    pub fn profile_logs_dir(&self, profile_path: &str) -> PathBuf {
-        self.profiles_dir().join(profile_path).join("logs")
+    pub fn instance_logs_dir(&self, instance_path: &str) -> PathBuf {
+        self.instances_dir().join(instance_path).join("logs")
     }
 
-    /// Gets the crash reports dir for a given profile
+    /// Gets the crash reports dir for a given instance path
     #[inline]
-    pub fn crash_reports_dir(&self, profile_path: &str) -> PathBuf {
-        self.profiles_dir().join(profile_path).join("crash-reports")
+    pub fn crash_reports_dir(&self, instance_path: &str) -> PathBuf {
+        self.instances_dir()
+            .join(instance_path)
+            .join("crash-reports")
     }
 
     #[inline]
-    pub fn launcher_logs_dir() -> Option<PathBuf> {
-        Self::get_initial_settings_dir()
+    pub fn launcher_logs_dir(&self) -> Option<PathBuf> {
+        self.get_initial_settings_dir()
+            .map(|d| d.join(LAUNCHER_LOGS_FOLDER_NAME))
+    }
+
+    #[inline]
+    pub fn launcher_logs_dir_path(app_identifier: &str) -> Option<PathBuf> {
+        Self::initial_settings_dir_path(app_identifier)
             .map(|d| d.join(LAUNCHER_LOGS_FOLDER_NAME))
     }
 
@@ -171,15 +197,15 @@ impl DirectoryInfo {
         settings: &mut Settings,
         exec: E,
         io_semaphore: &IoSemaphore,
+        app_identifier: &str,
     ) -> crate::Result<()>
     where
         E: sqlx::Executor<'a, Database = sqlx::Sqlite> + Copy,
     {
-        let app_dir = DirectoryInfo::get_initial_settings_dir().ok_or(
-            crate::ErrorKind::FSError(
+        let app_dir = DirectoryInfo::initial_settings_dir_path(app_identifier)
+            .ok_or(crate::ErrorKind::FSError(
                 "Could not find valid config dir".to_string(),
-            ),
-        )?;
+            ))?;
 
         if let Some(ref prev_custom_dir) = settings.prev_custom_dir {
             let prev_dir = PathBuf::from(prev_custom_dir);
@@ -187,10 +213,9 @@ impl DirectoryInfo {
             let move_dir = settings
                 .custom_dir
                 .as_ref()
-                .map(PathBuf::from)
-                .unwrap_or_else(|| app_dir.clone());
+                .map_or_else(|| app_dir.clone(), PathBuf::from);
 
-            async fn is_dir_writeable(
+            async fn is_dir_writable(
                 new_config_dir: &Path,
             ) -> crate::Result<bool> {
                 let temp_path = new_config_dir.join(".tmp");
@@ -209,40 +234,12 @@ impl DirectoryInfo {
                 }
             }
 
-            fn is_same_disk(
-                old_dir: &Path,
-                new_dir: &Path,
-            ) -> crate::Result<bool> {
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::MetadataExt;
-                    Ok(old_dir.metadata()?.dev() == new_dir.metadata()?.dev())
-                }
-
-                #[cfg(windows)]
-                {
-                    let old_dir = crate::util::io::canonicalize(old_dir)?;
-                    let new_dir = crate::util::io::canonicalize(new_dir)?;
-
-                    let old_component = old_dir.components().next();
-                    let new_component = new_dir.components().next();
-
-                    match (old_component, new_component) {
-                        (
-                            Some(std::path::Component::Prefix(old)),
-                            Some(std::path::Component::Prefix(new)),
-                        ) => Ok(old.as_os_str() == new.as_os_str()),
-                        _ => Ok(false),
-                    }
-                }
-            }
-
             fn get_disk_usage(path: &Path) -> crate::Result<Option<u64>> {
                 let path = crate::util::io::canonicalize(path)?;
 
                 let disks = sysinfo::Disks::new_with_refreshed_list();
 
-                for disk in disks.iter() {
+                for disk in &disks {
                     if path.starts_with(disk.mount_point()) {
                         return Ok(Some(disk.available_space()));
                     }
@@ -264,13 +261,13 @@ impl DirectoryInfo {
                 )
                 .await?;
 
-                if !is_dir_writeable(&move_dir).await? {
-                    return Err(crate::ErrorKind::DirectoryMoveError(format!("Cannot move directory to {}: directory is not writeable", move_dir.display())).into());
+                if !is_dir_writable(&move_dir).await? {
+                    return Err(crate::ErrorKind::DirectoryMoveError(format!("Cannot move directory to {}: directory is not writable", move_dir.display())).into());
                 }
 
                 const MOVE_DIRS: &[&str] = &[
                     CACHES_FOLDER_NAME,
-                    PROFILES_FOLDER_NAME,
+                    INSTANCES_FOLDER_NAME,
                     METADATA_FOLDER_NAME,
                 ];
 
@@ -335,7 +332,9 @@ impl DirectoryInfo {
 
                 let paths_len = paths.len();
 
-                if is_same_disk(&prev_dir, &move_dir).unwrap_or(false) {
+                if crate::util::io::is_same_disk(&prev_dir, &move_dir)
+                    .unwrap_or(false)
+                {
                     let success_idxs = Arc::new(DashSet::new());
 
                     let loader_bar_id = Arc::new(&loader_bar_id);
@@ -359,7 +358,7 @@ impl DirectoryInfo {
                                     })?;
                                 }
 
-                                crate::util::io::rename(
+                                crate::util::io::rename_or_move(
                                     &x.old,
                                     &x.new,
                                 )
@@ -367,10 +366,9 @@ impl DirectoryInfo {
                                     .map_err(|e| {
                                         crate::Error::from(crate::ErrorKind::DirectoryMoveError(
                                             format!(
-                                                "Failed to move directory from {} to {}: {}",
+                                                "Failed to move directory from {} to {}: {e:?}",
                                                 x.old.display(),
                                                 x.new.display(),
-                                                e
                                             ),
                                         ))
                                     })?;
@@ -407,10 +405,10 @@ impl DirectoryInfo {
                         return Err(e);
                     }
                 } else {
-                    if let Some(disk_usage) = get_disk_usage(&move_dir)? {
-                        if total_size > disk_usage {
-                            return Err(crate::ErrorKind::DirectoryMoveError(format!("Not enough space to move directory to {}: only {} bytes available", app_dir.display(), disk_usage)).into());
-                        }
+                    if let Some(disk_usage) = get_disk_usage(&move_dir)?
+                        && total_size > disk_usage
+                    {
+                        return Err(crate::ErrorKind::DirectoryMoveError(format!("Not enough space to move directory to {}: only {} bytes available", app_dir.display(), disk_usage)).into());
                     }
 
                     let loader_bar_id = Arc::new(&loader_bar_id);
@@ -424,7 +422,7 @@ impl DirectoryInfo {
                                 io_semaphore,
                             )
                             .await.map_err(|e| { crate::Error::from(
-                                crate::ErrorKind::DirectoryMoveError(format!("Failed to move directory from {} to {}: {}", x.old.display(), x.new.display(), e)))
+                                crate::ErrorKind::DirectoryMoveError(format!("Failed to move directory from {} to {}: {e:?}", x.old.display(), x.new.display())))
                             })?;
 
                             let _ = emit_loading(
@@ -476,27 +474,37 @@ impl DirectoryInfo {
                     java_version.upsert(exec).await?
                 }
 
-                let profiles = Profile::get_all(exec).await?;
-
-                for mut profile in profiles {
-                    profile.icon_path = profile.icon_path.map(|x| {
-                        x.replace(
-                            prev_custom_dir,
-                            new_dir
-                                .trim_end_matches('/')
-                                .trim_end_matches('\\'),
-                        )
-                    });
-                    profile.java_path = profile.java_path.map(|x| {
-                        x.replace(
-                            prev_custom_dir,
-                            new_dir
-                                .trim_end_matches('/')
-                                .trim_end_matches('\\'),
-                        )
-                    });
-                    profile.upsert(exec).await?;
-                }
+                let new_dir = new_dir
+                    .trim_end_matches('/')
+                    .trim_end_matches('\\')
+                    .to_string();
+                let new_dir = new_dir.as_str();
+                sqlx::query!(
+                    "
+                    UPDATE instances
+                    SET icon_path = replace(icon_path, ?, ?)
+                    WHERE icon_path IS NOT NULL
+                    ",
+                    prev_custom_dir,
+                    new_dir,
+                )
+                .execute(exec)
+                .await?;
+                sqlx::query!(
+                    "
+                    UPDATE instance_launch_overrides
+                    SET overrides = jsonb(json_set(
+                        overrides,
+                        '$.java_path',
+                        replace(json_extract(overrides, '$.java_path'), ?, ?)
+                    ))
+                    WHERE json_type(overrides, '$.java_path') = 'text'
+                    ",
+                    prev_custom_dir,
+                    new_dir,
+                )
+                .execute(exec)
+                .await?;
             }
 
             settings.custom_dir = Some(new_dir);

@@ -1,67 +1,74 @@
 [package]
 name = "theseus_gui"
-version = "0.9.2"
+# The actual version is set by the theseus-build workflow on tagging
+version = "1.0.0-local"
+edition.workspace = true
 description = "The Modrinth App is a desktop application for managing your Minecraft mods"
-license = "GPL-3.0-only"
 repository = "https://github.com/modrinth/code/apps/app/"
-edition = "2021"
-build = "build.rs"
-
-[build-dependencies]
-tauri-build = { version = "2.0.3", features = ["codegen"] }
+license = "GPL-3.0-only"
 
 [dependencies]
-theseus = { path = "../../packages/app-lib", features = ["tauri"] }
+async_zip = { workspace = true, features = ["deflate", "tokio-fs"] }
+chrono = { workspace = true }
+daedalus = { workspace = true }
+dashmap = { workspace = true }
+either = { workspace = true }
+enumset = { workspace = true, features = ["serde"] }
+hyper = { workspace = true, features = ["server"] }
+hyper-util = { workspace = true }
+native-dialog = { workspace = true }
+paste = { workspace = true }
+path-util = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_with = { workspace = true }
+tauri-plugin-deep-link = { workspace = true }
+tauri-plugin-dialog = { workspace = true }
+tauri-plugin-fs = { workspace = true }
+tauri-plugin-http = { workspace = true }
+tauri-plugin-opener = { workspace = true }
+tauri-plugin-os = { workspace = true }
+tauri-plugin-single-instance = { workspace = true }
+tauri-plugin-updater = { workspace = true }
+tauri-plugin-window-state = { workspace = true }
+theseus = { workspace = true, features = ["tauri"] }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["time"] }
+tracing = { workspace = true }
+tracing-error = { workspace = true }
+url = { workspace = true }
+urlencoding = { workspace = true }
+uuid = { workspace = true, features = ["serde", "v4"] }
 
-serde_json = "1.0"
-serde = { version = "1.0", features = ["derive"] }
-serde_with = "3.0.0"
+[dependencies.tauri]
+workspace = true
+features = ["devtools", "macos-private-api", "protocol-asset"]
 
-tauri = { version = "2.1.1",  features = ["devtools", "macos-private-api", "protocol-asset", "unstable"] }
-tauri-plugin-window-state = "2.2.0"
-tauri-plugin-deep-link = "2.2.0"
-tauri-plugin-os = "2.2.0"
-tauri-plugin-opener = "2.2.1"
-tauri-plugin-dialog = "2.2.0"
-tauri-plugin-updater = { version = "2.3.0" }
-tauri-plugin-single-instance = { version = "2.2.0" }
-
-tokio = { version = "1", features = ["full"] }
-thiserror = "1.0"
-futures = "0.3"
-daedalus = { path = "../../packages/daedalus" }
-chrono = "0.4.26"
-
-dirs = "5.0.1"
-
-url = "2.2"
-uuid = { version = "1.1", features = ["serde", "v4"] }
-os_info = "3.7.0"
-
-tracing = "0.1.37"
-tracing-error = "0.2.0"
-
-lazy_static = "1"
-once_cell = "1"
-
-dashmap = "6.0.1"
-paste = "1.0.15"
-
-opener = { version = "0.7.2", features = ["reveal", "dbus-vendored"] }
-
-native-dialog = "0.7.0"
-trusted-signing-cli = "0.3.0"
-
-[target.'cfg(not(target_os = "linux"))'.dependencies]
-window-shadows = "0.2.1"
-
-[target.'cfg(target_os = "macos")'.dependencies]
-cocoa = "0.25.0"
-objc = "0.2.7"
-rand = "0.8.5"
+[build-dependencies]
+tauri-build = { workspace = true, features = ["codegen"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-tauri-plugin-updater = { version = "2.3.0", optional = true, features = ["native-tls-vendored", "zip"], default-features = false }
+tauri-plugin-updater = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation.workspace = true
+core-graphics.workspace = true
+objc2-app-kit = { workspace = true, features = ["NSWindow"] }
+
+[target.'cfg(windows)'.dependencies]
+webview2-com.workspace = true
+windows-core.workspace = true
+
+[target.'cfg(windows)'.dependencies.windows]
+workspace = true
+features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Dwm",
+  "Win32_Graphics_Gdi",
+  "Win32_System_Com",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+]
 
 [features]
 # by default Tauri runs in production mode
@@ -71,3 +78,6 @@ default = ["custom-protocol"]
 # DO NOT remove this
 custom-protocol = ["tauri/custom-protocol"]
 updater = []
+
+[lints]
+workspace = true

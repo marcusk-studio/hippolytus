@@ -1,391 +1,226 @@
-// NOTE: re-export using consts to help TypeScript resolve the proper type
+/**
+ * NOTE: You should re-export any manually added icons
+ *       using consts to help TypeScript resolve the proper type
+ *
+ * NOTE: If an icon is part of the lucide icon set, it should be placed in the "icons" folder
+ *       and automatically generated through the "pnpm run fix" command.
+ */
 
-// Branding
-import _ModrinthIcon from './branding/logo.svg?component'
+import './omorphia.scss'
+
 import _FourOhFourNotFound from './branding/404.svg?component'
+// Branding
+import _BrowserWindowSuccessIllustration from './branding/illustrations/browser-window-success.svg?component'
+import _ModrinthIcon from './branding/logo.svg?component'
 import _ModrinthPlusIcon from './branding/modrinth-plus.svg?component'
-
+import _AngryRinthbot from './branding/rinthbot/angry.webp'
+import _AnnoyedRinthbot from './branding/rinthbot/annoyed.webp'
+import _ConfusedRinthbot from './branding/rinthbot/confused.webp'
+import _ExcitedRinthbot from './branding/rinthbot/excited.webp'
+import _LaughingRinthbot from './branding/rinthbot/laughing.webp'
+import _SadRinthbot from './branding/rinthbot/sad.webp'
+import _SleepingRinthbot from './branding/rinthbot/sleeping.webp'
+import _SobbingRinthbot from './branding/rinthbot/sobbing.webp'
+import _ThinkingRinthbot from './branding/rinthbot/thinking.webp'
+import _WavingRinthbot from './branding/rinthbot/waving.webp'
 // External Icons
-import _SSODiscordIcon from './external/sso/discord.svg?component'
-import _SSOGitHubIcon from './external/sso/github.svg?component'
-import _SSOGitLabIcon from './external/sso/gitlab.svg?component'
-import _SSOGoogleIcon from './external/sso/google.svg?component'
-import _SSOMicrosoftIcon from './external/sso/microsoft.svg?component'
-import _SSOSteamIcon from './external/sso/steam.svg?component'
 import _AppleIcon from './external/apple.svg?component'
+import _BlueskyIcon from './external/bluesky.svg?component'
 import _BuyMeACoffeeIcon from './external/bmac.svg?component'
+import _DiscordColorIcon from './external/color/discord.svg?component'
+import _GitHubColorIcon from './external/color/github.svg?component'
+import _GitLabColorIcon from './external/color/gitlab.svg?component'
+import _GoogleColorIcon from './external/color/google.svg?component'
+import _MicrosoftColorIcon from './external/color/microsoft.svg?component'
+import _PayPalColorIcon from './external/color/paypal.svg?component'
+import _SteamColorIcon from './external/color/steam.svg?component'
+import _USDCColorIcon from './external/color/usdc.svg?component'
+import _VenmoColorIcon from './external/color/venmo.svg?component'
+import _CurseForgeIcon from './external/curseforge.svg?component'
 import _DiscordIcon from './external/discord.svg?component'
+import _FacebookIcon from './external/facebook.svg?component'
+import _FlathubIcon from './external/flathub.svg?component'
+import _GithubIcon from './external/github.svg?component'
+import _IntercomBubbleIcon from './external/illustrations/intercom_bubble_icon.png?url'
+import _MinecraftServerIcon from './external/illustrations/minecraft_server_icon.png?url'
+import _InstagramIcon from './external/instagram.svg?component'
 import _KoFiIcon from './external/kofi.svg?component'
 import _MastodonIcon from './external/mastodon.svg?component'
 import _OpenCollectiveIcon from './external/opencollective.svg?component'
 import _PatreonIcon from './external/patreon.svg?component'
 import _PayPalIcon from './external/paypal.svg?component'
+import _PolygonIcon from './external/polygon.svg?component'
 import _RedditIcon from './external/reddit.svg?component'
+import _ReelsIcon from './external/reels.svg?component'
+import _SnapchatIcon from './external/snapchat.svg?component'
+import _ThreadsIcon from './external/threads.svg?component'
+import _TikTokIcon from './external/tiktok.svg?component'
+import _TumblrIcon from './external/tumblr.svg?component'
+import _TwitchIcon from './external/twitch.svg?component'
 import _TwitterIcon from './external/twitter.svg?component'
+import _VenmoIcon from './external/venmo.svg?component'
+import _VisaIcon from './external/visa.svg?component'
 import _WindowsIcon from './external/windows.svg?component'
 import _YouTubeIcon from './external/youtube.svg?component'
-import _PyroIcon from './external/pyro.svg?component'
-
-// Icons
-import _AlignLeftIcon from './icons/align-left.svg?component'
-import _ArchiveIcon from './icons/archive.svg?component'
-import _ArrowBigUpDashIcon from './icons/arrow-big-up-dash.svg?component'
-import _AsteriskIcon from './icons/asterisk.svg?component'
-import _BanIcon from './icons/ban.svg?component'
-import _BellIcon from './icons/bell.svg?component'
-import _BellRingIcon from './icons/bell-ring.svg?component'
-import _BookIcon from './icons/book.svg?component'
-import _BookTextIcon from './icons/book-text.svg?component'
-import _BookmarkIcon from './icons/bookmark.svg?component'
-import _BoxIcon from './icons/box.svg?component'
-import _BoxImportIcon from './icons/box-import.svg?component'
-import _BracesIcon from './icons/braces.svg?component'
-import _CalendarIcon from './icons/calendar.svg?component'
-import _CardIcon from './icons/card.svg?component'
-import _ChartIcon from './icons/chart.svg?component'
-import _CheckIcon from './icons/check.svg?component'
-import _CheckCheckIcon from './icons/check-check.svg?component'
-import _CheckCircleIcon from './icons/check-circle.svg?component'
-import _ChevronLeftIcon from './icons/chevron-left.svg?component'
-import _ChevronRightIcon from './icons/chevron-right.svg?component'
-import _ClearIcon from './icons/clear.svg?component'
-import _ClientIcon from './icons/client.svg?component'
-import _ClipboardCopyIcon from './icons/clipboard-copy.svg?component'
-import _CodeIcon from './icons/code.svg?component'
-import _CoffeeIcon from './icons/coffee.svg?component'
-import _CoinsIcon from './icons/coins.svg?component'
-import _CollectionIcon from './icons/collection.svg?component'
-import _CompassIcon from './icons/compass.svg?component'
-import _ContractIcon from './icons/contract.svg?component'
-import _CopyIcon from './icons/copy.svg?component'
-import _CopyrightIcon from './icons/copyright.svg?component'
-import _CrownIcon from './icons/crown.svg?component'
-import _CurrencyIcon from './icons/currency.svg?component'
-import _DashboardIcon from './icons/dashboard.svg?component'
-import _DownloadIcon from './icons/download.svg?component'
-import _DropdownIcon from './icons/dropdown.svg?component'
-import _EditIcon from './icons/edit.svg?component'
-import _ExpandIcon from './icons/expand.svg?component'
-import _ExternalIcon from './icons/external.svg?component'
-import _EyeIcon from './icons/eye.svg?component'
-import _EyeOffIcon from './icons/eye-off.svg?component'
-import _FileIcon from './icons/file.svg?component'
-import _FileTextIcon from './icons/file-text.svg?component'
-import _FilterIcon from './icons/filter.svg?component'
-import _FilterXIcon from './icons/filter-x.svg?component'
-import _FolderOpenIcon from './icons/folder-open.svg?component'
-import _FolderSearchIcon from './icons/folder-search.svg?component'
-import _GapIcon from './icons/gap.svg?component'
-import _GaugeIcon from './icons/gauge.svg?component'
-import _GameIcon from './icons/game.svg?component'
-import _GitHubIcon from './icons/github.svg?component'
-import _GlassesIcon from './icons/glasses.svg?component'
-import _GlobeIcon from './icons/globe.svg?component'
-import _GridIcon from './icons/grid.svg?component'
-import _HamburgerIcon from './icons/hamburger.svg?component'
-import _HammerIcon from './icons/hammer.svg?component'
-import _HashIcon from './icons/hash.svg?component'
-import _HeartIcon from './icons/heart.svg?component'
-import _HeartHandshakeIcon from './icons/heart-handshake.svg?component'
-import _HistoryIcon from './icons/history.svg?component'
-import _HomeIcon from './icons/home.svg?component'
-import _ImageIcon from './icons/image.svg?component'
-import _InfoIcon from './icons/info.svg?component'
-import _IssuesIcon from './icons/issues.svg?component'
-import _KeyIcon from './icons/key.svg?component'
-import _LanguagesIcon from './icons/languages.svg?component'
-import _LeftArrowIcon from './icons/left-arrow.svg?component'
-import _LibraryIcon from './icons/library.svg?component'
-import _LightBulbIcon from './icons/light-bulb.svg?component'
-import _LinkIcon from './icons/link.svg?component'
-import _ListIcon from './icons/list.svg?component'
-import _ListEndIcon from './icons/list-end.svg?component'
-import _LockIcon from './icons/lock.svg?component'
-import _LockOpenIcon from './icons/lock-open.svg?component'
-import _LogInIcon from './icons/log-in.svg?component'
-import _LogOutIcon from './icons/log-out.svg?component'
-import _MailIcon from './icons/mail.svg?component'
-import _ManageIcon from './icons/manage.svg?component'
-import _MaximizeIcon from './icons/maximize.svg?component'
-import _MessageIcon from './icons/message.svg?component'
-import _MicrophoneIcon from './icons/microphone.svg?component'
-import _MinimizeIcon from './icons/minimize.svg?component'
-import _MinusIcon from './icons/minus.svg?component'
-import _MonitorIcon from './icons/monitor.svg?component'
-import _MonitorSmartphoneIcon from './icons/monitor-smartphone.svg?component'
-import _MoonIcon from './icons/moon.svg?component'
-import _MoreHorizontalIcon from './icons/more-horizontal.svg?component'
-import _MoreVerticalIcon from './icons/more-vertical.svg?component'
-import _NewspaperIcon from './icons/newspaper.svg?component'
-import _OmorphiaIcon from './icons/omorphia.svg?component'
-import _OrganizationIcon from './icons/organization.svg?component'
-import _PackageIcon from './icons/package.svg?component'
-import _PackageOpenIcon from './icons/package-open.svg?component'
-import _PackageClosedIcon from './icons/package-closed.svg?component'
-import _PaintBrushIcon from './icons/paintbrush.svg?component'
-import _PlayIcon from './icons/play.svg?component'
-import _PlugIcon from './icons/plug.svg?component'
-import _PlusIcon from './icons/plus.svg?component'
-import _RadioButtonIcon from './icons/radio-button.svg?component'
-import _RadioButtonChecked from './icons/radio-button-checked.svg?component'
-import _ReceiptTextIcon from './icons/receipt-text.svg?component'
-import _ReplyIcon from './icons/reply.svg?component'
-import _ReportIcon from './icons/report.svg?component'
-import _RestoreIcon from './icons/restore.svg?component'
-import _RightArrowIcon from './icons/right-arrow.svg?component'
-import _SaveIcon from './icons/save.svg?component'
-import _ScaleIcon from './icons/scale.svg?component'
-import _ScanEyeIcon from './icons/scan-eye.svg?component'
-import _SearchIcon from './icons/search.svg?component'
-import _SendIcon from './icons/send.svg?component'
-import _ServerIcon from './icons/server.svg?component'
-import _SettingsIcon from './icons/settings.svg?component'
-import _ShareIcon from './icons/share.svg?component'
-import _ShieldIcon from './icons/shield.svg?component'
-import _SlashIcon from './icons/slash.svg?component'
-import _SortAscendingIcon from './icons/sort-asc.svg?component'
-import _SortDescendingIcon from './icons/sort-desc.svg?component'
-import _SparklesIcon from './icons/sparkles.svg?component'
-import _SpinnerIcon from './icons/spinner.svg?component'
-import _StarIcon from './icons/star.svg?component'
-import _StopCircleIcon from './icons/stop-circle.svg?component'
-import _SunIcon from './icons/sun.svg?component'
-import _SunriseIcon from './icons/sunrise.svg?component'
-import _TagIcon from './icons/tag.svg?component'
-import _TagsIcon from './icons/tags.svg?component'
-import _TerminalSquareIcon from './icons/terminal-square.svg?component'
-import _TransferIcon from './icons/transfer.svg?component'
-import _TrashIcon from './icons/trash.svg?component'
-import _UndoIcon from './icons/undo.svg?component'
-import _RedoIcon from './icons/redo.svg?component'
-import _UnknownIcon from './icons/unknown.svg?component'
-import _UnknownDonationIcon from './icons/unknown-donation.svg?component'
-import _UpdatedIcon from './icons/updated.svg?component'
-import _UnlinkIcon from './icons/unlink.svg?component'
-import _UnplugIcon from './icons/unplug.svg?component'
-import _UploadIcon from './icons/upload.svg?component'
-import _UserIcon from './icons/user.svg?component'
-import _UserPlusIcon from './icons/user-plus.svg?component'
-import _UserXIcon from './icons/user-x.svg?component'
-import _UsersIcon from './icons/users.svg?component'
-import _VersionIcon from './icons/version.svg?component'
-import _WikiIcon from './icons/wiki.svg?component'
-import _WindowIcon from './icons/window.svg?component'
-import _WrenchIcon from './icons/wrench.svg?component'
-import _XIcon from './icons/x.svg?component'
-import _XCircleIcon from './icons/x-circle.svg?component'
-import _ZoomInIcon from './icons/zoom-in.svg?component'
-import _ZoomOutIcon from './icons/zoom-out.svg?component'
-import _CubeIcon from './icons/cube.svg?component'
-import _CloudIcon from './icons/cloud.svg?component'
-import _CogIcon from './icons/cog.svg?component'
-import _CPUIcon from './icons/cpu.svg?component'
-import _DBIcon from './icons/db.svg?component'
-import _LoaderIcon from './icons/loader.svg?component'
-import _ImportIcon from './icons/import.svg?component'
-import _TimerIcon from './icons/timer.svg?component'
-
-// Editor Icons
-import _BoldIcon from './icons/bold.svg?component'
-import _ItalicIcon from './icons/italic.svg?component'
-import _UnderlineIcon from './icons/underline.svg?component'
-import _StrikethroughIcon from './icons/strikethrough.svg?component'
-import _ListBulletedIcon from './icons/list-bulleted.svg?component'
-import _ListOrderedIcon from './icons/list-ordered.svg?component'
-import _TextQuoteIcon from './icons/text-quote.svg?component'
-import _Heading1Icon from './icons/heading-1.svg?component'
-import _Heading2Icon from './icons/heading-2.svg?component'
-import _Heading3Icon from './icons/heading-3.svg?component'
-
-import './omorphia.scss'
+import _YouTubeGaming from './external/youtubegaming.svg?component'
+import _YouTubeShortsIcon from './external/youtubeshorts.svg?component'
+// Tag icon helpers - import maps from generated-icons
+import type { IconComponent } from './generated-icons'
+import { categoryIconMap, loaderIconMap } from './generated-icons'
+import _DoneIllustration from './illustrations/done.svg?component'
+import _EmptyIllustration from './illustrations/empty.svg?component'
+import _EmptyInboxIllustration from './illustrations/empty-inbox.svg?component'
+import _ErrorIllustration from './illustrations/error.svg?component'
+import _NoConnectionIllustration from './illustrations/no-connection.svg?component'
+import _NoCreditCardIllustration from './illustrations/no-credit-card.svg?component'
+import _NoDocumentsIllustration from './illustrations/no-documents.svg?component'
+import _NoGPSIllustration from './illustrations/no-gps.svg?component'
+import _NoImagesIllustration from './illustrations/no-images.svg?component'
+import _NoItemsCartIllustration from './illustrations/no-items-cart.svg?component'
+import _NoMessagesIllustration from './illustrations/no-messages.svg?component'
+import _NoSearchResultIllustration from './illustrations/no-search-result.svg?component'
+import _NoTasksIllustration from './illustrations/no-tasks.svg?component'
 
 export const ModrinthIcon = _ModrinthIcon
+export const BrowserWindowSuccessIllustration = _BrowserWindowSuccessIllustration
 export const FourOhFourNotFound = _FourOhFourNotFound
 export const ModrinthPlusIcon = _ModrinthPlusIcon
-export const SSODiscordIcon = _SSODiscordIcon
-export const SSOGitHubIcon = _SSOGitHubIcon
-export const SSOGitLabIcon = _SSOGitLabIcon
-export const SSOGoogleIcon = _SSOGoogleIcon
-export const SSOMicrosoftIcon = _SSOMicrosoftIcon
-export const SSOSteamIcon = _SSOSteamIcon
+export const AngryRinthbot = _AngryRinthbot
+export const AnnoyedRinthbot = _AnnoyedRinthbot
+export const ConfusedRinthbot = _ConfusedRinthbot
+export const ExcitedRinthbot = _ExcitedRinthbot
+export const LaughingRinthbot = _LaughingRinthbot
+export const SadRinthbot = _SadRinthbot
+export const SleepingRinthbot = _SleepingRinthbot
+export const SobbingRinthbot = _SobbingRinthbot
+export const ThinkingRinthbot = _ThinkingRinthbot
+export const WavingRinthbot = _WavingRinthbot
+export const PayPalColorIcon = _PayPalColorIcon
+export const VenmoColorIcon = _VenmoColorIcon
+export const DiscordColorIcon = _DiscordColorIcon
+export const GitHubColorIcon = _GitHubColorIcon
+export const GitLabColorIcon = _GitLabColorIcon
+export const GoogleColorIcon = _GoogleColorIcon
+export const MicrosoftColorIcon = _MicrosoftColorIcon
+export const SteamColorIcon = _SteamColorIcon
 export const AppleIcon = _AppleIcon
+export const BlueskyIcon = _BlueskyIcon
 export const BuyMeACoffeeIcon = _BuyMeACoffeeIcon
+export const GithubIcon = _GithubIcon
+export const CurseForgeIcon = _CurseForgeIcon
 export const DiscordIcon = _DiscordIcon
+export const FacebookIcon = _FacebookIcon
+export const FlathubIcon = _FlathubIcon
+export const InstagramIcon = _InstagramIcon
+export const SnapchatIcon = _SnapchatIcon
+export const ReelsIcon = _ReelsIcon
+export const TikTokIcon = _TikTokIcon
+export const TwitchIcon = _TwitchIcon
+export const ThreadsIcon = _ThreadsIcon
 export const KoFiIcon = _KoFiIcon
 export const MastodonIcon = _MastodonIcon
 export const OpenCollectiveIcon = _OpenCollectiveIcon
 export const PatreonIcon = _PatreonIcon
 export const PayPalIcon = _PayPalIcon
 export const RedditIcon = _RedditIcon
+export const TumblrIcon = _TumblrIcon
 export const TwitterIcon = _TwitterIcon
 export const WindowsIcon = _WindowsIcon
 export const YouTubeIcon = _YouTubeIcon
-export const PyroIcon = _PyroIcon
-export const AlignLeftIcon = _AlignLeftIcon
-export const ArchiveIcon = _ArchiveIcon
-export const ArrowBigUpDashIcon = _ArrowBigUpDashIcon
-export const AsteriskIcon = _AsteriskIcon
-export const BanIcon = _BanIcon
-export const BellIcon = _BellIcon
-export const BellRingIcon = _BellRingIcon
-export const BookIcon = _BookIcon
-export const BookTextIcon = _BookTextIcon
-export const BookmarkIcon = _BookmarkIcon
-export const BoxIcon = _BoxIcon
-export const BoxImportIcon = _BoxImportIcon
-export const BracesIcon = _BracesIcon
-export const CalendarIcon = _CalendarIcon
-export const ChartIcon = _ChartIcon
-export const CheckIcon = _CheckIcon
-export const CheckCheckIcon = _CheckCheckIcon
-export const CheckCircleIcon = _CheckCircleIcon
-export const ChevronLeftIcon = _ChevronLeftIcon
-export const ChevronRightIcon = _ChevronRightIcon
-export const ClearIcon = _ClearIcon
-export const ClientIcon = _ClientIcon
-export const ClipboardCopyIcon = _ClipboardCopyIcon
-export const CodeIcon = _CodeIcon
-export const CoffeeIcon = _CoffeeIcon
-export const CoinsIcon = _CoinsIcon
-export const CollectionIcon = _CollectionIcon
-export const CompassIcon = _CompassIcon
-export const ContractIcon = _ContractIcon
-export const CopyIcon = _CopyIcon
-export const CopyrightIcon = _CopyrightIcon
-export const CrownIcon = _CrownIcon
-export const CurrencyIcon = _CurrencyIcon
-export const DashboardIcon = _DashboardIcon
-export const DownloadIcon = _DownloadIcon
-export const DropdownIcon = _DropdownIcon
-export const EditIcon = _EditIcon
-export const ExitIcon = _XIcon
-export const ExpandIcon = _ExpandIcon
-export const ExternalIcon = _ExternalIcon
-export const EyeIcon = _EyeIcon
-export const EyeOffIcon = _EyeOffIcon
-export const FileIcon = _FileIcon
-export const FileTextIcon = _FileTextIcon
-export const FilterIcon = _FilterIcon
-export const FilterXIcon = _FilterXIcon
-export const FolderOpenIcon = _FolderOpenIcon
-export const FolderSearchIcon = _FolderSearchIcon
-export const GapIcon = _GapIcon
-export const GaugeIcon = _GaugeIcon
-export const GameIcon = _GameIcon
-export const GitHubIcon = _GitHubIcon
-export const GlassesIcon = _GlassesIcon
-export const GlobeIcon = _GlobeIcon
-export const GridIcon = _GridIcon
-export const HamburgerIcon = _HamburgerIcon
-export const HammerIcon = _HammerIcon
-export const HashIcon = _HashIcon
-export const HeartIcon = _HeartIcon
-export const HeartHandshakeIcon = _HeartHandshakeIcon
-export const HistoryIcon = _HistoryIcon
-export const HomeIcon = _HomeIcon
-export const ImageIcon = _ImageIcon
-export const InfoIcon = _InfoIcon
-export const IssuesIcon = _IssuesIcon
-export const KeyIcon = _KeyIcon
-export const LanguagesIcon = _LanguagesIcon
-export const LeftArrowIcon = _LeftArrowIcon
-export const LibraryIcon = _LibraryIcon
-export const LightBulbIcon = _LightBulbIcon
-export const LinkIcon = _LinkIcon
-export const ListIcon = _ListIcon
-export const ListEndIcon = _ListEndIcon
-export const LockIcon = _LockIcon
-export const LockOpenIcon = _LockOpenIcon
-export const LogInIcon = _LogInIcon
-export const LogOutIcon = _LogOutIcon
-export const MailIcon = _MailIcon
-export const ManageIcon = _ManageIcon
-export const MaximizeIcon = _MaximizeIcon
-export const MessageIcon = _MessageIcon
-export const MicrophoneIcon = _MicrophoneIcon
-export const MinimizeIcon = _MinimizeIcon
-export const MinusIcon = _MinusIcon
-export const MonitorIcon = _MonitorIcon
-export const MonitorSmartphoneIcon = _MonitorSmartphoneIcon
-export const MoonIcon = _MoonIcon
-export const MoreHorizontalIcon = _MoreHorizontalIcon
-export const MoreVerticalIcon = _MoreVerticalIcon
-export const NewspaperIcon = _NewspaperIcon
-export const OmorphiaIcon = _OmorphiaIcon
-export const OrganizationIcon = _OrganizationIcon
-export const PackageIcon = _PackageIcon
-export const PackageOpenIcon = _PackageOpenIcon
-export const PackageClosedIcon = _PackageClosedIcon
-export const PaintBrushIcon = _PaintBrushIcon
-export const PlayIcon = _PlayIcon
-export const PlugIcon = _PlugIcon
-export const PlusIcon = _PlusIcon
-export const RadioButtonIcon = _RadioButtonIcon
-export const RadioButtonChecked = _RadioButtonChecked
-export const ReceiptTextIcon = _ReceiptTextIcon
-export const ReplyIcon = _ReplyIcon
-export const ReportIcon = _ReportIcon
-export const RestoreIcon = _RestoreIcon
-export const RightArrowIcon = _RightArrowIcon
-export const SaveIcon = _SaveIcon
-export const ScaleIcon = _ScaleIcon
-export const ScanEyeIcon = _ScanEyeIcon
-export const SearchIcon = _SearchIcon
-export const SendIcon = _SendIcon
-export const ServerIcon = _ServerIcon
-export const SettingsIcon = _SettingsIcon
-export const ShareIcon = _ShareIcon
-export const ShieldIcon = _ShieldIcon
-export const SlashIcon = _SlashIcon
-export const SortAscendingIcon = _SortAscendingIcon
-export const SortDescendingIcon = _SortDescendingIcon
-export const SparklesIcon = _SparklesIcon
-export const SpinnerIcon = _SpinnerIcon
-export const StarIcon = _StarIcon
-export const StopCircleIcon = _StopCircleIcon
-export const SunIcon = _SunIcon
-export const SunriseIcon = _SunriseIcon
-export const TagIcon = _TagIcon
-export const TagsIcon = _TagsIcon
-export const TerminalSquareIcon = _TerminalSquareIcon
-export const TransferIcon = _TransferIcon
-export const TrashIcon = _TrashIcon
-export const UndoIcon = _UndoIcon
-export const RedoIcon = _RedoIcon
-export const UnknownIcon = _UnknownIcon
-export const UnknownDonationIcon = _UnknownDonationIcon
-export const UpdatedIcon = _UpdatedIcon
-export const UnlinkIcon = _UnlinkIcon
-export const UnplugIcon = _UnplugIcon
-export const UploadIcon = _UploadIcon
-export const UserIcon = _UserIcon
-export const UserPlusIcon = _UserPlusIcon
-export const UserXIcon = _UserXIcon
-export const UsersIcon = _UsersIcon
-export const VersionIcon = _VersionIcon
-export const WikiIcon = _WikiIcon
-export const WindowIcon = _WindowIcon
-export const WrenchIcon = _WrenchIcon
-export const XIcon = _XIcon
-export const XCircleIcon = _XCircleIcon
-export const ZoomInIcon = _ZoomInIcon
-export const ZoomOutIcon = _ZoomOutIcon
-export const BoldIcon = _BoldIcon
-export const ItalicIcon = _ItalicIcon
-export const UnderlineIcon = _UnderlineIcon
-export const StrikethroughIcon = _StrikethroughIcon
-export const ListBulletedIcon = _ListBulletedIcon
-export const ListOrderedIcon = _ListOrderedIcon
-export const TextQuoteIcon = _TextQuoteIcon
-export const Heading1Icon = _Heading1Icon
-export const Heading2Icon = _Heading2Icon
-export const Heading3Icon = _Heading3Icon
-export const CubeIcon = _CubeIcon
-export const CloudIcon = _CloudIcon
-export const CogIcon = _CogIcon
-export const CPUIcon = _CPUIcon
-export const DBIcon = _DBIcon
-export const LoaderIcon = _LoaderIcon
-export const ImportIcon = _ImportIcon
-export const CardIcon = _CardIcon
-export const TimerIcon = _TimerIcon
+export const YouTubeGaming = _YouTubeGaming
+export const YouTubeShortsIcon = _YouTubeShortsIcon
+export const VenmoIcon = _VenmoIcon
+export const PolygonIcon = _PolygonIcon
+export const USDCColorIcon = _USDCColorIcon
+export const VisaIcon = _VisaIcon
+export const IntercomBubbleIcon = _IntercomBubbleIcon
+export const MinecraftServerIcon = _MinecraftServerIcon
+
+export * from './generated-icons'
+export { default as ClassicPlayerModel } from './models/classic-player.gltf?url'
+export { default as SlimPlayerModel } from './models/slim-player.gltf?url'
+
+export const DoneIllustration = _DoneIllustration
+export const EmptyIllustration = _EmptyIllustration
+export const EmptyInboxIllustration = _EmptyInboxIllustration
+export const ErrorIllustration = _ErrorIllustration
+export const NoConnectionIllustration = _NoConnectionIllustration
+export const NoCreditCardIllustration = _NoCreditCardIllustration
+export const NoDocumentsIllustration = _NoDocumentsIllustration
+export const NoGPSIllustration = _NoGPSIllustration
+export const NoImagesIllustration = _NoImagesIllustration
+export const NoItemsCartIllustration = _NoItemsCartIllustration
+export const NoMessagesIllustration = _NoMessagesIllustration
+export const NoSearchResultIllustration = _NoSearchResultIllustration
+export const NoTasksIllustration = _NoTasksIllustration
+
+export function getCategoryIcon(categoryName: string): IconComponent | undefined {
+	if (!categoryName) {
+		return undefined
+	}
+	return categoryIconMap[categoryName.toLowerCase()]
+}
+
+export function getLoaderIcon(loaderName: string): IconComponent | undefined {
+	if (!loaderName) {
+		return undefined
+	}
+	return loaderIconMap[loaderName.toLowerCase()]
+}
+
+// will try loader first, then category
+export function getTagIcon(tagName: string): IconComponent | undefined {
+	if (!tagName) {
+		return undefined
+	}
+	return getLoaderIcon(tagName) ?? getCategoryIcon(tagName)
+}
+
+export const SERVER_CATEGORY_ICON_MAP: Record<string, string> = {
+	'adventure-mode': 'compass',
+	anarchy: 'skull',
+	'battle-royale': 'target',
+	bedwars: 'bed-double',
+	bosses: 'crown',
+	classes: 'badge',
+	competitive: 'trophy',
+	'creative-mode': 'palette',
+	'creator-community': 'clapperboard',
+	crossplay: 'gamepad-2',
+	'custom-content': 'blocks',
+	dungeons: 'castle',
+	factions: 'flag',
+	gens: 'pickaxe',
+	'hardcore-mode': 'heart-crack',
+	'keep-inventory': 'backpack',
+	kitpvp: 'sword',
+	lifesteal: 'heart-pulse',
+	media: 'film',
+	microgames: 'grid-3x3',
+	minigames: 'dices',
+	mmo: 'globe',
+	network: 'network',
+	'offline-mode': 'wifi-off',
+	oneblock: 'square',
+	op: 'zap',
+	parkour: 'footprints',
+	'personal-worlds': 'house',
+	plots: 'map-pinned',
+	pokemon: 'paw-print',
+	prison: 'lock',
+	pve: 'shield',
+	pvp: 'swords',
+	questing: 'scroll-text',
+	racing: 'gauge',
+	'recording-smp': 'camera',
+	roleplay: 'theater',
+	rpg: 'wand-sparkles',
+	skyblock: 'cloud',
+	smp: 'users',
+	'survival-mode': 'tree-pine',
+	teams: 'handshake',
+	technical: 'terminal',
+	towns: 'building-2',
+	whitelisted: 'badge-check',
+	'world-resets': 'refresh-ccw',
+}

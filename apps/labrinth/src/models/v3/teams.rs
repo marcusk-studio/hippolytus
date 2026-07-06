@@ -1,19 +1,13 @@
-use super::ids::Base62Id;
 use crate::bitflags_serde_impl;
+use crate::models::ids::TeamId;
 use crate::models::users::User;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-/// The ID of a team
-#[derive(Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(from = "Base62Id")]
-#[serde(into = "Base62Id")]
-pub struct TeamId(pub u64);
-
 pub const DEFAULT_ROLE: &str = "Member";
 
 /// A team of users who control a project
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
 pub struct Team {
     /// The id of the team
     pub id: TeamId,
@@ -39,6 +33,23 @@ bitflags::bitflags! {
 
 bitflags_serde_impl!(ProjectPermissions, u64);
 
+impl utoipa::PartialSchema for ProjectPermissions {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        u64::schema()
+    }
+}
+
+impl utoipa::ToSchema for ProjectPermissions {
+    fn schemas(
+        schemas: &mut Vec<(
+            String,
+            utoipa::openapi::RefOr<utoipa::openapi::schema::Schema>,
+        )>,
+    ) {
+        u64::schemas(schemas);
+    }
+}
+
 impl Default for ProjectPermissions {
     fn default() -> ProjectPermissions {
         ProjectPermissions::empty()
@@ -48,23 +59,25 @@ impl Default for ProjectPermissions {
 impl ProjectPermissions {
     pub fn get_permissions_by_role(
         role: &crate::models::users::Role,
-        project_team_member: &Option<crate::database::models::TeamMember>, // team member of the user in the project
-        organization_team_member: &Option<crate::database::models::TeamMember>, // team member of the user in the organization
+        project_team_member: &Option<crate::database::models::DBTeamMember>, // team member of the user in the project
+        organization_team_member: &Option<
+            crate::database::models::DBTeamMember,
+        >, // team member of the user in the organization
     ) -> Option<Self> {
         if role.is_admin() {
             return Some(ProjectPermissions::all());
         }
 
-        if let Some(member) = project_team_member {
-            if member.accepted {
-                return Some(member.permissions);
-            }
+        if let Some(member) = project_team_member
+            && member.accepted
+        {
+            return Some(member.permissions);
         }
 
-        if let Some(member) = organization_team_member {
-            if member.accepted {
-                return Some(member.permissions);
-            }
+        if let Some(member) = organization_team_member
+            && member.accepted
+        {
+            return Some(member.permissions);
         }
 
         if role.is_mod() {
@@ -96,6 +109,23 @@ bitflags::bitflags! {
 
 bitflags_serde_impl!(OrganizationPermissions, u64);
 
+impl utoipa::PartialSchema for OrganizationPermissions {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        u64::schema()
+    }
+}
+
+impl utoipa::ToSchema for OrganizationPermissions {
+    fn schemas(
+        schemas: &mut Vec<(
+            String,
+            utoipa::openapi::RefOr<utoipa::openapi::schema::Schema>,
+        )>,
+    ) {
+        u64::schemas(schemas);
+    }
+}
+
 impl Default for OrganizationPermissions {
     fn default() -> OrganizationPermissions {
         OrganizationPermissions::NONE
@@ -105,16 +135,16 @@ impl Default for OrganizationPermissions {
 impl OrganizationPermissions {
     pub fn get_permissions_by_role(
         role: &crate::models::users::Role,
-        team_member: &Option<crate::database::models::TeamMember>,
+        team_member: &Option<crate::database::models::DBTeamMember>,
     ) -> Option<Self> {
         if role.is_admin() {
             return Some(OrganizationPermissions::all());
         }
 
-        if let Some(member) = team_member {
-            if member.accepted {
-                return member.organization_permissions;
-            }
+        if let Some(member) = team_member
+            && member.accepted
+        {
+            return member.organization_permissions;
         }
         if role.is_mod() {
             return Some(
@@ -127,7 +157,7 @@ impl OrganizationPermissions {
 }
 
 /// A member of a team
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, utoipa::ToSchema)]
 pub struct TeamMember {
     /// The ID of the team this team member is a member of
     pub team_id: TeamId,
@@ -160,8 +190,8 @@ pub struct TeamMember {
 
 impl TeamMember {
     pub fn from(
-        data: crate::database::models::team_item::TeamMember,
-        user: crate::database::models::User,
+        data: crate::database::models::team_item::DBTeamMember,
+        user: crate::database::models::DBUser,
         override_permissions: bool,
     ) -> Self {
         let user: User = user.into();
@@ -172,7 +202,7 @@ impl TeamMember {
     // if already available.
     // (Avoids a db query in some cases)
     pub fn from_model(
-        data: crate::database::models::team_item::TeamMember,
+        data: crate::database::models::team_item::DBTeamMember,
         user: crate::models::users::User,
         override_permissions: bool,
     ) -> Self {

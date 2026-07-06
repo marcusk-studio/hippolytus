@@ -1,5 +1,6 @@
 use crate::validate::{
-    filter_out_packs, SupportedGameVersions, ValidationError, ValidationResult,
+    SupportedGameVersions, ValidationError, ValidationResult,
+    validate_pack_formats,
 };
 use chrono::DateTime;
 use std::io::Cursor;
@@ -18,7 +19,7 @@ impl super::Validator for QuiltValidator {
 
     fn get_supported_game_versions(&self) -> SupportedGameVersions {
         SupportedGameVersions::PastDate(
-            DateTime::from_timestamp(1646070100, 0).unwrap(),
+            DateTime::from_timestamp_secs(1646070100).unwrap(),
         )
     }
 
@@ -34,8 +35,6 @@ impl super::Validator for QuiltValidator {
             ));
         }
 
-        filter_out_packs(archive)?;
-
-        Ok(ValidationResult::Pass)
+        Ok(validate_pack_formats(archive))
     }
 }

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{routes::v2_reroute, search::ResultSearchProject};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, utoipa::ToSchema)]
 pub struct LegacySearchResults {
     pub hits: Vec<LegacyResultSearchProject>,
     pub offset: usize,
@@ -11,12 +11,18 @@ pub struct LegacySearchResults {
     pub total_hits: usize,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, utoipa::ToSchema)]
 pub struct LegacyResultSearchProject {
     pub project_id: String,
     pub project_type: String,
     pub slug: Option<String>,
     pub author: String,
+    #[serde(default)]
+    pub author_id: Option<String>,
+    #[serde(default)]
+    pub organization: Option<String>,
+    #[serde(default)]
+    pub organization_id: Option<String>,
     pub title: String,
     pub description: String,
     pub categories: Vec<String>,
@@ -43,35 +49,33 @@ impl LegacyResultSearchProject {
     pub fn from(result_search_project: ResultSearchProject) -> Self {
         let mut categories = result_search_project.categories;
         categories.extend(result_search_project.loaders.clone());
-        if categories.contains(&"mrpack".to_string()) {
-            if let Some(mrpack_loaders) = result_search_project
+        if categories.contains(&"mrpack".to_string())
+            && let Some(mrpack_loaders) = result_search_project
                 .project_loader_fields
                 .get("mrpack_loaders")
-            {
-                categories.extend(
-                    mrpack_loaders
-                        .iter()
-                        .filter_map(|c| c.as_str())
-                        .map(String::from),
-                );
-                categories.retain(|c| c != "mrpack");
-            }
+        {
+            categories.extend(
+                mrpack_loaders
+                    .iter()
+                    .filter_map(|c| c.as_str())
+                    .map(String::from),
+            );
+            categories.retain(|c| c != "mrpack");
         }
         let mut display_categories = result_search_project.display_categories;
         display_categories.extend(result_search_project.loaders);
-        if display_categories.contains(&"mrpack".to_string()) {
-            if let Some(mrpack_loaders) = result_search_project
+        if display_categories.contains(&"mrpack".to_string())
+            && let Some(mrpack_loaders) = result_search_project
                 .project_loader_fields
                 .get("mrpack_loaders")
-            {
-                categories.extend(
-                    mrpack_loaders
-                        .iter()
-                        .filter_map(|c| c.as_str())
-                        .map(String::from),
-                );
-                display_categories.retain(|c| c != "mrpack");
-            }
+        {
+            categories.extend(
+                mrpack_loaders
+                    .iter()
+                    .filter_map(|c| c.as_str())
+                    .map(String::from),
+            );
+            display_categories.retain(|c| c != "mrpack");
         }
 
         // Sort then remove duplicates
@@ -102,28 +106,20 @@ impl LegacyResultSearchProject {
 
         let project_loader_fields =
             result_search_project.project_loader_fields.clone();
-        let get_one_bool_loader_field = |key: &str| {
+        let get_one_string_loader_field = |key: &str| {
             project_loader_fields
                 .get(key)
-                .cloned()
-                .unwrap_or_default()
+                .map_or(&[][..], |values| values.as_slice())
                 .first()
-                .and_then(|s| s.as_bool())
+                .and_then(|s| s.as_str())
         };
 
-        let singleplayer = get_one_bool_loader_field("singleplayer");
-        let client_only =
-            get_one_bool_loader_field("client_only").unwrap_or(false);
-        let server_only =
-            get_one_bool_loader_field("server_only").unwrap_or(false);
-        let client_and_server = get_one_bool_loader_field("client_and_server");
+        let environment =
+            get_one_string_loader_field("environment").unwrap_or("unknown");
 
         let (client_side, server_side) =
-            v2_reroute::convert_side_types_v2_bools(
-                singleplayer,
-                client_only,
-                server_only,
-                client_and_server,
+            v2_reroute::convert_v3_environment_to_v2_side_types(
+                environment,
                 Some(&*og_project_type),
             );
         let client_side = client_side.to_string();
@@ -149,6 +145,9 @@ impl LegacyResultSearchProject {
             project_id: result_search_project.project_id,
             slug: result_search_project.slug,
             author: result_search_project.author,
+            author_id: result_search_project.author_id,
+            organization: result_search_project.organization,
+            organization_id: result_search_project.organization_id,
             title: result_search_project.name,
             description: result_search_project.summary,
             display_categories,
@@ -169,15 +168,20 @@ impl LegacySearchResults {
     pub fn from(search_results: crate::search::SearchResults) -> Self {
         let limit = search_results.hits_per_page;
         let offset = (search_results.page - 1) * limit;
+        let crate::search::SearchResults {
+            hits,
+            page: _,
+            hits_per_page: _,
+            total_hits,
+        } = search_results;
         Self {
-            hits: search_results
-                .hits
+            hits: hits
                 .into_iter()
                 .map(LegacyResultSearchProject::from)
                 .collect(),
             offset,
             limit,
-            total_hits: search_results.total_hits,
+            total_hits,
         }
     }
 }

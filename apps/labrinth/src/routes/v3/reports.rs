@@ -1,38 +1,40 @@
 use crate::auth::{check_is_moderator_from_headers, get_user_from_headers};
 use crate::database;
+use crate::database::PgPool;
 use crate::database::models::image_item;
+use crate::database::models::notification_item::NotificationBuilder;
 use crate::database::models::thread_item::{
     ThreadBuilder, ThreadMessageBuilder,
 };
 use crate::database::redis::RedisPool;
 use crate::models::ids::ImageId;
-use crate::models::ids::{
-    base62_impl::parse_base62, ProjectId, UserId, VersionId,
-};
+use crate::models::ids::{ProjectId, VersionId};
 use crate::models::images::{Image, ImageContext};
+use crate::models::notifications::NotificationBody;
 use crate::models::pats::Scopes;
 use crate::models::reports::{ItemType, Report};
 use crate::models::threads::{MessageBody, ThreadType};
 use crate::queue::session::AuthQueue;
 use crate::routes::ApiError;
 use crate::util::img;
-use actix_web::{web, HttpRequest, HttpResponse};
+use crate::util::routes::read_typed_from_payload;
+use actix_web::{HttpRequest, HttpResponse, delete, get, patch, post, web};
+use ariadne::ids::UserId;
+use ariadne::ids::base62_impl::parse_base62;
 use chrono::Utc;
-use futures::StreamExt;
 use serde::Deserialize;
-use sqlx::PgPool;
 use validator::Validate;
 
-pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg.route("report", web::post().to(report_create));
-    cfg.route("report", web::get().to(reports));
-    cfg.route("reports", web::get().to(reports_get));
-    cfg.route("report/{id}", web::get().to(report_get));
-    cfg.route("report/{id}", web::patch().to(report_edit));
-    cfg.route("report/{id}", web::delete().to(report_delete));
+pub fn config(cfg: &mut actix_web::web::ServiceConfig) {
+    cfg.service(report_create_route)
+        .service(reports_route)
+        .service(reports_get_route)
+        .service(report_get_route)
+        .service(report_edit_route)
+        .service(report_delete_route);
 }
 
-#[derive(Deserialize, Validate)]
+#[derive(Deserialize, Validate, utoipa::ToSchema)]
 pub struct CreateReport {
     pub report_type: String,
     pub item_id: String,
@@ -42,6 +44,22 @@ pub struct CreateReport {
     #[validate(length(max = 10))]
     #[serde(default)]
     pub uploaded_images: Vec<ImageId>,
+}
+
+#[utoipa::path(
+	tag = "reports",
+	request_body = CreateReport,
+	responses((status = OK))
+)]
+#[post("/report")]
+pub async fn report_create_route(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    body: web::Payload,
+    redis: web::Data<RedisPool>,
+    session_queue: web::Data<AuthQueue>,
+) -> Result<HttpResponse, ApiError> {
+    report_create(req, pool, body, redis, session_queue).await
 }
 
 pub async fn report_create(
@@ -58,26 +76,18 @@ pub async fn report_create(
         &**pool,
         &redis,
         &session_queue,
-        Some(&[Scopes::REPORT_CREATE]),
+        Scopes::REPORT_CREATE,
     )
     .await?
     .1;
 
-    let mut bytes = web::BytesMut::new();
-    while let Some(item) = body.next().await {
-        bytes.extend_from_slice(&item.map_err(|_| {
-            ApiError::InvalidInput(
-                "Error while parsing request payload!".to_string(),
-            )
-        })?);
-    }
-    let new_report: CreateReport = serde_json::from_slice(bytes.as_ref())?;
+    let new_report: CreateReport = read_typed_from_payload(&mut body).await?;
 
     let id =
         crate::database::models::generate_report_id(&mut transaction).await?;
     let report_type = crate::database::models::categories::ReportType::get_id(
         &new_report.report_type,
-        &mut *transaction,
+        &mut transaction,
     )
     .await?
     .ok_or_else(|| {
@@ -87,7 +97,7 @@ pub async fn report_create(
         ))
     })?;
 
-    let mut report = crate::database::models::report_item::Report {
+    let mut report = crate::database::models::report_item::DBReport {
         id,
         report_type_id: report_type,
         project_id: None,
@@ -108,7 +118,7 @@ pub async fn report_create(
                 "SELECT EXISTS(SELECT 1 FROM mods WHERE id = $1)",
                 project_id.0 as i64
             )
-            .fetch_one(&mut *transaction)
+            .fetch_one(&mut transaction)
             .await?;
 
             if !result.exists.unwrap_or(false) {
@@ -128,7 +138,7 @@ pub async fn report_create(
                 "SELECT EXISTS(SELECT 1 FROM versions WHERE id = $1)",
                 version_id.0 as i64
             )
-            .fetch_one(&mut *transaction)
+            .fetch_one(&mut transaction)
             .await?;
 
             if !result.exists.unwrap_or(false) {
@@ -147,7 +157,7 @@ pub async fn report_create(
                 "SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)",
                 user_id.0 as i64
             )
-            .fetch_one(&mut *transaction)
+            .fetch_one(&mut transaction)
             .await?;
 
             if !result.exists.unwrap_or(false) {
@@ -163,7 +173,7 @@ pub async fn report_create(
             return Err(ApiError::InvalidInput(format!(
                 "Invalid report item type: {}",
                 new_report.item_type.as_str()
-            )))
+            )));
         }
     }
 
@@ -171,7 +181,7 @@ pub async fn report_create(
 
     for image_id in new_report.uploaded_images {
         if let Some(db_image) =
-            image_item::Image::get(image_id.into(), &mut *transaction, &redis)
+            image_item::DBImage::get(image_id.into(), &mut transaction, &redis)
                 .await?
         {
             let image: Image = db_image.into();
@@ -179,8 +189,7 @@ pub async fn report_create(
                 || image.context.inner_id().is_some()
             {
                 return Err(ApiError::InvalidInput(format!(
-                    "Image {} is not unused and in the 'report' context",
-                    image_id
+                    "Image {image_id} is not unused and in the 'report' context"
                 )));
             }
 
@@ -193,14 +202,13 @@ pub async fn report_create(
                 id.0 as i64,
                 image_id.0 as i64
             )
-            .execute(&mut *transaction)
+            .execute(&mut transaction)
             .await?;
 
-            image_item::Image::clear_cache(image.id.into(), &redis).await?;
+            image_item::DBImage::clear_cache(image.id.into(), &redis).await?;
         } else {
             return Err(ApiError::InvalidInput(format!(
-                "Image {} could not be found",
-                image_id
+                "Image {image_id} could not be found"
             )));
         }
     }
@@ -212,6 +220,15 @@ pub async fn report_create(
         report_id: Some(report.id),
     }
     .insert(&mut transaction)
+    .await?;
+
+    // Notify the reporter that the report has been submitted
+    NotificationBuilder {
+        body: NotificationBody::ReportSubmitted {
+            report_id: id.into(),
+        },
+    }
+    .insert(current_user.id.into(), &mut transaction, &redis)
     .await?;
 
     transaction.commit().await?;
@@ -232,23 +249,45 @@ pub async fn report_create(
 #[derive(Deserialize)]
 pub struct ReportsRequestOptions {
     #[serde(default = "default_count")]
-    pub count: i16,
+    pub count: u16,
+    #[serde(default)]
+    pub offset: u32,
     #[serde(default = "default_all")]
     pub all: bool,
 }
 
-fn default_count() -> i16 {
+fn default_count() -> u16 {
     100
 }
 fn default_all() -> bool {
     true
 }
 
+#[utoipa::path(
+	tag = "reports",
+	params(
+		("count" = Option<u16>, Query),
+		("offset" = Option<u32>, Query),
+		("all" = Option<bool>, Query)
+	),
+	responses((status = OK))
+)]
+#[get("/report")]
+pub async fn reports_route(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    redis: web::Data<RedisPool>,
+    request_opts: web::Query<ReportsRequestOptions>,
+    session_queue: web::Data<AuthQueue>,
+) -> Result<HttpResponse, ApiError> {
+    reports(req, pool, redis, request_opts, session_queue).await
+}
+
 pub async fn reports(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     redis: web::Data<RedisPool>,
-    count: web::Query<ReportsRequestOptions>,
+    request_opts: web::Query<ReportsRequestOptions>,
     session_queue: web::Data<AuthQueue>,
 ) -> Result<HttpResponse, ApiError> {
     let user = get_user_from_headers(
@@ -256,26 +295,28 @@ pub async fn reports(
         &**pool,
         &redis,
         &session_queue,
-        Some(&[Scopes::REPORT_READ]),
+        Scopes::REPORT_READ,
     )
     .await?
     .1;
 
     use futures::stream::TryStreamExt;
 
-    let report_ids = if user.role.is_mod() && count.all {
+    let report_ids = if user.role.is_mod() && request_opts.all {
         sqlx::query!(
             "
             SELECT id FROM reports
             WHERE closed = FALSE
             ORDER BY created ASC
-            LIMIT $1;
+            OFFSET $2
+            LIMIT $1
             ",
-            count.count as i64
+            request_opts.count as i64,
+            request_opts.offset as i64
         )
         .fetch(&**pool)
-        .map_ok(|m| crate::database::models::ids::ReportId(m.id))
-        .try_collect::<Vec<crate::database::models::ids::ReportId>>()
+        .map_ok(|m| crate::database::models::ids::DBReportId(m.id))
+        .try_collect::<Vec<crate::database::models::ids::DBReportId>>()
         .await?
     } else {
         sqlx::query!(
@@ -283,22 +324,25 @@ pub async fn reports(
             SELECT id FROM reports
             WHERE closed = FALSE AND reporter = $1
             ORDER BY created ASC
-            LIMIT $2;
+            OFFSET $3
+            LIMIT $2
             ",
             user.id.0 as i64,
-            count.count as i64
+            request_opts.count as i64,
+            request_opts.offset as i64
         )
         .fetch(&**pool)
-        .map_ok(|m| crate::database::models::ids::ReportId(m.id))
-        .try_collect::<Vec<crate::database::models::ids::ReportId>>()
+        .map_ok(|m| crate::database::models::ids::DBReportId(m.id))
+        .try_collect::<Vec<crate::database::models::ids::DBReportId>>()
         .await?
     };
 
-    let query_reports = crate::database::models::report_item::Report::get_many(
-        &report_ids,
-        &**pool,
-    )
-    .await?;
+    let query_reports =
+        crate::database::models::report_item::DBReport::get_many(
+            &report_ids,
+            &**pool,
+        )
+        .await?;
 
     let mut reports: Vec<Report> = Vec::new();
 
@@ -314,6 +358,22 @@ pub struct ReportIds {
     pub ids: String,
 }
 
+#[utoipa::path(
+	tag = "reports",
+	params(("ids" = String, Query)),
+	responses((status = OK))
+)]
+#[get("/reports")]
+pub async fn reports_get_route(
+    req: HttpRequest,
+    ids: web::Query<ReportIds>,
+    pool: web::Data<PgPool>,
+    redis: web::Data<RedisPool>,
+    session_queue: web::Data<AuthQueue>,
+) -> Result<HttpResponse, ApiError> {
+    reports_get(req, ids, pool, redis, session_queue).await
+}
+
 pub async fn reports_get(
     req: HttpRequest,
     web::Query(ids): web::Query<ReportIds>,
@@ -321,24 +381,25 @@ pub async fn reports_get(
     redis: web::Data<RedisPool>,
     session_queue: web::Data<AuthQueue>,
 ) -> Result<HttpResponse, ApiError> {
-    let report_ids: Vec<crate::database::models::ids::ReportId> =
+    let report_ids: Vec<crate::database::models::ids::DBReportId> =
         serde_json::from_str::<Vec<crate::models::ids::ReportId>>(&ids.ids)?
             .into_iter()
             .map(|x| x.into())
             .collect();
 
-    let reports_data = crate::database::models::report_item::Report::get_many(
-        &report_ids,
-        &**pool,
-    )
-    .await?;
+    let reports_data =
+        crate::database::models::report_item::DBReport::get_many(
+            &report_ids,
+            &**pool,
+        )
+        .await?;
 
     let user = get_user_from_headers(
         &req,
         &**pool,
         &redis,
         &session_queue,
-        Some(&[Scopes::REPORT_READ]),
+        Scopes::REPORT_READ,
     )
     .await?
     .1;
@@ -352,11 +413,23 @@ pub async fn reports_get(
     Ok(HttpResponse::Ok().json(all_reports))
 }
 
+#[utoipa::path(tag = "reports", responses((status = OK)))]
+#[get("/report/{id}")]
+pub async fn report_get_route(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    redis: web::Data<RedisPool>,
+    info: web::Path<(crate::models::ids::ReportId,)>,
+    session_queue: web::Data<AuthQueue>,
+) -> Result<HttpResponse, ApiError> {
+    report_get(req, pool, redis, info, session_queue).await
+}
+
 pub async fn report_get(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     redis: web::Data<RedisPool>,
-    info: web::Path<(crate::models::reports::ReportId,)>,
+    info: web::Path<(crate::models::ids::ReportId,)>,
     session_queue: web::Data<AuthQueue>,
 ) -> Result<HttpResponse, ApiError> {
     let user = get_user_from_headers(
@@ -364,14 +437,15 @@ pub async fn report_get(
         &**pool,
         &redis,
         &session_queue,
-        Some(&[Scopes::REPORT_READ]),
+        Scopes::REPORT_READ,
     )
     .await?
     .1;
     let id = info.into_inner().0.into();
 
     let report =
-        crate::database::models::report_item::Report::get(id, &**pool).await?;
+        crate::database::models::report_item::DBReport::get(id, &**pool)
+            .await?;
 
     if let Some(report) = report {
         if !user.role.is_mod() && report.reporter != user.id.into() {
@@ -385,18 +459,31 @@ pub async fn report_get(
     }
 }
 
-#[derive(Deserialize, Validate)]
+#[derive(Deserialize, Validate, utoipa::ToSchema)]
 pub struct EditReport {
     #[validate(length(max = 65536))]
     pub body: Option<String>,
     pub closed: Option<bool>,
 }
 
+#[utoipa::path(tag = "reports", responses((status = NO_CONTENT)))]
+#[patch("/report/{id}")]
+pub async fn report_edit_route(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    redis: web::Data<RedisPool>,
+    info: web::Path<(crate::models::ids::ReportId,)>,
+    session_queue: web::Data<AuthQueue>,
+    edit_report: web::Json<EditReport>,
+) -> Result<HttpResponse, ApiError> {
+    report_edit(req, pool, redis, info, session_queue, edit_report).await
+}
+
 pub async fn report_edit(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     redis: web::Data<RedisPool>,
-    info: web::Path<(crate::models::reports::ReportId,)>,
+    info: web::Path<(crate::models::ids::ReportId,)>,
     session_queue: web::Data<AuthQueue>,
     edit_report: web::Json<EditReport>,
 ) -> Result<HttpResponse, ApiError> {
@@ -405,14 +492,15 @@ pub async fn report_edit(
         &**pool,
         &redis,
         &session_queue,
-        Some(&[Scopes::REPORT_WRITE]),
+        Scopes::REPORT_WRITE,
     )
     .await?
     .1;
     let id = info.into_inner().0.into();
 
     let report =
-        crate::database::models::report_item::Report::get(id, &**pool).await?;
+        crate::database::models::report_item::DBReport::get(id, &**pool)
+            .await?;
 
     if let Some(report) = report {
         if !user.role.is_mod() && report.reporter != user.id.into() {
@@ -429,9 +517,9 @@ pub async fn report_edit(
                 WHERE (id = $2)
                 ",
                 edit_body,
-                id as crate::database::models::ids::ReportId,
+                id as crate::database::models::ids::DBReportId,
             )
-            .execute(&mut *transaction)
+            .execute(&mut transaction)
             .await?;
         }
 
@@ -455,6 +543,14 @@ pub async fn report_edit(
             .insert(&mut transaction)
             .await?;
 
+            NotificationBuilder {
+                body: NotificationBody::ReportStatusUpdated {
+                    report_id: id.into(),
+                },
+            }
+            .insert(report.reporter, &mut transaction, &redis)
+            .await?;
+
             sqlx::query!(
                 "
                 UPDATE reports
@@ -462,9 +558,9 @@ pub async fn report_edit(
                 WHERE (id = $2)
                 ",
                 edit_closed,
-                id as crate::database::models::ids::ReportId,
+                id as crate::database::models::ids::DBReportId,
             )
-            .execute(&mut *transaction)
+            .execute(&mut transaction)
             .await?;
         }
 
@@ -492,10 +588,22 @@ pub async fn report_edit(
     }
 }
 
+#[utoipa::path(tag = "reports", responses((status = NO_CONTENT)))]
+#[delete("/report/{id}")]
+pub async fn report_delete_route(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    info: web::Path<(crate::models::ids::ReportId,)>,
+    redis: web::Data<RedisPool>,
+    session_queue: web::Data<AuthQueue>,
+) -> Result<HttpResponse, ApiError> {
+    report_delete(req, pool, info, redis, session_queue).await
+}
+
 pub async fn report_delete(
     req: HttpRequest,
     pool: web::Data<PgPool>,
-    info: web::Path<(crate::models::reports::ReportId,)>,
+    info: web::Path<(crate::models::ids::ReportId,)>,
     redis: web::Data<RedisPool>,
     session_queue: web::Data<AuthQueue>,
 ) -> Result<HttpResponse, ApiError> {
@@ -504,7 +612,7 @@ pub async fn report_delete(
         &**pool,
         &redis,
         &session_queue,
-        Some(&[Scopes::REPORT_DELETE]),
+        Scopes::REPORT_DELETE,
     )
     .await?;
 
@@ -514,14 +622,16 @@ pub async fn report_delete(
     let context = ImageContext::Report {
         report_id: Some(id),
     };
-    let uploaded_images =
-        database::models::Image::get_many_contexted(context, &mut transaction)
-            .await?;
+    let uploaded_images = database::models::DBImage::get_many_contexted(
+        context,
+        &mut transaction,
+    )
+    .await?;
     for image in uploaded_images {
-        image_item::Image::remove(image.id, &mut transaction, &redis).await?;
+        image_item::DBImage::remove(image.id, &mut transaction, &redis).await?;
     }
 
-    let result = crate::database::models::report_item::Report::remove_full(
+    let result = crate::database::models::report_item::DBReport::remove_full(
         id.into(),
         &mut transaction,
     )

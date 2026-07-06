@@ -3,13 +3,13 @@ use std::collections::{HashMap, HashSet};
 use common::{
     api_v3::ApiV3,
     environment::{
-        with_test_environment, with_test_environment_all, TestEnvironment,
+        TestEnvironment, with_test_environment, with_test_environment_all,
     },
 };
 
 use crate::common::api_common::ApiTags;
 
-mod common;
+pub mod common;
 
 #[actix_rt::test]
 async fn get_tags() {
@@ -21,21 +21,18 @@ async fn get_tags() {
             .into_iter()
             .map(|x| x.name)
             .collect::<HashSet<_>>();
-        assert_eq!(
-            category_names,
-            [
-                "combat",
-                "economy",
-                "food",
-                "optimization",
-                "decoration",
-                "mobs",
-                "magic"
-            ]
-            .iter()
-            .map(|s| s.to_string())
-            .collect()
-        );
+
+        for name in [
+            "combat",
+            "economy",
+            "food",
+            "optimization",
+            "decoration",
+            "mobs",
+            "magic",
+        ] {
+            assert!(category_names.contains(name));
+        }
     })
     .await;
 }

@@ -4,21 +4,30 @@ use thiserror::Error;
 
 pub mod auth;
 pub mod import;
+pub mod install;
+pub mod instance;
 pub mod jre;
 pub mod logs;
 pub mod metadata;
+pub mod minecraft_skins;
 pub mod mr_auth;
-pub mod pack;
 pub mod process;
-pub mod profile;
-pub mod profile_create;
 pub mod settings;
+pub mod shortcuts;
 pub mod tags;
 pub mod utils;
 
 pub mod ads;
+#[cfg(target_os = "macos")]
+mod ads_occlusion_macos;
+#[cfg(windows)]
+mod ads_occlusion_windows;
 pub mod cache;
+pub mod files;
 pub mod friends;
+pub mod worlds;
+
+mod oauth_utils;
 
 pub type Result<T> = std::result::Result<T, TheseusSerializableError>;
 
@@ -43,8 +52,12 @@ pub enum TheseusSerializableError {
     Tauri(#[from] tauri::Error),
 
     #[cfg(feature = "updater")]
-    #[error("Tauri updater error: {0}")]
-    TauriUpdater(#[from] tauri_plugin_updater::Error),
+    #[error("Updater error: {0}")]
+    Updater(#[from] tauri_plugin_updater::Error),
+
+    #[cfg(feature = "updater")]
+    #[error("HTTP error: {0}")]
+    Http(#[from] tauri_plugin_http::reqwest::Error),
 }
 
 // Generic implementation of From<T> for ErrorTypeA
@@ -102,5 +115,6 @@ impl_serialize! {
 impl_serialize! {
     IO,
     Tauri,
-    TauriUpdater,
+    Updater,
+    Http,
 }

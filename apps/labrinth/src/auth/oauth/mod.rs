@@ -1,29 +1,30 @@
+use std::fmt::Write;
+
 use crate::auth::get_user_from_headers;
 use crate::auth::oauth::uris::{OAuthRedirectUris, ValidatedRedirectUri};
 use crate::auth::validate::extract_authorization_header;
-use crate::database::models::flow_item::Flow;
-use crate::database::models::oauth_client_authorization_item::OAuthClientAuthorization;
-use crate::database::models::oauth_client_item::OAuthClient as DBOAuthClient;
-use crate::database::models::oauth_token_item::OAuthAccessToken;
+use crate::database::PgPool;
+use crate::database::models::flow_item::DBFlow;
+use crate::database::models::oauth_client_authorization_item::DBOAuthClientAuthorization;
+use crate::database::models::oauth_client_item::DBOAuthClient;
+use crate::database::models::oauth_token_item::DBOAuthAccessToken;
 use crate::database::models::{
-    generate_oauth_access_token_id, generate_oauth_client_authorization_id,
-    OAuthClientAuthorizationId,
+    DBOAuthClientAuthorizationId, generate_oauth_access_token_id,
+    generate_oauth_client_authorization_id,
 };
 use crate::database::redis::RedisPool;
 use crate::models;
 use crate::models::ids::OAuthClientId;
 use crate::models::pats::Scopes;
 use crate::queue::session::AuthQueue;
-use actix_web::http::header::LOCATION;
-use actix_web::web::{Data, Query, ServiceConfig};
-use actix_web::{get, post, web, HttpRequest, HttpResponse};
-use chrono::Duration;
+use actix_web::http::header::{CACHE_CONTROL, LOCATION, PRAGMA};
+use actix_web::web::{Data, Query};
+use actix_web::{HttpRequest, HttpResponse, get, post, web};
+use chrono::{DateTime, Duration};
 use rand::distributions::Alphanumeric;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use reqwest::header::{CACHE_CONTROL, PRAGMA};
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::PgPool;
 
 use self::errors::{OAuthError, OAuthErrorType};
 
@@ -32,7 +33,7 @@ use super::AuthenticationError;
 pub mod errors;
 pub mod uris;
 
-pub fn config(cfg: &mut ServiceConfig) {
+pub fn config(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(init_oauth)
         .service(accept_client_scopes)
         .service(reject_client_scopes)
@@ -56,6 +57,18 @@ pub struct OAuthClientAccessRequest {
     pub requested_scopes: Scopes,
 }
 
+#[utoipa::path(
+	context_path = "/oauth",
+	path = "/authorize",
+	tag = "oauth",
+	params(
+		("client_id" = OAuthClientId, Query),
+		("redirect_uri" = Option<String>, Query),
+		("scope" = Option<String>, Query),
+		("state" = Option<String>, Query)
+	),
+	responses((status = OK))
+)]
 #[get("authorize")]
 pub async fn init_oauth(
     req: HttpRequest,
@@ -69,7 +82,7 @@ pub async fn init_oauth(
         &**pool,
         &redis,
         &session_queue,
-        Some(&[Scopes::USER_AUTH_WRITE]),
+        Scopes::USER_AUTH_WRITE,
     )
     .await?
     .1;
@@ -107,15 +120,15 @@ pub async fn init_oauth(
         }
 
         let existing_authorization =
-            OAuthClientAuthorization::get(client.id, user.id.into(), &**pool)
+            DBOAuthClientAuthorization::get(client.id, user.id.into(), &**pool)
                 .await
                 .map_err(|e| {
                     OAuthError::redirect(e, &oauth_info.state, &redirect_uri)
                 })?;
-        let redirect_uris = OAuthRedirectUris::new(
-            oauth_info.redirect_uri.clone(),
-            redirect_uri.clone(),
-        );
+        let redirect_uris = OAuthRedirectUris {
+            original: oauth_info.redirect_uri.clone(),
+            validated: redirect_uri.clone(),
+        };
         match existing_authorization {
             Some(existing_authorization)
                 if existing_authorization.scopes.contains(requested_scopes) =>
@@ -132,7 +145,7 @@ pub async fn init_oauth(
                 .await
             }
             _ => {
-                let flow_id = Flow::InitOAuthAppApproval {
+                let flow_id = DBFlow::InitOAuthAppApproval {
                     user_id: user.id.into(),
                     client_id: client.id,
                     existing_authorization_id: existing_authorization
@@ -164,11 +177,15 @@ pub async fn init_oauth(
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
 pub struct RespondToOAuthClientScopes {
     pub flow: String,
 }
 
+#[utoipa::path(
+	context_path = "/oauth",
+	path = "/accept", tag = "oauth", responses((status = OK))
+)]
 #[post("accept")]
 pub async fn accept_client_scopes(
     req: HttpRequest,
@@ -188,6 +205,10 @@ pub async fn accept_client_scopes(
     .await
 }
 
+#[utoipa::path(
+	context_path = "/oauth",
+	path = "/reject", tag = "oauth", responses((status = OK))
+)]
 #[post("reject")]
 pub async fn reject_client_scopes(
     req: HttpRequest,
@@ -200,7 +221,7 @@ pub async fn reject_client_scopes(
         .await
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
 pub struct TokenRequest {
     pub grant_type: String,
     pub code: String,
@@ -215,6 +236,10 @@ pub struct TokenResponse {
     pub expires_in: i64,
 }
 
+#[utoipa::path(
+	context_path = "/oauth",
+	path = "/token", tag = "oauth", responses((status = OK))
+)]
 #[post("token")]
 /// Params should be in the urlencoded request body
 /// And client secret should be in the HTTP basic authorization header
@@ -232,13 +257,13 @@ pub async fn request_token(
 
         // Ensure auth code is single use
         // per IETF RFC6749 Section 10.5 (https://datatracker.ietf.org/doc/html/rfc6749#section-10.5)
-        let flow = Flow::take_if(
+        let flow = DBFlow::take_if(
             &req_params.code,
-            |f| matches!(f, Flow::OAuthAuthorizationCodeSupplied { .. }),
+            |f| matches!(f, DBFlow::OAuthAuthorizationCodeSupplied { .. }),
             &redis,
         )
         .await?;
-        if let Some(Flow::OAuthAuthorizationCodeSupplied {
+        if let Some(DBFlow::OAuthAuthorizationCodeSupplied {
             user_id,
             client_id,
             authorization_id,
@@ -275,19 +300,19 @@ pub async fn request_token(
             let token_id =
                 generate_oauth_access_token_id(&mut transaction).await?;
             let token = generate_access_token();
-            let token_hash = OAuthAccessToken::hash_token(&token);
-            let time_until_expiration = OAuthAccessToken {
+            let token_hash = DBOAuthAccessToken::hash_token(&token);
+            let time_until_expiration = DBOAuthAccessToken {
                 id: token_id,
                 authorization_id,
                 token_hash,
                 scopes,
-                created: Default::default(),
-                expires: Default::default(),
+                created: DateTime::default(),
+                expires: DateTime::default(),
                 last_used: None,
                 client_id,
                 user_id,
             }
-            .insert(&mut *transaction)
+            .insert(&mut transaction)
             .await?;
 
             transaction.commit().await?;
@@ -324,18 +349,18 @@ pub async fn accept_or_reject_client_scopes(
         &**pool,
         &redis,
         &session_queue,
-        Some(&[Scopes::SESSION_ACCESS]),
+        Scopes::SESSION_ACCESS,
     )
     .await?
     .1;
 
-    let flow = Flow::take_if(
+    let flow = DBFlow::take_if(
         &body.flow,
-        |f| matches!(f, Flow::InitOAuthAppApproval { .. }),
+        |f| matches!(f, DBFlow::InitOAuthAppApproval { .. }),
         &redis,
     )
     .await?;
-    if let Some(Flow::InitOAuthAppApproval {
+    if let Some(DBFlow::InitOAuthAppApproval {
         user_id,
         client_id,
         existing_authorization_id,
@@ -360,7 +385,7 @@ pub async fn accept_or_reject_client_scopes(
                         .await?
                 }
             };
-            OAuthClientAuthorization::upsert(
+            DBOAuthClientAuthorization::upsert(
                 auth_id,
                 client_id,
                 user_id,
@@ -414,19 +439,19 @@ fn generate_access_token() -> String {
         .take(60)
         .map(char::from)
         .collect::<String>();
-    format!("mro_{}", random)
+    format!("mro_{random}")
 }
 
 async fn init_oauth_code_flow(
-    user_id: crate::database::models::UserId,
+    user_id: crate::database::models::DBUserId,
     client_id: OAuthClientId,
-    authorization_id: OAuthClientAuthorizationId,
+    authorization_id: DBOAuthClientAuthorizationId,
     scopes: Scopes,
     redirect_uris: OAuthRedirectUris,
     state: Option<String>,
     redis: &RedisPool,
 ) -> Result<HttpResponse, OAuthError> {
-    let code = Flow::OAuthAuthorizationCodeSupplied {
+    let code = DBFlow::OAuthAuthorizationCodeSupplied {
         user_id,
         client_id: client_id.into(),
         authorization_id,
@@ -457,7 +482,7 @@ fn append_params_to_uri(uri: &str, params: &[impl AsRef<str>]) -> String {
     let mut uri = uri.to_string();
     let mut connector = if uri.contains('?') { "&" } else { "?" };
     for param in params {
-        uri.push_str(&format!("{}{}", connector, param.as_ref()));
+        write!(&mut uri, "{connector}{}", param.as_ref()).unwrap();
         connector = "&";
     }
 

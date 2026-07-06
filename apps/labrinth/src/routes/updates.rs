@@ -1,8 +1,10 @@
+use std::cmp::Reverse;
 use std::collections::HashMap;
 
-use actix_web::{get, web, HttpRequest, HttpResponse};
+use crate::database::{PgPool, ReadOnlyPgPool};
+use crate::env::ENV;
+use actix_web::{HttpRequest, HttpResponse, get, web};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 
 use crate::auth::checks::{filter_visible_versions, is_visible_project};
 use crate::auth::get_user_from_headers;
@@ -15,11 +17,11 @@ use crate::queue::session::AuthQueue;
 
 use super::ApiError;
 
-pub fn config(cfg: &mut web::ServiceConfig) {
+pub fn config(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(forge_updates);
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
 pub struct NeoForge {
     #[serde(default = "default_neoforge")]
     pub neoforge: String,
@@ -29,12 +31,22 @@ fn default_neoforge() -> String {
     "none".into()
 }
 
-#[get("{id}/forge_updates.json")]
+#[utoipa::path(
+	context_path = "/updates",
+	tag = "updates",
+	params(
+		("id" = String, Path),
+		("neoforge" = Option<String>, Query)
+	),
+	responses((status = OK))
+)]
+#[get("/{id}/forge_updates.json")]
 pub async fn forge_updates(
     req: HttpRequest,
     web::Query(neo): web::Query<NeoForge>,
     info: web::Path<(String,)>,
     pool: web::Data<PgPool>,
+    ro_pool: web::Data<ReadOnlyPgPool>,
     redis: web::Data<RedisPool>,
     session_queue: web::Data<AuthQueue>,
 ) -> Result<HttpResponse, ApiError> {
@@ -42,7 +54,7 @@ pub async fn forge_updates(
 
     let (id,) = info.into_inner();
 
-    let project = database::models::Project::get(&id, &**pool, &redis)
+    let project = database::models::DBProject::get(&id, &**pool, &redis)
         .await?
         .ok_or_else(|| ApiError::InvalidInput(ERROR.to_string()))?;
 
@@ -51,7 +63,7 @@ pub async fn forge_updates(
         &**pool,
         &redis,
         &session_queue,
-        Some(&[Scopes::PROJECT_READ]),
+        Scopes::PROJECT_READ,
     )
     .await
     .map(|x| x.1)
@@ -61,9 +73,12 @@ pub async fn forge_updates(
         return Err(ApiError::InvalidInput(ERROR.to_string()));
     }
 
-    let versions =
-        database::models::Version::get_many(&project.versions, &**pool, &redis)
-            .await?;
+    let versions = database::models::DBVersion::get_many(
+        &project.versions,
+        &***ro_pool,
+        &redis,
+    )
+    .await?;
 
     let loaders = match &*neo.neoforge {
         "only" => |x: &String| *x == "neoforge",
@@ -78,11 +93,12 @@ pub async fn forge_updates(
             .collect(),
         &user_option,
         &pool,
+        &ro_pool,
         &redis,
     )
     .await?;
 
-    versions.sort_by(|a, b| b.date_published.cmp(&a.date_published));
+    versions.sort_by_key(|b| Reverse(b.date_published));
 
     #[derive(Serialize)]
     struct ForgeUpdates {
@@ -91,11 +107,7 @@ pub async fn forge_updates(
     }
 
     let mut response = ForgeUpdates {
-        homepage: format!(
-            "{}/mod/{}",
-            dotenvy::var("SITE_URL").unwrap_or_default(),
-            id
-        ),
+        homepage: format!("{}/mod/{}", ENV.SITE_URL, id),
         promos: HashMap::new(),
     };
 
@@ -116,7 +128,7 @@ pub async fn forge_updates(
             for game_version in &game_versions {
                 response
                     .promos
-                    .entry(format!("{}-recommended", game_version))
+                    .entry(format!("{game_version}-recommended"))
                     .or_insert_with(|| version.version_number.clone());
             }
         }
@@ -124,7 +136,7 @@ pub async fn forge_updates(
         for game_version in &game_versions {
             response
                 .promos
-                .entry(format!("{}-latest", game_version))
+                .entry(format!("{game_version}-latest"))
                 .or_insert_with(|| version.version_number.clone());
         }
     }

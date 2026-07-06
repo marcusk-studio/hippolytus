@@ -1,9 +1,11 @@
 use super::ids::*;
+use crate::database::PgTransaction;
 use crate::database::models::DatabaseError;
 use crate::database::redis::RedisPool;
-use crate::models::ids::base62_impl::parse_base62;
+use ariadne::ids::base62_impl::parse_base62;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
+use futures_util::TryStreamExt;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
@@ -14,7 +16,7 @@ const SESSIONS_USERS_NAMESPACE: &str = "sessions_users";
 
 pub struct SessionBuilder {
     pub session: String,
-    pub user_id: UserId,
+    pub user_id: DBUserId,
 
     pub os: Option<String>,
     pub platform: Option<String>,
@@ -24,37 +26,48 @@ pub struct SessionBuilder {
 
     pub ip: String,
     pub user_agent: String,
+
+    // When None, database default of 14 days will be used
+    pub expires: Option<DateTime<Utc>>,
+    // When None, database default of 60 days will be used
+    pub session_expires: Option<DateTime<Utc>>,
 }
 
 impl SessionBuilder {
     pub async fn insert(
         &self,
-        transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    ) -> Result<SessionId, DatabaseError> {
+        transaction: &mut PgTransaction<'_>,
+    ) -> Result<DBSessionId, DatabaseError> {
         let id = generate_session_id(transaction).await?;
 
         sqlx::query!(
             "
             INSERT INTO sessions (
                 id, session, user_id, os, platform,
-                city, country, ip, user_agent
+                city, country, ip, user_agent,
+                expires, refresh_expires
             )
             VALUES (
                 $1, $2, $3, $4, $5,
-                $6, $7, $8, $9
+                $6, $7, $8, $9,
+                $10, $11
             )
             ",
-            id as SessionId,
+            id as DBSessionId,
             self.session,
-            self.user_id as UserId,
+            self.user_id as DBUserId,
             self.os,
             self.platform,
             self.city,
             self.country,
             self.ip,
             self.user_agent,
+            self.expires
+                .unwrap_or_else(|| Utc::now() + chrono::Duration::days(14)),
+            self.session_expires
+                .unwrap_or_else(|| Utc::now() + chrono::Duration::days(60)),
         )
-        .execute(&mut **transaction)
+        .execute(&mut *transaction)
         .await?;
 
         Ok(id)
@@ -62,10 +75,10 @@ impl SessionBuilder {
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct Session {
-    pub id: SessionId,
+pub struct DBSession {
+    pub id: DBSessionId,
     pub session: String,
-    pub user_id: UserId,
+    pub user_id: DBUserId,
 
     pub created: DateTime<Utc>,
     pub last_login: DateTime<Utc>,
@@ -81,7 +94,7 @@ pub struct Session {
     pub ip: String,
 }
 
-impl Session {
+impl DBSession {
     pub async fn get<
         'a,
         E,
@@ -90,9 +103,9 @@ impl Session {
         id: T,
         exec: E,
         redis: &RedisPool,
-    ) -> Result<Option<Session>, DatabaseError>
+    ) -> Result<Option<DBSession>, DatabaseError>
     where
-        E: sqlx::Executor<'a, Database = sqlx::Postgres>,
+        E: crate::database::Executor<'a, Database = sqlx::Postgres>,
     {
         Self::get_many(&[id], exec, redis)
             .await
@@ -100,14 +113,14 @@ impl Session {
     }
 
     pub async fn get_id<'a, 'b, E>(
-        id: SessionId,
+        id: DBSessionId,
         executor: E,
         redis: &RedisPool,
-    ) -> Result<Option<Session>, DatabaseError>
+    ) -> Result<Option<DBSession>, DatabaseError>
     where
-        E: sqlx::Executor<'a, Database = sqlx::Postgres>,
+        E: crate::database::Executor<'a, Database = sqlx::Postgres>,
     {
-        Session::get_many(
+        DBSession::get_many(
             &[crate::models::ids::SessionId::from(id)],
             executor,
             redis,
@@ -117,18 +130,18 @@ impl Session {
     }
 
     pub async fn get_many_ids<'a, E>(
-        session_ids: &[SessionId],
+        session_ids: &[DBSessionId],
         exec: E,
         redis: &RedisPool,
-    ) -> Result<Vec<Session>, DatabaseError>
+    ) -> Result<Vec<DBSession>, DatabaseError>
     where
-        E: sqlx::Executor<'a, Database = sqlx::Postgres>,
+        E: crate::database::Executor<'a, Database = sqlx::Postgres>,
     {
         let ids = session_ids
             .iter()
             .map(|x| crate::models::ids::SessionId::from(*x))
             .collect::<Vec<_>>();
-        Session::get_many(&ids, exec, redis).await
+        DBSession::get_many(&ids, exec, redis).await
     }
 
     pub async fn get_many<
@@ -139,9 +152,9 @@ impl Session {
         session_strings: &[T],
         exec: E,
         redis: &RedisPool,
-    ) -> Result<Vec<Session>, DatabaseError>
+    ) -> Result<Vec<DBSession>, DatabaseError>
     where
-        E: sqlx::Executor<'a, Database = sqlx::Postgres>,
+        E: crate::database::Executor<'a, Database = sqlx::Postgres>,
     {
         use futures::TryStreamExt;
 
@@ -153,7 +166,7 @@ impl Session {
             |ids| async move {
                 let session_ids: Vec<i64> = ids
                     .iter()
-                    .flat_map(|x| parse_base62(&x.to_string()).ok())
+                    .filter_map(|x| parse_base62(&x.to_string()).ok())
                     .map(|x| x as i64)
                     .collect();
                 let slugs = ids
@@ -173,10 +186,10 @@ impl Session {
                 )
                     .fetch(exec)
                     .try_fold(DashMap::new(), |acc, x| {
-                        let session = Session {
-                            id: SessionId(x.id),
+                        let session = DBSession {
+                            id: DBSessionId(x.id),
                             session: x.session.clone(),
-                            user_id: UserId(x.user_id),
+                            user_id: DBUserId(x.user_id),
                             created: x.created,
                             last_login: x.last_login,
                             expires: x.expires,
@@ -202,28 +215,30 @@ impl Session {
     }
 
     pub async fn get_user_sessions<'a, E>(
-        user_id: UserId,
+        user_id: DBUserId,
         exec: E,
         redis: &RedisPool,
-    ) -> Result<Vec<SessionId>, DatabaseError>
+    ) -> Result<Vec<DBSessionId>, DatabaseError>
     where
-        E: sqlx::Executor<'a, Database = sqlx::Postgres>,
+        E: crate::database::Executor<'a, Database = sqlx::Postgres>,
     {
-        let mut redis = redis.connect().await?;
+        {
+            let mut redis = redis.connect().await?;
 
-        let res = redis
-            .get_deserialized_from_json::<Vec<i64>>(
-                SESSIONS_USERS_NAMESPACE,
-                &user_id.0.to_string(),
-            )
-            .await?;
+            let res = redis
+                .get_deserialized_from_json::<Vec<i64>>(
+                    SESSIONS_USERS_NAMESPACE,
+                    &user_id.0.to_string(),
+                )
+                .await?;
 
-        if let Some(res) = res {
-            return Ok(res.into_iter().map(SessionId).collect());
+            if let Some(res) = res {
+                return Ok(res.into_iter().map(DBSessionId).collect());
+            }
         }
 
         use futures::TryStreamExt;
-        let db_sessions: Vec<SessionId> = sqlx::query!(
+        let db_sessions: Vec<DBSessionId> = sqlx::query!(
             "
                 SELECT id
                 FROM sessions
@@ -233,9 +248,11 @@ impl Session {
             user_id.0,
         )
         .fetch(exec)
-        .map_ok(|x| SessionId(x.id))
-        .try_collect::<Vec<SessionId>>()
+        .map_ok(|x| DBSessionId(x.id))
+        .try_collect::<Vec<DBSessionId>>()
         .await?;
+
+        let mut redis = redis.connect().await?;
 
         redis
             .set_serialized_to_json(
@@ -251,9 +268,9 @@ impl Session {
 
     pub async fn clear_cache(
         clear_sessions: Vec<(
-            Option<SessionId>,
+            Option<DBSessionId>,
             Option<String>,
-            Option<UserId>,
+            Option<DBUserId>,
         )>,
         redis: &RedisPool,
     ) -> Result<(), DatabaseError> {
@@ -281,18 +298,36 @@ impl Session {
     }
 
     pub async fn remove(
-        id: SessionId,
-        transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        id: DBSessionId,
+        transaction: &mut PgTransaction<'_>,
     ) -> Result<Option<()>, sqlx::error::Error> {
         sqlx::query!(
             "
             DELETE FROM sessions WHERE id = $1
             ",
-            id as SessionId,
+            id as DBSessionId,
         )
-        .execute(&mut **transaction)
+        .execute(&mut *transaction)
         .await?;
 
         Ok(Some(()))
+    }
+
+    pub async fn remove_all_for_user(
+        user_id: DBUserId,
+        transaction: &mut PgTransaction<'_>,
+    ) -> Result<Vec<(DBSessionId, String)>, sqlx::Error> {
+        let sessions = sqlx::query!(
+            "
+            DELETE FROM sessions WHERE user_id = $1 RETURNING id, session
+            ",
+            user_id.0
+        )
+        .fetch(&mut *transaction)
+        .map_ok(|x| (DBSessionId(x.id), x.session))
+        .try_collect()
+        .await?;
+
+        Ok(sessions)
     }
 }

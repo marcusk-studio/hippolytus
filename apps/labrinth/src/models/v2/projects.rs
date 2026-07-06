@@ -3,26 +3,24 @@ use std::convert::TryFrom;
 use std::collections::HashMap;
 
 use super::super::ids::OrganizationId;
-use super::super::teams::TeamId;
-use super::super::users::UserId;
-use crate::database::models::{version_item, DatabaseError};
+use crate::database::models::{DatabaseError, version_item};
 use crate::database::redis::RedisPool;
-use crate::models::ids::{ProjectId, VersionId};
+use crate::models::ids::{ProjectId, TeamId, ThreadId, VersionId};
 use crate::models::projects::{
     Dependency, License, Link, Loader, ModeratorMessage, MonetizationStatus,
     Project, ProjectStatus, Version, VersionFile, VersionStatus, VersionType,
 };
-use crate::models::threads::ThreadId;
 use crate::routes::v2_reroute::{self, capitalize_first};
+use ariadne::ids::UserId;
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 /// A project returned from the API
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, utoipa::ToSchema)]
 pub struct LegacyProject {
-    /// Relevant V2 fields- these were removed or modfified in V3,
+    /// Relevant V2 fields- these were removed or modified in V3,
     /// and are now part of the dynamic fields system
     /// The support range for the client project*
     pub client_side: LegacySideType,
@@ -105,7 +103,7 @@ impl LegacyProject {
     // It's safe to use a db version_item for this as the only info is side types, game versions, and loader fields (for loaders), which used to be public on project anyway.
     pub fn from(
         data: Project,
-        versions_item: Option<version_item::QueryVersion>,
+        versions_item: Option<version_item::VersionQueryResult>,
     ) -> Self {
         let mut client_side = LegacySideType::Unknown;
         let mut server_side = LegacySideType::Unknown;
@@ -129,7 +127,7 @@ impl LegacyProject {
             .collect();
 
         if let Some(versions_item) = versions_item {
-            // Extract side types from remaining fields (singleplayer, client_only, etc)
+            // Extract side types from remaining fields
             let fields = versions_item
                 .version_fields
                 .iter()
@@ -137,10 +135,11 @@ impl LegacyProject {
                     (f.field_name.clone(), f.value.clone().serialize_internal())
                 })
                 .collect::<HashMap<_, _>>();
-            (client_side, server_side) = v2_reroute::convert_side_types_v2(
-                &fields,
-                Some(&*og_project_type),
-            );
+            (client_side, server_side) =
+                v2_reroute::convert_v3_side_types_to_v2_side_types(
+                    &fields,
+                    Some(&*og_project_type),
+                );
 
             // - if loader is mrpack, this is a modpack
             // the loaders are whatever the corresponding loader fields are
@@ -232,14 +231,15 @@ impl LegacyProject {
         redis: &RedisPool,
     ) -> Result<Vec<Self>, DatabaseError>
     where
-        E: sqlx::Acquire<'a, Database = sqlx::Postgres>,
+        E: crate::database::Acquire<'a, Database = sqlx::Postgres>,
     {
         let version_ids: Vec<_> = data
             .iter()
             .filter_map(|p| p.versions.first().map(|i| (*i).into()))
             .collect();
         let example_versions =
-            version_item::Version::get_many(&version_ids, exec, redis).await?;
+            version_item::DBVersion::get_many(&version_ids, exec, redis)
+                .await?;
         let mut legacy_projects = Vec::new();
         for project in data {
             let version_item = example_versions
@@ -253,7 +253,9 @@ impl LegacyProject {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, Copy)]
+#[derive(
+    Serialize, Deserialize, Clone, Debug, Eq, PartialEq, Copy, utoipa::ToSchema,
+)]
 #[serde(rename_all = "kebab-case")]
 pub enum LegacySideType {
     Required,
@@ -269,7 +271,7 @@ impl std::fmt::Display for LegacySideType {
 }
 
 impl LegacySideType {
-    // These are constant, so this can remove unneccessary allocations (`to_string`)
+    // These are constant, so this can remove unnecessary allocations (`to_string`)
     pub fn as_str(&self) -> &'static str {
         match self {
             LegacySideType::Required => "required",
@@ -290,9 +292,9 @@ impl LegacySideType {
 }
 
 /// A specific version of a project
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, utoipa::ToSchema)]
 pub struct LegacyVersion {
-    /// Relevant V2 fields- these were removed or modfified in V3,
+    /// Relevant V2 fields- these were removed or modified in V3,
     /// and are now part of the dynamic fields system
     /// A list of game versions this project supports
     pub game_versions: Vec<String>,
@@ -306,7 +308,8 @@ pub struct LegacyVersion {
     pub featured: bool,
     pub name: String,
     pub version_number: String,
-    pub changelog: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub changelog: Option<String>,
     pub changelog_url: Option<String>,
     pub date_published: DateTime<Utc>,
     pub downloads: u32,
@@ -334,18 +337,14 @@ impl From<Version> for LegacyVersion {
         // the v2 loaders are whatever the corresponding loader fields are
         let mut loaders =
             data.loaders.into_iter().map(|l| l.0).collect::<Vec<_>>();
-        if loaders.contains(&"mrpack".to_string()) {
-            if let Some((_, mrpack_loaders)) = data
+        if loaders.contains(&"mrpack".to_string())
+            && let Some((_, mrpack_loaders)) = data
                 .fields
                 .into_iter()
                 .find(|(key, _)| key == "mrpack_loaders")
-            {
-                if let Ok(mrpack_loaders) =
-                    serde_json::from_value(mrpack_loaders)
-                {
-                    loaders = mrpack_loaders;
-                }
-            }
+            && let Ok(mrpack_loaders) = serde_json::from_value(mrpack_loaders)
+        {
+            loaders = mrpack_loaders;
         }
         let loaders = loaders.into_iter().map(Loader).collect::<Vec<_>>();
 
@@ -371,7 +370,7 @@ impl From<Version> for LegacyVersion {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, utoipa::ToSchema)]
 pub struct LegacyGalleryItem {
     pub url: String,
     pub raw_url: String,
@@ -396,7 +395,9 @@ impl LegacyGalleryItem {
     }
 }
 
-#[derive(Serialize, Deserialize, Validate, Clone, Eq, PartialEq)]
+#[derive(
+    Serialize, Deserialize, Validate, Clone, Eq, PartialEq, utoipa::ToSchema,
+)]
 pub struct DonationLink {
     pub id: String,
     pub platform: String,

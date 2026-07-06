@@ -1,9 +1,24 @@
 //! Theseus error type
-use crate::{profile, util};
+use std::sync::Arc;
+
+use crate::util;
+use data_url::DataUrlError;
+use derive_more::Display;
+use serde::{Deserialize, Serialize};
 use tracing_error::InstrumentError;
+
+#[derive(Serialize, Deserialize, Debug, Display)]
+#[display("{description}")]
+pub struct LabrinthError {
+    pub error: String,
+    pub description: String,
+}
 
 #[derive(thiserror::Error, Debug)]
 pub enum ErrorKind {
+    #[error("{0:?}")]
+    Any(eyre::Report),
+
     #[error("Filesystem error: {0}")]
     FSError(String),
 
@@ -12,6 +27,17 @@ pub enum ErrorKind {
 
     #[error("Serialization error (JSON): {0}")]
     JSONError(#[from] serde_json::Error),
+
+    #[error("Serialization error (NBT): {0}")]
+    NBTError(#[from] quartz_nbt::io::NbtIoError),
+
+    #[error("NBT data structure error: {0}")]
+    NBTReprError(#[from] quartz_nbt::NbtReprError),
+
+    #[error("Serialization error (websocket): {0}")]
+    WebsocketSerializationError(
+        #[from] ariadne::networking::serialization::SerializationError,
+    ),
 
     #[error("Error parsing UUID: {0}")]
     UUIDError(#[from] uuid::Error),
@@ -42,6 +68,12 @@ pub enum ErrorKind {
     #[error("Error fetching URL: {0}")]
     FetchError(#[from] reqwest::Error),
 
+    #[error("Too many API errors, try again in {0} minutes")]
+    ApiIsDownError(u32),
+
+    #[error("{0}")]
+    LabrinthError(LabrinthError),
+
     #[error("Websocket error: {0}")]
     WSError(#[from] async_tungstenite::tungstenite::Error),
 
@@ -69,11 +101,8 @@ pub enum ErrorKind {
     #[error("Error acquiring semaphore: {0}")]
     AcquireError(#[from] tokio::sync::AcquireError),
 
-    #[error("Profile {0} is not managed by the app!")]
-    UnmanagedProfileError(String),
-
-    #[error("Could not create profile: {0}")]
-    ProfileCreationError(#[from] profile::create::ProfileCreationError),
+    #[error("Instance {0} is not managed by the app!")]
+    UnmanagedInstanceError(String),
 
     #[error("User is not logged in, no credentials available!")]
     NoCredentialsError,
@@ -111,12 +140,54 @@ pub enum ErrorKind {
 
     #[error("Move directory error: {0}")]
     DirectoryMoveError(String),
+
+    #[error("Error resolving DNS: {0}")]
+    DNSError(#[from] hickory_resolver::ResolveError),
+
+    #[error("An online profile for {user_name} is not available")]
+    OnlineMinecraftProfileUnavailable { user_name: String },
+
+    #[error("Invalid data URL: {0}")]
+    InvalidDataUrl(#[from] DataUrlError),
+
+    #[error("Invalid data URL: {0}")]
+    InvalidDataUrlBase64(#[from] data_url::forgiving_base64::InvalidBase64),
+
+    #[error("Invalid PNG")]
+    InvalidPng,
+
+    #[error("Invalid PNG: {0}")]
+    PngDecodingError(#[from] png::DecodingError),
+
+    #[error("PNG encoding error: {0}")]
+    PngEncodingError(#[from] png::EncodingError),
+
+    #[error(
+        "A skin texture must have a dimension of either 64x64 or 64x32 pixels"
+    )]
+    InvalidSkinTexture,
+
+    #[error("RPC error: {0}")]
+    RpcError(String),
+
+    #[cfg(windows)]
+    #[error("Windows error: {0}")]
+    WindowsError(#[from] windows_core::Error),
+
+    #[error("zbus error: {0}")]
+    ZbusError(#[from] zbus::Error),
+
+    #[error("Deserialization error: {0}")]
+    DeserializationError(#[from] serde::de::value::Error),
+
+    #[error("Discord IPC error: {0}")]
+    DiscordRichPresenceError(#[from] discord_rich_presence::error::Error),
 }
 
 #[derive(Debug)]
 pub struct Error {
-    pub raw: std::sync::Arc<ErrorKind>,
-    pub source: tracing_error::TracedError<std::sync::Arc<ErrorKind>>,
+    pub raw: Arc<ErrorKind>,
+    pub source: tracing_error::TracedError<Arc<ErrorKind>>,
 }
 
 impl std::error::Error for Error {
@@ -134,11 +205,22 @@ impl std::fmt::Display for Error {
 impl<E: Into<ErrorKind>> From<E> for Error {
     fn from(source: E) -> Self {
         let error = Into::<ErrorKind>::into(source);
-        let boxed_error = std::sync::Arc::new(error);
+        let boxed_error = Arc::new(error);
 
         Self {
             raw: boxed_error.clone(),
             source: boxed_error.in_current_span(),
+        }
+    }
+}
+
+impl From<eyre::Report> for Error {
+    fn from(value: eyre::Report) -> Self {
+        let error = Arc::new(ErrorKind::Any(value));
+
+        Self {
+            raw: error.clone(),
+            source: error.in_current_span(),
         }
     }
 }

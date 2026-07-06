@@ -2,20 +2,22 @@ use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::models::pats::Scopes;
+use crate::{database::PgTransaction, models::pats::Scopes};
 
-use super::{DatabaseError, OAuthClientAuthorizationId, OAuthClientId, UserId};
+use super::{
+    DBOAuthClientAuthorizationId, DBOAuthClientId, DBUserId, DatabaseError,
+};
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct OAuthClientAuthorization {
-    pub id: OAuthClientAuthorizationId,
-    pub client_id: OAuthClientId,
-    pub user_id: UserId,
+pub struct DBOAuthClientAuthorization {
+    pub id: DBOAuthClientAuthorizationId,
+    pub client_id: DBOAuthClientId,
+    pub user_id: DBUserId,
     pub scopes: Scopes,
     pub created: DateTime<Utc>,
 }
 
-struct AuthorizationQueryResult {
+struct DBAuthClientAuthorizationQueryResult {
     id: i64,
     client_id: i64,
     user_id: i64,
@@ -23,26 +25,26 @@ struct AuthorizationQueryResult {
     created: DateTime<Utc>,
 }
 
-impl From<AuthorizationQueryResult> for OAuthClientAuthorization {
-    fn from(value: AuthorizationQueryResult) -> Self {
-        OAuthClientAuthorization {
-            id: OAuthClientAuthorizationId(value.id),
-            client_id: OAuthClientId(value.client_id),
-            user_id: UserId(value.user_id),
+impl From<DBAuthClientAuthorizationQueryResult> for DBOAuthClientAuthorization {
+    fn from(value: DBAuthClientAuthorizationQueryResult) -> Self {
+        DBOAuthClientAuthorization {
+            id: DBOAuthClientAuthorizationId(value.id),
+            client_id: DBOAuthClientId(value.client_id),
+            user_id: DBUserId(value.user_id),
             scopes: Scopes::from_postgres(value.scopes),
             created: value.created,
         }
     }
 }
 
-impl OAuthClientAuthorization {
+impl DBOAuthClientAuthorization {
     pub async fn get(
-        client_id: OAuthClientId,
-        user_id: UserId,
-        exec: impl sqlx::Executor<'_, Database = sqlx::Postgres>,
-    ) -> Result<Option<OAuthClientAuthorization>, DatabaseError> {
+        client_id: DBOAuthClientId,
+        user_id: DBUserId,
+        exec: impl crate::database::Executor<'_, Database = sqlx::Postgres>,
+    ) -> Result<Option<DBOAuthClientAuthorization>, DatabaseError> {
         let value = sqlx::query_as!(
-            AuthorizationQueryResult,
+            DBAuthClientAuthorizationQueryResult,
             "
             SELECT id, client_id, user_id, scopes, created
             FROM oauth_client_authorizations
@@ -58,11 +60,11 @@ impl OAuthClientAuthorization {
     }
 
     pub async fn get_all_for_user(
-        user_id: UserId,
-        exec: impl sqlx::Executor<'_, Database = sqlx::Postgres>,
-    ) -> Result<Vec<OAuthClientAuthorization>, DatabaseError> {
+        user_id: DBUserId,
+        exec: impl crate::database::Executor<'_, Database = sqlx::Postgres>,
+    ) -> Result<Vec<DBOAuthClientAuthorization>, DatabaseError> {
         let results = sqlx::query_as!(
-            AuthorizationQueryResult,
+            DBAuthClientAuthorizationQueryResult,
             "
             SELECT id, client_id, user_id, scopes, created
             FROM oauth_client_authorizations
@@ -77,11 +79,11 @@ impl OAuthClientAuthorization {
     }
 
     pub async fn upsert(
-        id: OAuthClientAuthorizationId,
-        client_id: OAuthClientId,
-        user_id: UserId,
+        id: DBOAuthClientAuthorizationId,
+        client_id: DBOAuthClientId,
+        user_id: DBUserId,
         scopes: Scopes,
-        transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        transaction: &mut PgTransaction<'_>,
     ) -> Result<(), DatabaseError> {
         sqlx::query!(
             "
@@ -99,16 +101,16 @@ impl OAuthClientAuthorization {
             user_id.0,
             scopes.bits() as i64,
         )
-        .execute(&mut **transaction)
+        .execute(&mut *transaction)
         .await?;
 
         Ok(())
     }
 
     pub async fn remove(
-        client_id: OAuthClientId,
-        user_id: UserId,
-        exec: impl sqlx::Executor<'_, Database = sqlx::Postgres>,
+        client_id: DBOAuthClientId,
+        user_id: DBUserId,
+        exec: impl crate::database::Executor<'_, Database = sqlx::Postgres>,
     ) -> Result<(), DatabaseError> {
         sqlx::query!(
             "

@@ -1,31 +1,43 @@
 use crate::auth::get_user_from_headers;
 use crate::database;
+use crate::database::PgPool;
 use crate::database::redis::RedisPool;
 use crate::models::ids::NotificationId;
 use crate::models::notifications::Notification;
 use crate::models::pats::Scopes;
 use crate::queue::session::AuthQueue;
 use crate::routes::ApiError;
-use actix_web::{web, HttpRequest, HttpResponse};
+use actix_web::{HttpRequest, HttpResponse, delete, get, patch, web};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 
-pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg.route("notifications", web::get().to(notifications_get));
-    cfg.route("notifications", web::patch().to(notifications_read));
-    cfg.route("notifications", web::delete().to(notifications_delete));
-
-    cfg.service(
-        web::scope("notification")
-            .route("{id}", web::get().to(notification_get))
-            .route("{id}", web::patch().to(notification_read))
-            .route("{id}", web::delete().to(notification_delete)),
-    );
+pub fn config(cfg: &mut actix_web::web::ServiceConfig) {
+    cfg.service(notifications_get_route)
+        .service(notifications_read_route)
+        .service(notifications_delete_route)
+        .service(notification_get_route)
+        .service(notification_read_route)
+        .service(notification_delete_route);
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct NotificationIds {
     pub ids: String,
+}
+
+#[utoipa::path(
+	tag = "notifications",
+	params(("ids" = String, Query)),
+	responses((status = OK))
+)]
+#[get("/notifications")]
+pub async fn notifications_get_route(
+    req: HttpRequest,
+    ids: web::Query<NotificationIds>,
+    pool: web::Data<PgPool>,
+    redis: web::Data<RedisPool>,
+    session_queue: web::Data<AuthQueue>,
+) -> Result<HttpResponse, ApiError> {
+    notifications_get(req, ids, pool, redis, session_queue).await
 }
 
 pub async fn notifications_get(
@@ -40,13 +52,13 @@ pub async fn notifications_get(
         &**pool,
         &redis,
         &session_queue,
-        Some(&[Scopes::NOTIFICATION_READ]),
+        Scopes::NOTIFICATION_READ,
     )
     .await?
     .1;
 
-    use database::models::notification_item::Notification as DBNotification;
-    use database::models::NotificationId as DBNotificationId;
+    use database::models::DBNotificationId;
+    use database::models::notification_item::DBNotification;
 
     let notification_ids: Vec<DBNotificationId> =
         serde_json::from_str::<Vec<NotificationId>>(ids.ids.as_str())?
@@ -55,7 +67,7 @@ pub async fn notifications_get(
             .collect();
 
     let notifications_data: Vec<DBNotification> =
-        database::models::notification_item::Notification::get_many(
+        database::models::notification_item::DBNotification::get_many(
             &notification_ids,
             &**pool,
         )
@@ -70,6 +82,18 @@ pub async fn notifications_get(
     Ok(HttpResponse::Ok().json(notifications))
 }
 
+#[utoipa::path(tag = "notifications", responses((status = OK)))]
+#[get("/notification/{id}")]
+pub async fn notification_get_route(
+    req: HttpRequest,
+    info: web::Path<(NotificationId,)>,
+    pool: web::Data<PgPool>,
+    redis: web::Data<RedisPool>,
+    session_queue: web::Data<AuthQueue>,
+) -> Result<HttpResponse, ApiError> {
+    notification_get(req, info, pool, redis, session_queue).await
+}
+
 pub async fn notification_get(
     req: HttpRequest,
     info: web::Path<(NotificationId,)>,
@@ -82,7 +106,7 @@ pub async fn notification_get(
         &**pool,
         &redis,
         &session_queue,
-        Some(&[Scopes::NOTIFICATION_READ]),
+        Scopes::NOTIFICATION_READ,
     )
     .await?
     .1;
@@ -90,7 +114,7 @@ pub async fn notification_get(
     let id = info.into_inner().0;
 
     let notification_data =
-        database::models::notification_item::Notification::get(
+        database::models::notification_item::DBNotification::get(
             id.into(),
             &**pool,
         )
@@ -107,6 +131,18 @@ pub async fn notification_get(
     }
 }
 
+#[utoipa::path(tag = "notifications", responses((status = NO_CONTENT)))]
+#[patch("/notification/{id}")]
+pub async fn notification_read_route(
+    req: HttpRequest,
+    info: web::Path<(NotificationId,)>,
+    pool: web::Data<PgPool>,
+    redis: web::Data<RedisPool>,
+    session_queue: web::Data<AuthQueue>,
+) -> Result<HttpResponse, ApiError> {
+    notification_read(req, info, pool, redis, session_queue).await
+}
+
 pub async fn notification_read(
     req: HttpRequest,
     info: web::Path<(NotificationId,)>,
@@ -119,7 +155,7 @@ pub async fn notification_read(
         &**pool,
         &redis,
         &session_queue,
-        Some(&[Scopes::NOTIFICATION_WRITE]),
+        Scopes::NOTIFICATION_WRITE,
     )
     .await?
     .1;
@@ -127,7 +163,7 @@ pub async fn notification_read(
     let id = info.into_inner().0;
 
     let notification_data =
-        database::models::notification_item::Notification::get(
+        database::models::notification_item::DBNotification::get(
             id.into(),
             &**pool,
         )
@@ -137,7 +173,7 @@ pub async fn notification_read(
         if data.user_id == user.id.into() || user.role.is_admin() {
             let mut transaction = pool.begin().await?;
 
-            database::models::notification_item::Notification::read(
+            database::models::notification_item::DBNotification::read(
                 id.into(),
                 &mut transaction,
                 &redis,
@@ -157,6 +193,18 @@ pub async fn notification_read(
     }
 }
 
+#[utoipa::path(tag = "notifications", responses((status = NO_CONTENT)))]
+#[delete("/notification/{id}")]
+pub async fn notification_delete_route(
+    req: HttpRequest,
+    info: web::Path<(NotificationId,)>,
+    pool: web::Data<PgPool>,
+    redis: web::Data<RedisPool>,
+    session_queue: web::Data<AuthQueue>,
+) -> Result<HttpResponse, ApiError> {
+    notification_delete(req, info, pool, redis, session_queue).await
+}
+
 pub async fn notification_delete(
     req: HttpRequest,
     info: web::Path<(NotificationId,)>,
@@ -169,7 +217,7 @@ pub async fn notification_delete(
         &**pool,
         &redis,
         &session_queue,
-        Some(&[Scopes::NOTIFICATION_WRITE]),
+        Scopes::NOTIFICATION_WRITE,
     )
     .await?
     .1;
@@ -177,7 +225,7 @@ pub async fn notification_delete(
     let id = info.into_inner().0;
 
     let notification_data =
-        database::models::notification_item::Notification::get(
+        database::models::notification_item::DBNotification::get(
             id.into(),
             &**pool,
         )
@@ -187,7 +235,7 @@ pub async fn notification_delete(
         if data.user_id == user.id.into() || user.role.is_admin() {
             let mut transaction = pool.begin().await?;
 
-            database::models::notification_item::Notification::remove(
+            database::models::notification_item::DBNotification::remove(
                 id.into(),
                 &mut transaction,
                 &redis,
@@ -208,6 +256,22 @@ pub async fn notification_delete(
     }
 }
 
+#[utoipa::path(
+	tag = "notifications",
+	params(("ids" = String, Query)),
+	responses((status = NO_CONTENT))
+)]
+#[patch("/notifications")]
+pub async fn notifications_read_route(
+    req: HttpRequest,
+    ids: web::Query<NotificationIds>,
+    pool: web::Data<PgPool>,
+    redis: web::Data<RedisPool>,
+    session_queue: web::Data<AuthQueue>,
+) -> Result<HttpResponse, ApiError> {
+    notifications_read(req, ids, pool, redis, session_queue).await
+}
+
 pub async fn notifications_read(
     req: HttpRequest,
     web::Query(ids): web::Query<NotificationIds>,
@@ -220,7 +284,7 @@ pub async fn notifications_read(
         &**pool,
         &redis,
         &session_queue,
-        Some(&[Scopes::NOTIFICATION_WRITE]),
+        Scopes::NOTIFICATION_WRITE,
     )
     .await?
     .1;
@@ -234,13 +298,13 @@ pub async fn notifications_read(
     let mut transaction = pool.begin().await?;
 
     let notifications_data =
-        database::models::notification_item::Notification::get_many(
+        database::models::notification_item::DBNotification::get_many(
             &notification_ids,
             &**pool,
         )
         .await?;
 
-    let mut notifications: Vec<database::models::ids::NotificationId> =
+    let mut notifications: Vec<database::models::ids::DBNotificationId> =
         Vec::new();
 
     for notification in notifications_data {
@@ -249,7 +313,7 @@ pub async fn notifications_read(
         }
     }
 
-    database::models::notification_item::Notification::read_many(
+    database::models::notification_item::DBNotification::read_many(
         &notifications,
         &mut transaction,
         &redis,
@@ -259,6 +323,22 @@ pub async fn notifications_read(
     transaction.commit().await?;
 
     Ok(HttpResponse::NoContent().body(""))
+}
+
+#[utoipa::path(
+	tag = "notifications",
+	params(("ids" = String, Query)),
+	responses((status = NO_CONTENT))
+)]
+#[delete("/notifications")]
+pub async fn notifications_delete_route(
+    req: HttpRequest,
+    ids: web::Query<NotificationIds>,
+    pool: web::Data<PgPool>,
+    redis: web::Data<RedisPool>,
+    session_queue: web::Data<AuthQueue>,
+) -> Result<HttpResponse, ApiError> {
+    notifications_delete(req, ids, pool, redis, session_queue).await
 }
 
 pub async fn notifications_delete(
@@ -273,7 +353,7 @@ pub async fn notifications_delete(
         &**pool,
         &redis,
         &session_queue,
-        Some(&[Scopes::NOTIFICATION_WRITE]),
+        Scopes::NOTIFICATION_WRITE,
     )
     .await?
     .1;
@@ -287,13 +367,13 @@ pub async fn notifications_delete(
     let mut transaction = pool.begin().await?;
 
     let notifications_data =
-        database::models::notification_item::Notification::get_many(
+        database::models::notification_item::DBNotification::get_many(
             &notification_ids,
             &**pool,
         )
         .await?;
 
-    let mut notifications: Vec<database::models::ids::NotificationId> =
+    let mut notifications: Vec<database::models::ids::DBNotificationId> =
         Vec::new();
 
     for notification in notifications_data {
@@ -302,7 +382,7 @@ pub async fn notifications_delete(
         }
     }
 
-    database::models::notification_item::Notification::remove_many(
+    database::models::notification_item::DBNotification::remove_many(
         &notifications,
         &mut transaction,
         &redis,

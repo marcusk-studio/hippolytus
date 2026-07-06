@@ -1,17 +1,21 @@
 //! Theseus state management system
 use crate::util::fetch::{FetchSemaphore, IoSemaphore};
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use tokio::sync::{OnceCell, Semaphore};
 
-use crate::state::fs_watcher::FileWatcher;
+use crate::state::instances::watcher::FileWatcher;
 use sqlx::SqlitePool;
 
 // Submodules
 mod dirs;
 pub use self::dirs::*;
 
-mod profiles;
-pub use self::profiles::*;
+mod instance_types;
+pub use self::instance_types::*;
+
+pub(crate) mod instances;
+pub use self::instances::*;
 
 mod settings;
 pub use self::settings::*;
@@ -28,19 +32,27 @@ pub use self::discord::*;
 mod minecraft_auth;
 pub use self::minecraft_auth::*;
 
+pub mod minecraft_skins;
+
 mod cache;
 pub use self::cache::*;
 
 mod friends;
 pub use self::friends::*;
 
+mod tunnel;
+pub use self::tunnel::*;
+
 pub mod db;
-pub mod fs_watcher;
+pub(crate) mod db_backup;
 mod mr_auth;
 
 pub use self::mr_auth::*;
 
 mod legacy_converter;
+
+pub mod attached_world_data;
+pub mod server_join_log;
 
 // Global state
 // RwLock on state only has concurrent reads, except for config dir change which takes control of the State
@@ -63,8 +75,16 @@ pub struct State {
     /// Process manager
     pub process_manager: ProcessManager,
 
+    // NOTE: we explicitly must NOT store the app identifier in the state object,
+    // because creating the state object is fallible (e.g. database missing),
+    // but we rely on the app identifier to create the state (data dir).
+    //
+    // /// App identifier string (like com.modrinth.ModrinthApp)
+    // pub app_identifier: String,
     /// Friends socket
     pub friends_socket: FriendsSocket,
+
+    pub restart_after_pending_update: AtomicBool,
 
     pub(crate) pool: SqlitePool,
 
@@ -72,15 +92,29 @@ pub struct State {
 }
 
 impl State {
-    pub async fn init() -> crate::Result<()> {
+    pub async fn init(app_identifier: String) -> crate::Result<()> {
         let state = LAUNCHER_STATE
-            .get_or_try_init(Self::initialize_state)
+            .get_or_try_init(move || Self::initialize_state(app_identifier))
             .await?;
 
+        if let Err(e) =
+            crate::install::recovery::recover_interrupted_jobs(state).await
+        {
+            tracing::error!("Error recovering interrupted install jobs: {e}");
+        }
+
         tokio::task::spawn(async move {
+            instances::watcher::watch_instances_init(
+                &state.file_watcher,
+                &state.directories,
+                &state.pool,
+            )
+            .await;
+
             let res = tokio::try_join!(
                 state.discord_rpc.clear_to_default(true),
-                Profile::refresh_all(),
+                instances::refresh_all_instances(),
+                Settings::migrate(&state.pool),
                 ModrinthCredentials::refresh_all(),
             );
 
@@ -105,7 +139,9 @@ impl State {
     /// Get the current launcher state, waiting for initialization
     pub async fn get() -> crate::Result<Arc<Self>> {
         if !LAUNCHER_STATE.initialized() {
-            tracing::error!("Attempted to get state before it is initialized - this should never happen!");
+            tracing::error!(
+                "Attempted to get state before it is initialized - this should never happen!"
+            );
             while !LAUNCHER_STATE.initialized() {
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             }
@@ -120,10 +156,16 @@ impl State {
         LAUNCHER_STATE.initialized()
     }
 
+    pub fn get_if_initialized() -> Option<Arc<Self>> {
+        LAUNCHER_STATE.get().map(Arc::clone)
+    }
+
     #[tracing::instrument]
-    async fn initialize_state() -> crate::Result<Arc<Self>> {
+    async fn initialize_state(
+        app_identifier: String,
+    ) -> crate::Result<Arc<Self>> {
         tracing::info!("Connecting to app database");
-        let pool = db::connect().await?;
+        let pool = db::connect(&app_identifier).await?;
 
         legacy_converter::migrate_legacy_data(&pool).await?;
 
@@ -142,15 +184,17 @@ impl State {
             &mut settings,
             &pool,
             &io_semaphore,
+            &app_identifier,
         )
         .await?;
-        let directories = DirectoryInfo::init(settings.custom_dir).await?;
+
+        let directories =
+            DirectoryInfo::init(settings.custom_dir, &app_identifier).await?;
 
         let discord_rpc = DiscordGuard::init()?;
 
         tracing::info!("Initializing file watcher");
-        let file_watcher = fs_watcher::init_watcher().await?;
-        fs_watcher::watch_profiles_init(&file_watcher, &directories).await;
+        let file_watcher = instances::watcher::init_watcher().await?;
 
         let process_manager = ProcessManager::new();
 
@@ -164,8 +208,10 @@ impl State {
             discord_rpc,
             process_manager,
             friends_socket,
+            restart_after_pending_update: AtomicBool::new(false),
             pool,
             file_watcher,
+            // app_identifier,
         }))
     }
 }

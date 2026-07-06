@@ -11,11 +11,11 @@ use crate::{
             FRIEND_USER_ID, FRIEND_USER_ID_PARSED, FRIEND_USER_PAT,
             USER_USER_ID_PARSED, USER_USER_PAT,
         },
-        environment::{with_test_environment, TestEnvironment},
+        environment::{TestEnvironment, with_test_environment},
     },
 };
 
-// trasnfer ownership (requires being owner, etc)
+// transfer ownership (requires being owner, etc)
 #[actix_rt::test]
 async fn transfer_ownership_v2() {
     // Test setup and dummy data

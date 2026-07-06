@@ -1,6 +1,5 @@
-use crate::{
-    models::v2::projects::LegacySideType, util::env::parse_strings_from_var,
-};
+use crate::{env::ENV, models::v2::projects::LegacySideType};
+use path_util::SafeRelativeUtf8UnixPathBuf;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -15,7 +14,7 @@ pub struct PackFormat {
     pub name: String,
     #[validate(length(max = 2048))]
     pub summary: Option<String>,
-    #[validate]
+    #[validate(nested)]
     pub files: Vec<PackFile>,
     pub dependencies: std::collections::HashMap<PackDependency, String>,
 }
@@ -23,7 +22,7 @@ pub struct PackFormat {
 #[derive(Serialize, Deserialize, Validate, Eq, PartialEq, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct PackFile {
-    pub path: String,
+    pub path: SafeRelativeUtf8UnixPathBuf,
     pub hashes: std::collections::HashMap<PackFileHash, String>,
     pub env: Option<std::collections::HashMap<EnvType, LegacySideType>>, // TODO: Should this use LegacySideType? Will probably require a overhaul of mrpack format to change this
     #[validate(custom(function = "validate_download_url"))]
@@ -43,9 +42,7 @@ fn validate_download_url(
             return Err(validator::ValidationError::new("invalid URL"));
         }
 
-        let domains = parse_strings_from_var("WHITELISTED_MODPACK_DOMAINS")
-            .unwrap_or_default();
-        if !domains.contains(
+        if !ENV.WHITELISTED_MODPACK_DOMAINS.contains(
             &url.domain()
                 .ok_or_else(|| validator::ValidationError::new("invalid URL"))?
                 .to_string(),

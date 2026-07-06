@@ -1,20 +1,20 @@
+use crate::assert_status;
+use crate::common::api_common::{ApiProject, ApiVersion};
+use crate::common::api_v2::ApiV2;
 use actix_http::StatusCode;
 use actix_web::test;
 use futures::StreamExt;
-use labrinth::models::projects::VersionId;
 use labrinth::{
+    models::ids::VersionId,
     models::projects::{Loader, VersionStatus, VersionType},
+    models::v2::projects::LegacySideType,
     routes::v2::version_file::FileUpdateData,
 };
 use serde_json::json;
 
-use crate::assert_status;
-use crate::common::api_common::{ApiProject, ApiVersion};
-use crate::common::api_v2::ApiV2;
-
 use crate::common::api_v2::request_data::get_public_project_creation_data;
 use crate::common::dummy_data::{DummyProjectAlpha, DummyProjectBeta};
-use crate::common::environment::{with_test_environment, TestEnvironment};
+use crate::common::environment::{TestEnvironment, with_test_environment};
 use crate::common::{
     database::{ENEMY_USER_PAT, USER_USER_PAT},
     dummy_data::TestFile,
@@ -57,7 +57,7 @@ pub async fn test_patch_version() {
                 assert_status!(&resp, StatusCode::BAD_REQUEST);
             }
 
-            // Sucessful request to patch many fields.
+            // Successful request to patch many fields.
             let resp = api
                 .edit_version(
                     alpha_version_id,
@@ -85,7 +85,7 @@ pub async fn test_patch_version() {
                 .await;
             assert_eq!(version.name, "new version name");
             assert_eq!(version.version_number, "1.3.0");
-            assert_eq!(version.changelog, "new changelog");
+            assert_eq!(version.changelog, Some("new changelog".into()));
             assert_eq!(
                 version.version_type,
                 serde_json::from_str::<VersionType>("\"beta\"").unwrap()
@@ -220,7 +220,7 @@ async fn version_updates() {
 
             // Add 3 new versions, 1 before, and 2 after, with differing game_version/version_types/loaders
             let mut update_ids = vec![];
-            for (version_number, patch_value) in [
+            for (version_number, patch_value) in &[
                 (
                     "0.9.9",
                     json!({
@@ -242,9 +242,7 @@ async fn version_updates() {
                         "version_type": "beta"
                     }),
                 ),
-            ]
-            .iter()
-            {
+            ] {
                 let version = api
                     .add_public_version_deserialized_common(
                         *alpha_project_id_parsed,
@@ -470,10 +468,10 @@ async fn add_version_project_types_v2() {
                 )
                 .await;
             assert_eq!(test_project.project_type, "project"); // No project_type set, as no versions are set
-                                                              // Default to 'project' if none are found
-                                                              // This is a known difference between older v2 ,but is acceptable.
-                                                              // This would be the appropriate test on older v2:
-                                                              // assert_eq!(test_project.project_type, "modpack");
+            // Default to 'project' if none are found
+            // This is a known difference between older v2 ,but is acceptable.
+            // This would be the appropriate test on older v2:
+            // assert_eq!(test_project.project_type, "modpack");
 
             // Create a version with a modpack file attached
             let test_version = api
@@ -513,6 +511,84 @@ async fn add_version_project_types_v2() {
             // When we get the project as v3, it should display 'modpack' as the project_type, and 'mrpack' as the loader
 
             // The project should be a modpack project
+        },
+    )
+    .await;
+}
+
+#[actix_rt::test]
+async fn add_version_accepts_environment_v2() {
+    with_test_environment(
+        None,
+        |test_env: TestEnvironment<ApiV2>| async move {
+            let api = &test_env.api;
+
+            let (test_project, test_versions) = api
+                .add_public_project(
+                    "test-version-environment",
+                    None,
+                    None,
+                    USER_USER_PAT,
+                )
+                .await;
+            assert_eq!(test_versions.len(), 0);
+
+            let patch = json!([{
+                "op": "add",
+                "path": "/environment",
+                "value": "server_only_client_optional"
+            }]);
+
+            let resp = api
+                .add_public_version(
+                    test_project.id,
+                    "1.0.0",
+                    TestFile::build_random_jar(),
+                    None,
+                    Some(serde_json::from_value(patch).unwrap()),
+                    USER_USER_PAT,
+                )
+                .await;
+            assert_status!(&resp, StatusCode::OK);
+
+            let project = api
+                .get_project_deserialized(
+                    &test_project.slug.unwrap(),
+                    USER_USER_PAT,
+                )
+                .await;
+            assert_eq!(project.client_side, LegacySideType::Optional);
+            assert_eq!(project.server_side, LegacySideType::Required);
+        },
+    )
+    .await;
+}
+
+#[actix_rt::test]
+async fn create_project_initial_version_accepts_environment_v2() {
+    with_test_environment(
+        None,
+        |test_env: TestEnvironment<ApiV2>| async move {
+            let api = &test_env.api;
+            let slug = "test-project-version-environment";
+            let patch = json!([{
+                "op": "add",
+                "path": "/initial_versions/0/environment",
+                "value": "client_only_server_optional"
+            }]);
+            let creation_data = get_public_project_creation_data(
+                slug,
+                Some(TestFile::build_random_jar()),
+                Some(serde_json::from_value(patch).unwrap()),
+            );
+
+            let resp = api.create_project(creation_data, USER_USER_PAT).await;
+            assert_status!(&resp, StatusCode::OK);
+
+            let project =
+                api.get_project_deserialized(slug, USER_USER_PAT).await;
+            assert_eq!(project.client_side, LegacySideType::Required);
+            assert_eq!(project.server_side, LegacySideType::Optional);
         },
     )
     .await;

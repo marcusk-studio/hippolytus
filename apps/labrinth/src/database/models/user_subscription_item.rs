@@ -1,24 +1,25 @@
+use crate::database::PgTransaction;
 use crate::database::models::{
-    DatabaseError, ProductPriceId, UserId, UserSubscriptionId,
+    DBProductPriceId, DBUserId, DBUserSubscriptionId, DatabaseError,
 };
 use crate::models::billing::{
-    PriceDuration, SubscriptionMetadata, SubscriptionStatus,
+    PriceDuration, ProductMetadata, SubscriptionMetadata, SubscriptionStatus,
 };
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use std::convert::{TryFrom, TryInto};
 
-pub struct UserSubscriptionItem {
-    pub id: UserSubscriptionId,
-    pub user_id: UserId,
-    pub price_id: ProductPriceId,
+pub struct DBUserSubscription {
+    pub id: DBUserSubscriptionId,
+    pub user_id: DBUserId,
+    pub price_id: DBProductPriceId,
     pub interval: PriceDuration,
     pub created: DateTime<Utc>,
     pub status: SubscriptionStatus,
     pub metadata: Option<SubscriptionMetadata>,
 }
 
-struct UserSubscriptionResult {
+struct UserSubscriptionQueryResult {
     id: i64,
     user_id: i64,
     price_id: i64,
@@ -31,7 +32,7 @@ struct UserSubscriptionResult {
 macro_rules! select_user_subscriptions_with_predicate {
     ($predicate:tt, $param:ident) => {
         sqlx::query_as!(
-            UserSubscriptionResult,
+            UserSubscriptionQueryResult,
             r#"
             SELECT
                 us.id, us.user_id, us.price_id, us.interval, us.created, us.status, us.metadata
@@ -43,14 +44,14 @@ macro_rules! select_user_subscriptions_with_predicate {
     };
 }
 
-impl TryFrom<UserSubscriptionResult> for UserSubscriptionItem {
+impl TryFrom<UserSubscriptionQueryResult> for DBUserSubscription {
     type Error = serde_json::Error;
 
-    fn try_from(r: UserSubscriptionResult) -> Result<Self, Self::Error> {
-        Ok(UserSubscriptionItem {
-            id: UserSubscriptionId(r.id),
-            user_id: UserId(r.user_id),
-            price_id: ProductPriceId(r.price_id),
+    fn try_from(r: UserSubscriptionQueryResult) -> Result<Self, Self::Error> {
+        Ok(DBUserSubscription {
+            id: DBUserSubscriptionId(r.id),
+            user_id: DBUserId(r.user_id),
+            price_id: DBProductPriceId(r.price_id),
             interval: PriceDuration::from_string(&r.interval),
             created: r.created,
             status: SubscriptionStatus::from_string(&r.status),
@@ -59,18 +60,18 @@ impl TryFrom<UserSubscriptionResult> for UserSubscriptionItem {
     }
 }
 
-impl UserSubscriptionItem {
+impl DBUserSubscription {
     pub async fn get(
-        id: UserSubscriptionId,
-        exec: impl sqlx::Executor<'_, Database = sqlx::Postgres>,
-    ) -> Result<Option<UserSubscriptionItem>, DatabaseError> {
+        id: DBUserSubscriptionId,
+        exec: impl crate::database::Executor<'_, Database = sqlx::Postgres>,
+    ) -> Result<Option<DBUserSubscription>, DatabaseError> {
         Ok(Self::get_many(&[id], exec).await?.into_iter().next())
     }
 
     pub async fn get_many(
-        ids: &[UserSubscriptionId],
-        exec: impl sqlx::Executor<'_, Database = sqlx::Postgres>,
-    ) -> Result<Vec<UserSubscriptionItem>, DatabaseError> {
+        ids: &[DBUserSubscriptionId],
+        exec: impl crate::database::Executor<'_, Database = sqlx::Postgres>,
+    ) -> Result<Vec<DBUserSubscription>, DatabaseError> {
         let ids = ids.iter().map(|id| id.0).collect_vec();
         let ids_ref: &[i64] = &ids;
         let results = select_user_subscriptions_with_predicate!(
@@ -87,9 +88,9 @@ impl UserSubscriptionItem {
     }
 
     pub async fn get_all_user(
-        user_id: UserId,
-        exec: impl sqlx::Executor<'_, Database = sqlx::Postgres>,
-    ) -> Result<Vec<UserSubscriptionItem>, DatabaseError> {
+        user_id: DBUserId,
+        exec: impl crate::database::Executor<'_, Database = sqlx::Postgres>,
+    ) -> Result<Vec<DBUserSubscription>, DatabaseError> {
         let user_id = user_id.0;
         let results = select_user_subscriptions_with_predicate!(
             "WHERE us.user_id = $1",
@@ -106,8 +107,8 @@ impl UserSubscriptionItem {
 
     pub async fn get_all_servers(
         status: Option<SubscriptionStatus>,
-        exec: impl sqlx::Executor<'_, Database = sqlx::Postgres>,
-    ) -> Result<Vec<UserSubscriptionItem>, DatabaseError> {
+        exec: impl crate::database::Executor<'_, Database = sqlx::Postgres>,
+    ) -> Result<Vec<DBUserSubscription>, DatabaseError> {
         let status = status.map(|x| x.as_str());
 
         let results = select_user_subscriptions_with_predicate!(
@@ -130,7 +131,7 @@ impl UserSubscriptionItem {
 
     pub async fn upsert(
         &self,
-        transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        transaction: &mut PgTransaction<'_>,
     ) -> Result<(), DatabaseError> {
         sqlx::query!(
             "
@@ -155,9 +156,44 @@ impl UserSubscriptionItem {
             self.status.as_str(),
             serde_json::to_value(&self.metadata)?,
         )
-        .execute(&mut **transaction)
+        .execute(&mut *transaction)
         .await?;
 
         Ok(())
     }
+
+    pub async fn get_many_by_server_ids(
+        server_ids: &[String],
+        exec: impl crate::database::Executor<'_, Database = sqlx::Postgres>,
+    ) -> Result<Vec<DBUserSubscription>, DatabaseError> {
+        if server_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let results = sqlx::query_as!(
+            UserSubscriptionQueryResult,
+            r#"
+            SELECT us.id, us.user_id, us.price_id, us.interval, us.created, us.status, us.metadata
+            FROM users_subscriptions us
+            WHERE us.metadata->>'type' = 'pyro' AND us.metadata->>'id' = ANY($1::text[])
+            "#,
+            server_ids
+        )
+        .fetch_all(exec)
+        .await?;
+
+        Ok(results
+            .into_iter()
+            .map(|r| r.try_into())
+            .collect::<Result<Vec<_>, serde_json::Error>>()?)
+    }
+}
+
+pub struct SubscriptionWithCharge {
+    pub subscription_id: DBUserSubscriptionId,
+    pub user_id: DBUserId,
+    pub product_metadata: ProductMetadata,
+    pub amount: i64,
+    pub tax_amount: i64,
+    pub due: DateTime<Utc>,
 }

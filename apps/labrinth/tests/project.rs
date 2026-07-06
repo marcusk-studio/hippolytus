@@ -4,20 +4,6 @@ use common::api_v3::ApiV3;
 use common::database::*;
 use common::dummy_data::DUMMY_CATEGORIES;
 
-use common::environment::{
-    with_test_environment, with_test_environment_all, TestEnvironment,
-};
-use common::permissions::{PermissionsTest, PermissionsTestContext};
-use futures::StreamExt;
-use labrinth::database::models::project_item::{
-    PROJECTS_NAMESPACE, PROJECTS_SLUGS_NAMESPACE,
-};
-use labrinth::models::ids::base62_impl::parse_base62;
-use labrinth::models::projects::ProjectId;
-use labrinth::models::teams::ProjectPermissions;
-use labrinth::util::actix::{MultipartSegment, MultipartSegmentData};
-use serde_json::json;
-
 use crate::common::api_common::models::CommonProject;
 use crate::common::api_common::request_data::ProjectCreationRequestData;
 use crate::common::api_common::{ApiProject, ApiTeams, ApiVersion};
@@ -25,7 +11,23 @@ use crate::common::dummy_data::{
     DummyImage, DummyOrganizationZeta, DummyProjectAlpha, DummyProjectBeta,
     TestFile,
 };
-mod common;
+use ariadne::ids::base62_impl::parse_base62;
+use common::environment::{
+    TestEnvironment, with_test_environment, with_test_environment_all,
+};
+use common::permissions::{PermissionsTest, PermissionsTestContext};
+use futures::StreamExt;
+use hex::ToHex;
+use labrinth::database::models::project_item::{
+    PROJECTS_NAMESPACE, PROJECTS_SLUGS_NAMESPACE,
+};
+use labrinth::models::ids::ProjectId;
+use labrinth::models::teams::ProjectPermissions;
+use labrinth::util::actix::{MultipartSegment, MultipartSegmentData};
+use serde_json::json;
+use sha1::Digest;
+
+pub mod common;
 
 #[actix_rt::test]
 async fn test_get_project() {
@@ -204,9 +206,8 @@ async fn test_add_remove_project() {
             let uploaded_version_id = project.versions[0];
 
             // Checks files to ensure they were uploaded and correctly identify the file
-            let hash = sha1::Sha1::from(basic_mod_file.bytes())
-                .digest()
-                .to_string();
+            let hash = sha1::Sha1::digest(basic_mod_file.bytes())
+                .encode_hex::<String>();
             let version = api
                 .get_version_from_hash_deserialized_common(
                     &hash,
@@ -418,7 +419,7 @@ pub async fn test_patch_project() {
                 .await;
             assert_status!(&resp, StatusCode::UNAUTHORIZED);
 
-            // Sucessful request to patch many fields.
+            // Successful request to patch many fields.
             let resp = api
                 .edit_project(
                     alpha_project_slug,
@@ -499,7 +500,7 @@ pub async fn test_patch_v3() {
 
             let alpha_project_slug = &test_env.dummy.project_alpha.project_slug;
 
-            // Sucessful request to patch many fields.
+            // Successful request to patch many fields.
             let resp = api
                 .edit_project(
                     alpha_project_slug,
@@ -1140,7 +1141,7 @@ async fn permissions_delete_project() {
 async fn project_permissions_consistency_test() {
     with_test_environment_all(Some(10), |test_env| async move {
         // Test that the permissions are consistent with each other
-        // For example, if we get the projectpermissions directly, from an organization's defaults, overriden, etc, they should all be correct & consistent
+        // For example, if we get the projectpermissions directly, from an organization's defaults, overridden, etc, they should all be correct & consistent
         let api = &test_env.api;
         // Full project permissions test with EDIT_DETAILS
         let success_permissions = ProjectPermissions::EDIT_DETAILS;
@@ -1349,6 +1350,50 @@ async fn projects_various_visibility() {
                     test::read_body_json(projects).await;
                 assert_eq!(projects.len(), expected_count);
             }
+        },
+    )
+    .await;
+}
+
+#[actix_rt::test]
+async fn test_thread_deleted_with_project() {
+    with_test_environment(
+        None,
+        |test_env: TestEnvironment<ApiV3>| async move {
+            let api = &test_env.api;
+
+            let alpha_project_id = &test_env.dummy.project_alpha.project_id;
+            let alpha_thread_id = &test_env.dummy.project_alpha.thread_id;
+
+            // Verify the thread exists initially
+            let resp = api.get_thread(alpha_thread_id, USER_USER_PAT).await;
+            assert_status!(&resp, StatusCode::OK);
+
+            // Write a message to the thread to confirm it's working
+            let resp = api
+                .write_to_thread(
+                    alpha_thread_id,
+                    "text",
+                    "Test message before project deletion",
+                    USER_USER_PAT,
+                )
+                .await;
+            assert_status!(&resp, StatusCode::NO_CONTENT);
+
+            // Check that the thread exists before project deletion
+            // Use a moderator PAT since moderation threads are not visible to users
+            let resp = api.get_thread(alpha_thread_id, MOD_USER_PAT).await;
+            assert_status!(&resp, StatusCode::OK);
+
+            // Delete the project
+            let resp =
+                api.remove_project(alpha_project_id, USER_USER_PAT).await;
+            assert_status!(&resp, StatusCode::NO_CONTENT);
+
+            // Check that the thread still exists after project deletion
+            // Also use mod PAT here
+            let resp = api.get_thread(alpha_thread_id, MOD_USER_PAT).await;
+            assert_status!(&resp, StatusCode::OK);
         },
     )
     .await;
