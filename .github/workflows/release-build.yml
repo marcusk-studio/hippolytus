@@ -120,6 +120,9 @@ jobs:
         run: |
           cd apps/app
           pnpm install
+      - name: Configure app environment
+        shell: bash
+        run: cp packages/app-lib/.env.prod packages/app-lib/.env
       - name: build app (macos)
         run: >-
           pnpm --filter=@modrinth/app run tauri build --target

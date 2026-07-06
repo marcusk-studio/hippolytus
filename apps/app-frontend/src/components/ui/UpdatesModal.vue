@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { Button, Card } from '@modrinth/ui'
 import { BellIcon, LeftArrowIcon, RightArrowIcon } from '@modrinth/assets'
-import ModalWrapper from './modal/ModalWrapper.vue'
-import { get, set } from '@/helpers/settings.ts'
+import { Button, Card } from '@modrinth/ui'
 import dayjs from 'dayjs'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+
+import { get, set } from '@/helpers/settings.ts'
+
+import ModalWrapper from './modal/ModalWrapper.vue'
 
 interface Update {
 	id: string
