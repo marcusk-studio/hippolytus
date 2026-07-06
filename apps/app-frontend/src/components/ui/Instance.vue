@@ -180,11 +180,7 @@ onUnmounted(() => unlisten())
     </div>
   </template>
   <div v-else class="instance-card">
-    <div
-      class="card-content"
-      @click="seeInstance"
-      @mouseenter="checkProcess"
-    >
+    <div class="card-content" @click="seeInstance" @mouseenter="checkProcess">
       <div class="card-header">
         <div class="icon-container">
           <Avatar
@@ -194,7 +190,7 @@ onUnmounted(() => unlisten())
             alt="Instance icon"
             :class="`instance-icon ${modLoading || installing ? 'loading' : ''}`"
           />
-          
+
           <div class="status-overlay">
             <ButtonStyled v-if="playing" size="large" color="red" circular>
               <button
@@ -212,11 +208,7 @@ onUnmounted(() => unlisten())
               class="status-spinner"
             />
             <ButtonStyled v-else-if="!installed" size="large" color="brand" circular>
-              <button
-                v-tooltip="'Repair'"
-                class="status-button"
-                @click="(e) => repair(e)"
-              >
+              <button v-tooltip="'Repair'" class="status-button" @click="(e) => repair(e)">
                 <DownloadIcon />
               </button>
             </ButtonStyled>
@@ -236,7 +228,7 @@ onUnmounted(() => unlisten())
 
       <div class="card-body">
         <h3 class="instance-name">{{ instance.name }}</h3>
-        
+
         <div class="instance-details">
           <div class="detail-item">
             <GameIcon class="detail-icon" />
@@ -244,12 +236,10 @@ onUnmounted(() => unlisten())
               {{ formatCategory(instance.loader) }} {{ instance.game_version }}
             </span>
           </div>
-          
+
           <div class="detail-item">
             <TimerIcon class="detail-icon" />
-            <span class="detail-text">
-              Played {{ dayjs(instance.last_played).fromNow() }}
-            </span>
+            <span class="detail-text"> Played {{ dayjs(instance.last_played).fromNow() }} </span>
           </div>
         </div>
       </div>
@@ -279,12 +269,12 @@ onUnmounted(() => unlisten())
   transition: all 0.3s ease;
   cursor: pointer;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-  
+
   &:hover {
     transform: translateY(-2px);
     box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
   }
-  
+
   .card-content {
     padding: 1.125rem;
     display: flex;
@@ -292,46 +282,46 @@ onUnmounted(() => unlisten())
     gap: 0.75rem;
     height: 100%;
   }
-  
+
   .card-header {
     display: flex;
     justify-content: center;
-    
+
     .icon-container {
       position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
-      
+
       .instance-icon {
         transition: all 0.3s ease;
         width: 64px !important;
         height: 64px !important;
-        
+
         &.loading {
           opacity: 0.5;
           transform: scale(0.9);
         }
       }
-      
+
       .status-overlay {
         position: absolute;
         inset: 0;
         display: flex;
         align-items: center;
         justify-content: center;
-        
+
         .status-button {
           opacity: 0;
           transform: scale(0.8);
           transition: all 0.2s ease;
-          
+
           &:hover {
             opacity: 1;
             transform: scale(1);
           }
         }
-        
+
         .status-spinner {
           width: 1.5rem;
           height: 1.5rem;
@@ -341,13 +331,13 @@ onUnmounted(() => unlisten())
       }
     }
   }
-  
+
   .card-body {
     flex: 1;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    
+
     .instance-name {
       margin: 0;
       font-size: 1.125rem;
@@ -357,12 +347,12 @@ onUnmounted(() => unlisten())
       text-align: center;
       word-break: break-word;
     }
-    
+
     .instance-details {
       display: flex;
       flex-direction: column;
       gap: 0.375rem;
-      
+
       .detail-item {
         display: flex;
         align-items: center;
@@ -371,14 +361,14 @@ onUnmounted(() => unlisten())
         background: rgba(255, 255, 255, 0.05);
         border-radius: 0.5rem;
         border: none;
-        
+
         .detail-icon {
           width: 0.875rem;
           height: 0.875rem;
           color: var(--color-secondary);
           flex-shrink: 0;
         }
-        
+
         .detail-text {
           font-size: 0.8125rem;
           color: var(--color-secondary);
@@ -388,19 +378,19 @@ onUnmounted(() => unlisten())
       }
     }
   }
-  
+
   .card-actions {
     display: flex;
     justify-content: center;
     gap: 0.5rem;
     padding-top: 0.375rem;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
-    
+
     button {
       padding: 0.375rem;
       border-radius: 0.5rem;
       transition: all 0.2s ease;
-      
+
       &:hover {
         background: rgba(255, 255, 255, 0.1);
         transform: scale(1.05);
@@ -425,19 +415,19 @@ onUnmounted(() => unlisten())
       padding: 1rem;
       gap: 0.75rem;
     }
-    
+
     .card-header .icon-container .instance-icon {
       width: 64px !important;
       height: 64px !important;
     }
-    
+
     .card-body .instance-name {
       font-size: 1.125rem;
     }
-    
+
     .card-actions {
       gap: 0.25rem;
-      
+
       button {
         padding: 0.375rem;
       }
@@ -450,10 +440,10 @@ onUnmounted(() => unlisten())
     .card-content {
       padding: 0.875rem;
     }
-    
+
     .card-body .instance-details .detail-item {
       padding: 0.375rem;
-      
+
       .detail-text {
         font-size: 0.8125rem;
       }

@@ -1,30 +1,57 @@
 <template>
   <div class="relative" style="width: 250px">
-    <div v-if="mode !== 'isolated'" ref="button"
+    <div
+      v-if="mode !== 'isolated'"
+      ref="button"
       class="flex overflow-hidden gap-3 px-4 py-3 bg-white rounded-3xl border-2 border-gray-700 border-solid shadow-2xl items-center justify-center w-full cursor-pointer"
-      role="article" @click="toggleMenu">
-      <Avatar size="64px" class="object-contain shrink-0 noborder" :src="selectedAccount
-        ? getCachedAvatarUrl(selectedAccount.username)
-        : 'https://launcher-files.modrinth.com/assets/steve_head.png'
-        " :alt="selectedAccount ? selectedAccount.username : 'Default avatar'" />
+      role="article"
+      @click="toggleMenu"
+    >
+      <Avatar
+        size="64px"
+        class="object-contain shrink-0 noborder"
+        :src="
+          selectedAccount
+            ? getCachedAvatarUrl(selectedAccount.username)
+            : 'https://launcher-files.modrinth.com/assets/steve_head.png'
+        "
+        :alt="selectedAccount ? selectedAccount.username : 'Default avatar'"
+      />
       <div class="flex flex-col justify-center">
         <p class="text-xs font-light text-gray-600 leading-none">Playing as</p>
-        <h2 class="text-lg font-bold leading-none text-black truncate">{{ selectedAccount ? selectedAccount.username :
-          'Select account' }}</h2>
+        <h2 class="text-lg font-bold leading-none text-black truncate">
+          {{ selectedAccount ? selectedAccount.username : 'Select account' }}
+        </h2>
       </div>
-      <DropdownIcon class="w-4 h-4 text-gray-600 ml-2 transition-transform" :class="{ 'rotate-180': showCard }" />
+      <DropdownIcon
+        class="w-4 h-4 text-gray-600 ml-2 transition-transform"
+        :class="{ 'rotate-180': showCard }"
+      />
     </div>
 
     <transition name="fade">
-      <Card v-if="showCard || mode === 'isolated'" ref="card" class="account-card"
-        :class="{ expanded: mode === 'expanded', isolated: mode === 'isolated' }">
+      <Card
+        v-if="showCard || mode === 'isolated'"
+        ref="card"
+        class="account-card"
+        :class="{ expanded: mode === 'expanded', isolated: mode === 'isolated' }"
+      >
         <div v-if="selectedAccount" class="selected account">
-          <Avatar size="xs" class="noborder" :src="`https://crafatar.com/avatars/${selectedAccount.id}`" />
+          <Avatar
+            size="xs"
+            class="noborder"
+            :src="`https://crafatar.com/avatars/${selectedAccount.id}`"
+          />
           <div class="flex-1 min-w-0">
             <h4 class="truncate">{{ selectedAccount.username }}</h4>
             <p>Selected</p>
           </div>
-          <Button v-tooltip="'Log out'" icon-only color="raised" @click="logout(selectedAccount.id)">
+          <Button
+            v-tooltip="'Log out'"
+            icon-only
+            color="raised"
+            @click="logout(selectedAccount.id)"
+          >
             <TrashIcon />
           </Button>
         </div>
@@ -133,7 +160,7 @@ async function setAccount(account) {
 }
 
 const logout = async (id) => {
-  const account = accounts.value.find(acc => acc.id === id)
+  const account = accounts.value.find((acc) => acc.id === id)
   if (account) {
     localStorage.removeItem(`avatar_${account.username}`)
     localStorage.removeItem(`crafatar_${account.id}`)
@@ -195,10 +222,6 @@ onUnmounted(() => {
 
 function getCachedAvatarUrl(username) {
   return `https://pfp.arcticbd.net/api/pfp/normal/${username}.png?gradient=e66a3e-e08a54`
-}
-
-function getCachedCrafatarUrl(uuid) {
-  return `https://crafatar.com/avatars/${uuid}`
 }
 
 const login = async () => {

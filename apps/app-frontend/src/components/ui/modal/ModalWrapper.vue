@@ -18,7 +18,7 @@ const props = defineProps({
   onHide: {
     type: Function,
     default() {
-      return () => { }
+      return () => {}
     },
   },
   showAdOnClose: {
@@ -30,7 +30,7 @@ const props = defineProps({
     default: '',
   },
 })
-const modal = ref<any>(null)
+const modal = ref<InstanceType<typeof Modal> | null>(null)
 
 defineExpose({
   show: () => {
@@ -53,10 +53,10 @@ function onModalHide() {
 
 <template>
   <Teleport to="body">
-    <Modal 
-      ref="modal" 
-      :header="header" 
-      :noblur="!themeStore.advancedRendering" 
+    <Modal
+      ref="modal"
+      :header="header"
+      :noblur="!themeStore.advancedRendering"
       :class="['modal-wrapper', props.class]"
       v-bind="$attrs"
       @hide="onModalHide"

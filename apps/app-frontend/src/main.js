@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import router from '@/routes'
 import App from '@/App.vue'
+import { useError } from '@/store/error.js'
 import { createPinia } from 'pinia'
 import FloatingVue from 'floating-vue'
 import 'floating-vue/dist/style.css'
@@ -52,7 +53,7 @@ app.use(VIntlPlugin)
 app.mount('#app')
 
 window.addEventListener('unhandledrejection', (event) => {
-  console.error('Unhandled promise rejection:', event.reason);
-  const error = useError();
-  error.showError(event.reason, 'Unhandled Promise Rejection');
-});
+  console.error('Unhandled promise rejection:', event.reason)
+  const error = useError()
+  error.showError(event.reason, 'Unhandled Promise Rejection')
+})

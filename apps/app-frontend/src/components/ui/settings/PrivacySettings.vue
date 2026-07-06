@@ -26,8 +26,8 @@ watch(
     <div>
       <h2 class="m-0 text-lg font-extrabold text-contrast">Telemetry</h2>
       <p class="m-0 text-sm">
-        MARCUSK Launcher collects anonymized analytics and usage data to improve our user experience and
-        customize your experience. By disabling this option, you opt out and your data will no
+        MARCUSK Launcher collects anonymized analytics and usage data to improve our user experience
+        and customize your experience. By disabling this option, you opt out and your data will no
         longer be collected.
       </p>
     </div>
@@ -47,8 +47,8 @@ watch(
     <div>
       <h2 class="m-0 text-lg font-extrabold text-contrast">Discord RPC</h2>
       <p class="m-0 text-sm">
-        Manages the Discord Rich Presence integration. Disabling this will cause 'MARCUSK Studio' to no
-        longer show up as a game or app you are using on your Discord profile.
+        Manages the Discord Rich Presence integration. Disabling this will cause 'MARCUSK Studio' to
+        no longer show up as a game or app you are using on your Discord profile.
       </p>
       <p class="m-0 mt-2 text-sm">
         Note: This will not prevent any instance-specific Discord Rich Presence integrations, such

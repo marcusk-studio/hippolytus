@@ -1,19 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, ref, shallowRef, watch, ref as vueRef } from 'vue'
 import type { Ref } from 'vue'
-import { ref as vueRef } from 'vue'
-import { SearchIcon, XIcon, ClipboardCopyIcon, GlobeIcon, ExternalIcon } from '@modrinth/assets'
-import type { Category, GameVersion, Platform, ProjectType, SortType, Tags } from '@modrinth/ui'
-import {
-  SearchFilterControl,
-  SearchSidebarFilter,
-  Button,
-  Checkbox,
-  DropdownSelect,
-  LoadingIndicator,
-  Pagination,
-  useSearch,
-} from '@modrinth/ui'
+import type { Category, GameVersion, Platform, ProjectType, Tags } from '@modrinth/ui'
+import { SearchFilterControl, LoadingIndicator, Pagination, useSearch } from '@modrinth/ui'
 import { handleError } from '@/store/state'
 import { useBreadcrumbs } from '@/store/breadcrumbs'
 import { get_categories, get_game_versions, get_loaders } from '@/helpers/tags'
@@ -25,11 +14,7 @@ import { get_search_results } from '@/helpers/cache.js'
 import NavTabs from '@/components/ui/NavTabs.vue'
 import type Instance from '@/components/ui/Instance.vue'
 import InstanceIndicator from '@/components/ui/InstanceIndicator.vue'
-import { defineMessages, useVIntl } from '@vintl/vintl'
-import ContextMenu from '@/components/ui/ContextMenu.vue'
-import { openUrl } from '@tauri-apps/plugin-opener'
-
-const { formatMessage } = useVIntl()
+import { defineMessages } from '@vintl/vintl'
 
 const router = useRouter()
 const route = useRoute()
@@ -123,22 +108,22 @@ fetchSuccessful.value = await fetchFeaturedProjects()
 
 const instanceFilters = computed(() => {
   const filters: {
-    type: string;
-    option: string;
-    negative?: boolean;
+    type: string
+    option: string
+    negative?: boolean
   }[] = []
 
   if (fetchSuccessful.value && featuredProjects.value.length > 0) {
     // Create a single filter with all project IDs joined with OR logic
-    const projectIdOptions = featuredProjects.value.map(project => `project_id:${project.id}`);
+    const projectIdOptions = featuredProjects.value.map((project) => `project_id:${project.id}`)
     filters.push({
       type: 'project_id',
-      option: projectIdOptions.join(' OR ')
+      option: projectIdOptions.join(' OR '),
     })
   } else {
     filters.push({
       type: 'project_id',
-      option: 'project_id:none'
+      option: 'project_id:none',
     })
   }
 
@@ -187,14 +172,11 @@ const {
   query,
   currentSortType,
   currentFilters,
-  toggledGroups,
-  maxResults,
   currentPage,
   overriddenProvidedFilterTypes,
 
   // Lists
   filters,
-  sortTypes,
 
   // Computed
   requestParams,
@@ -307,10 +289,6 @@ async function onSearchChangeToTop() {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-function clearSearch() {
-  query.value = ''
-}
-
 watch(
   () => route.params.projectType,
   async (newType) => {
@@ -322,26 +300,7 @@ watch(
 )
 
 const selectableProjectTypes = computed(() => {
-  let dataPacks = false,
-    mods = false,
-    modpacks = false
-
-  if (instance.value) {
-    if (
-      (availableGameVersions.value as GameVersion[]).findIndex((x) => x.version === instance.value?.game_version) <=
-      (availableGameVersions.value as GameVersion[]).findIndex((x) => x.version === '1.13')
-    ) {
-      dataPacks = true
-    }
-
-    if (instance.value.loader !== 'vanilla') {
-      mods = true
-    }
-  } else {
-    dataPacks = true
-    mods = true
-    modpacks = true
-  }
+  const modpacks = !instance.value
 
   const params: LocationQuery = {}
 
@@ -391,12 +350,7 @@ const messages = defineMessages({
   },
 })
 
-const options = ref(null)
-const handleRightClick = (event: MouseEvent, result: any) => {
-  return
-}
-
-const handleOptionsClick = (args: { option: string; item: { project_type: string; slug: string } }) => {
+const handleRightClick = (_event: MouseEvent, _result: unknown) => {
   return
 }
 
@@ -415,12 +369,7 @@ await refreshSearch()
       <!-- Navigation and Pagination -->
       <NavTabs :links="selectableProjectTypes" />
       <div class="flex gap-2">
-        <Pagination
-          :page="currentPage"
-          :count="pageCount"
-          class="ml-auto"
-          @switch-page="setPage"
-        />
+        <Pagination :page="currentPage" :count="pageCount" class="ml-auto" @switch-page="setPage" />
       </div>
 
       <!-- Search Filters -->
@@ -438,18 +387,11 @@ await refreshSearch()
           <LoadingIndicator />
         </section>
 
-        <section
-          v-else-if="offline && results?.total_hits === 0"
-          class="offline"
-        >
+        <section v-else-if="offline && results?.total_hits === 0" class="offline">
           You are currently offline. Connect to the internet to browse Modrinth!
         </section>
 
-        <section
-          v-else
-          class="project-list display-mode--list instance-results"
-          role="list"
-        >
+        <section v-else class="project-list display-mode--list instance-results" role="list">
           <SearchCard
             v-for="result in results.hits"
             :key="result?.project_id"
@@ -458,19 +400,20 @@ await refreshSearch()
             :categories="[
               ...categories.filter(
                 (cat) =>
-                  result?.display_categories.includes(cat.name) &&
-                  cat.project_type === projectType
+                  result?.display_categories.includes(cat.name) && cat.project_type === projectType,
               ),
               ...loaders.filter(
                 (loader) =>
                   result?.display_categories.includes(loader.name) &&
-                  loader.supported_project_types?.includes(projectType)
-              )
+                  loader.supported_project_types?.includes(projectType),
+              ),
             ]"
-            :installed="
-              result.installed || newlyInstalled.includes(result.project_id)
+            :installed="result.installed || newlyInstalled.includes(result.project_id)"
+            @install="
+              (id) => {
+                newlyInstalled.push(id)
+              }
             "
-            @install="(id) => { newlyInstalled.push(id) }"
             @contextmenu.prevent.stop="(event) => handleRightClick(event, result)"
           />
         </section>

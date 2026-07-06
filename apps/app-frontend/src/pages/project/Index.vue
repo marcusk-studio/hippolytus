@@ -4,14 +4,24 @@
       <div class="relative z-10">
         <InstanceIndicator v-if="instance" :instance="instance" />
         <template v-if="data">
-          <Teleport v-if="themeStore.featureFlags.project_background" to="#background-teleport-target">
+          <Teleport
+            v-if="themeStore.featureFlags.project_background"
+            to="#background-teleport-target"
+          >
             <ProjectBackgroundGradient :project="data" />
           </Teleport>
-          <ProjectHeader class="bg-[#0a0101] rounded-3xl pt-4 pl-4 pr-10 mb-6" :project="data" @contextmenu.prevent.stop="handleRightClick">
+          <ProjectHeader
+            class="bg-[#0a0101] rounded-3xl pt-4 pl-4 pr-10 mb-6"
+            :project="data"
+            @contextmenu.prevent.stop="handleRightClick"
+          >
             <template #actions>
               <ButtonStyled size="large" color="brand">
-                <button v-tooltip="installed ? `This project is already installed` : null"
-                  :disabled="installed || installing" @click="install(null)">
+                <button
+                  v-tooltip="installed ? `This project is already installed` : null"
+                  :disabled="installed || installing"
+                  @click="install(null)"
+                >
                   <DownloadIcon v-if="!installed && !installing" />
                   <CheckIcon v-else-if="installed" />
                   {{ installing ? 'Installing...' : installed ? 'Installed' : 'Install' }}
@@ -19,60 +29,52 @@
               </ButtonStyled>
             </template>
           </ProjectHeader>
-          <NavTabs :links="[
-          {
-            label: 'Description',
-            href: `/project/${$route.params.id}`,
-          },
-          {
-            label: 'Versions',
-            href: {
-              path: `/project/${$route.params.id}/versions`,
-              query: { l: instance?.loader, g: instance?.game_version },
-            },
-            subpages: ['version'],
-          },
-          {
-            label: 'Gallery',
-            href: `/project/${$route.params.id}/gallery`,
-            shown: data.gallery.length > 0,
-          },
-        ]" class="nav-spacing" />
-          <RouterView :project="data" :versions="versions" :members="members" :instance="instance" :install="install"
-            :installed="installed" :installing="installing" :installed-version="installedVersion" />
+          <NavTabs
+            :links="[
+              {
+                label: 'Description',
+                href: `/project/${$route.params.id}`,
+              },
+              {
+                label: 'Versions',
+                href: {
+                  path: `/project/${$route.params.id}/versions`,
+                  query: { l: instance?.loader, g: instance?.game_version },
+                },
+                subpages: ['version'],
+              },
+              {
+                label: 'Gallery',
+                href: `/project/${$route.params.id}/gallery`,
+                shown: data.gallery.length > 0,
+              },
+            ]"
+            class="nav-spacing"
+          />
+          <RouterView
+            :project="data"
+            :versions="versions"
+            :members="members"
+            :instance="instance"
+            :install="install"
+            :installed="installed"
+            :installing="installing"
+            :installed-version="installedVersion"
+          />
         </template>
         <template v-else> Project data couldn't not be loaded. </template>
       </div>
     </div>
     <ContextMenu ref="options" @option-clicked="handleOptionsClick">
-      <template #install>
-        <DownloadIcon /> Install
-      </template>
-      <template #copy_link>
-        <ClipboardCopyIcon /> Copy link
-      </template>
+      <template #install> <DownloadIcon /> Install </template>
+      <template #copy_link> <ClipboardCopyIcon /> Copy link </template>
     </ContextMenu>
   </div>
 </template>
 
 <script setup>
-import {
-  BookmarkIcon,
-  MoreVerticalIcon,
-  DownloadIcon,
-  ReportIcon,
-  HeartIcon,
-  ExternalIcon,
-  CheckIcon,
-  GlobeIcon,
-  ClipboardCopyIcon,
-} from '@modrinth/assets'
-import {
-  ProjectHeader,
-  ButtonStyled,
-  OverflowMenu,
-  ProjectBackgroundGradient,
-} from '@modrinth/ui'
+import { DownloadIcon, CheckIcon, ClipboardCopyIcon } from '@modrinth/assets'
+import { ProjectHeader, ButtonStyled, ProjectBackgroundGradient } from '@modrinth/ui'
 
 import { get_categories, get_game_versions, get_loaders } from '@/helpers/tags'
 import { get as getInstance, get_projects as getInstanceProjects } from '@/helpers/profile'
@@ -106,7 +108,7 @@ const instanceProjects = ref(null)
 const installed = ref(false)
 const installedVersion = ref(null)
 
-const [allLoaders, allGameVersions] = await Promise.all([
+await Promise.all([
   get_loaders().catch(handleError).then(ref),
   get_game_versions().catch(handleError).then(ref),
 ])
@@ -115,14 +117,14 @@ async function fetchProjectData() {
   const project = await get_project(route.params.id, 'must_revalidate').catch(handleError)
 
   data.value = project
-    ;[versions.value, members.value, categories.value, instance.value, instanceProjects.value] =
-      await Promise.all([
-        get_version_many(project.versions, 'must_revalidate').catch(handleError),
-        get_team(project.team).catch(handleError),
-        get_categories().catch(handleError),
-        route.query.i ? getInstance(route.query.i).catch(handleError) : Promise.resolve(),
-        route.query.i ? getInstanceProjects(route.query.i).catch(handleError) : Promise.resolve(),
-      ])
+  ;[versions.value, members.value, categories.value, instance.value, instanceProjects.value] =
+    await Promise.all([
+      get_version_many(project.versions, 'must_revalidate').catch(handleError),
+      get_team(project.team).catch(handleError),
+      get_categories().catch(handleError),
+      route.query.i ? getInstance(route.query.i).catch(handleError) : Promise.resolve(),
+      route.query.i ? getInstanceProjects(route.query.i).catch(handleError) : Promise.resolve(),
+    ])
 
   versions.value = versions.value.sort((a, b) => dayjs(b.date_published) - dayjs(a.date_published))
 
@@ -176,10 +178,9 @@ const handleRightClick = (event) => {
     {
       type: 'divider',
     },
-
   ])
 }
-const handleOptionsClick = (args) => {
+const handleOptionsClick = () => {
   return
 }
 </script>
@@ -308,7 +309,6 @@ const handleOptionsClick = (args) => {
 
     &:focus-visible,
     &:hover {
-
       svg,
       img,
       span {
@@ -317,7 +317,6 @@ const handleOptionsClick = (args) => {
     }
 
     &:active {
-
       svg,
       img,
       span {

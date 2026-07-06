@@ -11,7 +11,6 @@ import {
   EyeIcon,
   SearchIcon,
   XIcon,
-  FilterIcon,
   SortAscendingIcon,
 } from '@modrinth/assets'
 import { Button, DropdownSelect } from '@modrinth/ui'
@@ -226,22 +225,18 @@ const filteredResults = computed(() => {
         <div class="search-section">
           <div class="search-container">
             <SearchIcon class="search-icon" />
-            <input 
-              v-model="search" 
-              type="text" 
-              placeholder="Search instances..." 
+            <input
+              v-model="search"
+              type="text"
+              placeholder="Search instances..."
               class="search-input"
             />
-            <Button 
-              v-if="search" 
-              class="clear-search-btn" 
-              @click="() => (search = '')"
-            >
+            <Button v-if="search" class="clear-search-btn" @click="() => (search = '')">
               <XIcon />
             </Button>
           </div>
         </div>
-        
+
         <div class="filter-section">
           <div class="filter-group">
             <SortAscendingIcon class="filter-icon" />
@@ -335,13 +330,13 @@ const filteredResults = computed(() => {
 .search-section {
   flex: 1;
   min-width: 200px;
-  
+
   .search-container {
     position: relative;
     display: flex;
     align-items: center;
     height: 100%;
-    
+
     .search-icon {
       position: absolute;
       left: 0.5rem;
@@ -350,7 +345,7 @@ const filteredResults = computed(() => {
       height: 0.875rem;
       z-index: 1;
     }
-    
+
     .search-input {
       width: 100%;
       height: 100%;
@@ -361,18 +356,18 @@ const filteredResults = computed(() => {
       color: var(--color-contrast);
       font-size: 0.8125rem;
       transition: all 0.2s ease;
-      
+
       &:focus {
         outline: none;
         background: rgba(255, 255, 255, 0.15);
         box-shadow: 0 0 0 3px rgba(var(--color-brand-rgb), 0.1);
       }
-      
+
       &::placeholder {
         color: var(--color-secondary);
       }
     }
-    
+
     .clear-search-btn {
       position: absolute;
       right: 0.25rem;
@@ -388,7 +383,7 @@ const filteredResults = computed(() => {
   flex-wrap: wrap;
   flex-shrink: 0;
   height: 100%;
-  
+
   .filter-group {
     display: flex;
     align-items: center;
@@ -399,28 +394,28 @@ const filteredResults = computed(() => {
     transition: all 0.2s ease;
     max-width: 250px;
     height: 100%;
-    
+
     &:hover {
       background: rgba(255, 255, 255, 0.15);
     }
-    
+
     .filter-icon {
       width: 1rem;
       height: 1rem;
       color: var(--color-secondary);
     }
-    
+
     .filter-dropdown {
       min-width: 5rem;
       max-width: 150px;
     }
-    
+
     .filter-label {
       font-weight: 600;
       color: var(--color-contrast);
       font-size: 0.875rem;
     }
-    
+
     .filter-value {
       font-weight: 500;
       color: var(--color-brand);
@@ -438,25 +433,25 @@ const filteredResults = computed(() => {
   overflow-y: auto;
   padding-right: 0.5rem;
   max-height: 100%;
-  
+
   &::-webkit-scrollbar {
     width: 8px;
   }
-  
+
   &::-webkit-scrollbar-track {
     background: rgba(255, 255, 255, 0.05);
     border-radius: 4px;
   }
-  
+
   &::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.2);
     border-radius: 4px;
-    
+
     &:hover {
       background: rgba(255, 255, 255, 0.3);
     }
   }
-  
+
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.05);
 }
@@ -465,11 +460,11 @@ const filteredResults = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  
+
   .section-header {
     display: flex;
     align-items: center;
-    
+
     .section-title {
       margin: 0;
       font-size: 1.5rem;
@@ -496,31 +491,31 @@ const filteredResults = computed(() => {
   .controls-section {
     padding: 0.5rem;
   }
-  
+
   .controls-row {
     flex-direction: column;
     align-items: stretch;
     gap: 0.75rem;
   }
-  
+
   .search-section {
     min-width: unset;
   }
-  
+
   .filter-section {
     justify-content: center;
-    
+
     .filter-group {
       width: 100%;
       max-width: 250px;
     }
   }
-  
+
   .instances-grid {
     grid-template-columns: 1fr;
     gap: 1rem;
   }
-  
+
   .section-title {
     font-size: 1.25rem !important;
   }
@@ -530,15 +525,15 @@ const filteredResults = computed(() => {
   .grid-display-container {
     gap: 0.75rem;
   }
-  
+
   .controls-section {
     gap: 0.5rem;
   }
-  
+
   .search-input {
     padding: 0.375rem 0.375rem 0.375rem 1.75rem !important;
   }
-  
+
   .filter-group {
     padding: 0.25rem 0.375rem !important;
   }
