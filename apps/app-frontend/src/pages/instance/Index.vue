@@ -169,7 +169,6 @@ import {
   MoreVerticalIcon,
   PackageIcon,
   PlayIcon,
-  PlusIcon,
   ServerIcon,
   SettingsIcon,
   StopCircleIcon,

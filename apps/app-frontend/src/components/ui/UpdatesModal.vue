@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { Button, ButtonStyled, Card } from '@modrinth/ui'
-import { XIcon, BellIcon, LeftArrowIcon, RightArrowIcon } from '@modrinth/assets'
+import { Button, Card } from '@modrinth/ui'
+import { BellIcon, LeftArrowIcon, RightArrowIcon } from '@modrinth/assets'
 import ModalWrapper from './modal/ModalWrapper.vue'
 import { get, set } from '@/helpers/settings.js'
-import { useFetch } from '@/helpers/fetch.js'
 import dayjs from 'dayjs'
 
 interface Update {
@@ -19,7 +18,7 @@ interface Update {
   label?: string
 }
 
-const modal = ref<any>(null)
+const modal = ref<InstanceType<typeof ModalWrapper> | null>(null)
 const updates = ref<Update[]>([])
 const loading = ref(false)
 const lastUpdateCheck = ref<string | null>(null)
@@ -36,24 +35,21 @@ const hasPrevUpdate = computed(() => currentCarouselIndex.value > 0)
 function nextUpdate() {
   if (hasNextUpdate.value) {
     currentCarouselIndex.value++
-    setTimeout(() => {
-    }, 50)
+    setTimeout(() => {}, 50)
   }
 }
 
 function prevUpdate() {
   if (hasPrevUpdate.value) {
     currentCarouselIndex.value--
-    setTimeout(() => {
-    }, 50)
+    setTimeout(() => {}, 50)
   }
 }
 
 function goToUpdate(index: number) {
   if (index !== currentCarouselIndex.value) {
     currentCarouselIndex.value = index
-    setTimeout(() => {
-    }, 50)
+    setTimeout(() => {}, 50)
   }
 }
 
@@ -64,7 +60,7 @@ async function fetchUpdates() {
     const text = await response.text()
     const parser = new DOMParser()
     const xmlDoc = parser.parseFromString(text, 'text/xml')
-    
+
     const lastBuildDateElement = xmlDoc.querySelector('lastBuildDate')
     if (lastBuildDateElement) {
       lastBuildDate.value = lastBuildDateElement.textContent
@@ -72,11 +68,11 @@ async function fetchUpdates() {
     } else {
       console.log('No lastBuildDate found in RSS feed')
     }
-    
+
     const items = xmlDoc.querySelectorAll('item')
     const parsedUpdates: Update[] = []
-    
-    items.forEach(item => {
+
+    items.forEach((item) => {
       const id = item.querySelector('guid')?.textContent || ''
       const title = item.querySelector('title')?.textContent || ''
       const description = item.querySelector('description')?.textContent || ''
@@ -96,9 +92,9 @@ async function fetchUpdates() {
       }
       const published = item.querySelector('pubDate')?.textContent || ''
       const authorFull = item.querySelector('author')?.textContent || ''
-      
+
       let author = authorFull
-      
+
       if (authorFull.includes('(') && authorFull.includes(')')) {
         const startIndex = authorFull.indexOf('(') + 1
         const endIndex = authorFull.indexOf(')')
@@ -106,10 +102,10 @@ async function fetchUpdates() {
           author = authorFull.substring(startIndex, endIndex)
         }
       }
-      
+
       const category = item.querySelector('category')
       const label = category?.textContent || 'Update'
-      
+
       let featuredImage = undefined
       const mediaContent = item.querySelector('media\\:content')
       if (mediaContent) {
@@ -124,23 +120,21 @@ async function fetchUpdates() {
           }
         }
       }
-      
+
       if (!featuredImage && contentEncoded) {
         const imgMatch = contentEncoded.match(/<img[^>]+src="([^"]+)"[^>]*>/i)
         featuredImage = imgMatch ? imgMatch[1] : undefined
       }
-      
+
       if (featuredImage && featuredImage.startsWith('/')) {
         featuredImage = `https://marcusk-studio.noticeable.news${featuredImage}`
       }
-      
-      const fullContent = contentEncoded || description
-      
 
-      
+      const fullContent = contentEncoded || description
+
       const plainText = description.replace(/<[^>]*>/g, '')
       const summary = plainText.length > 150 ? plainText.substring(0, 150) + '...' : plainText
-      
+
       parsedUpdates.push({
         id,
         title,
@@ -150,10 +144,10 @@ async function fetchUpdates() {
         htmlContent: fullContent,
         featuredImage,
         summary,
-        label
+        label,
       })
     })
-    
+
     updates.value = parsedUpdates
   } catch (error) {
     console.error('Failed to fetch updates:', error)
@@ -166,40 +160,44 @@ async function shouldShowModal() {
   try {
     const settings = await get()
     console.log('Retrieved settings:', settings)
-    
+
     const lastCheck = settings.last_update_check || null
     const lastId = settings.last_update_id || null
     const lastBuildDateStored = settings.last_build_date || null
-    
+
     lastUpdateCheck.value = lastCheck
     lastUpdateId.value = lastId
-    
+
     console.log('News modal check:', {
       lastBuildDate: lastBuildDate.value,
       lastBuildDateStored,
       updatesCount: updates.value.length,
       lastId,
-      latestUpdateId: updates.value[0]?.id
+      latestUpdateId: updates.value[0]?.id,
     })
-    
+
     if (lastBuildDate.value && lastBuildDateStored) {
       const shouldShow = lastBuildDate.value !== lastBuildDateStored
-      console.log('Comparing build dates:', { shouldShow, current: lastBuildDate.value, stored: lastBuildDateStored })
+      console.log('Comparing build dates:', {
+        shouldShow,
+        current: lastBuildDate.value,
+        stored: lastBuildDateStored,
+      })
       return shouldShow
     }
-    
+
     if (updates.value.length > 0 && lastId) {
       const latestUpdate = updates.value[0]
       const shouldShow = latestUpdate.id !== lastId
       console.log('Comparing update IDs:', { shouldShow, current: latestUpdate.id, stored: lastId })
       return shouldShow
     }
-    
+
     if (updates.value.length > 0 && !lastId && lastBuildDate.value) {
       console.log('First time with updates, showing modal')
       return true
     }
-    
+
     console.log('No conditions met, not showing modal')
     return false
   } catch (error) {
@@ -212,7 +210,7 @@ async function markUpdatesAsSeen() {
   try {
     const settings = await get()
     const latestUpdate = updates.value[0]
-    
+
     if (latestUpdate) {
       settings.last_update_check = new Date().toISOString()
       settings.last_update_id = latestUpdate.id
@@ -220,13 +218,13 @@ async function markUpdatesAsSeen() {
       if (lastBuildDate.value) {
         settings.last_build_date = lastBuildDate.value
       }
-      
+
       console.log('Marking updates as seen:', {
         last_update_check: settings.last_update_check,
         last_update_id: settings.last_update_id,
-        last_build_date: settings.last_build_date
+        last_build_date: settings.last_build_date,
       })
-      
+
       console.log('About to save settings:', settings)
       try {
         await set(settings)
@@ -282,7 +280,7 @@ function handleKeydown(event: KeyboardEvent) {
 defineExpose({
   show,
   hide,
-  checkAndShowModal
+  checkAndShowModal,
 })
 
 onMounted(() => {
@@ -295,41 +293,46 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <ModalWrapper ref="modal" :show-ad-on-close="false" class="updates-modal-wrapper" :on-hide="markUpdatesAsSeen">
+  <ModalWrapper
+    ref="modal"
+    :show-ad-on-close="false"
+    class="updates-modal-wrapper"
+    :on-hide="markUpdatesAsSeen"
+  >
     <template #title>
       <div class="modal-title">
         <h1 class="title-text">Latest News & Updates</h1>
       </div>
     </template>
-    
+
     <div class="updates-modal">
       <!-- Loading State -->
       <div v-if="loading" class="loading-container">
         <div class="loading-spinner"></div>
         <p>Loading news...</p>
       </div>
-      
+
       <!-- No Updates State -->
       <div v-else-if="updates.length === 0" class="no-updates">
         <BellIcon class="no-updates-icon" />
         <p>No news available at the moment.</p>
       </div>
-      
+
       <!-- Carousel View -->
       <Transition name="carousel-fade" mode="out-in">
         <div v-if="!showDetailView && currentUpdate" key="carousel" class="carousel-container">
           <!-- Main Carousel Item -->
-          <div class="carousel-item" :key="currentUpdate.id">
+          <div :key="currentUpdate.id" class="carousel-item">
             <!-- Background Image -->
-            <div class="carousel-background" v-if="currentUpdate.featuredImage">
+            <div v-if="currentUpdate.featuredImage" class="carousel-background">
               <img :src="currentUpdate.featuredImage" :alt="currentUpdate.title" />
               <div class="background-overlay"></div>
             </div>
-            <div class="carousel-background-placeholder" v-else>
+            <div v-else class="carousel-background-placeholder">
               <BellIcon />
               <div class="background-overlay"></div>
             </div>
-            
+
             <!-- Glassmorphism Content Card -->
             <div class="glassmorphism-card">
               <div class="card-header">
@@ -345,11 +348,11 @@ onUnmounted(() => {
                   </div>
                 </div>
               </div>
-              
+
               <div class="card-content">
                 <h2 class="card-title">{{ currentUpdate.title }}</h2>
                 <p class="card-summary">{{ currentUpdate.summary }}</p>
-                
+
                 <div class="card-actions">
                   <Button color="primary" @click="showUpdateDetail(currentUpdate)">
                     Read Full Article
@@ -357,43 +360,35 @@ onUnmounted(() => {
                 </div>
               </div>
             </div>
-            
+
             <!-- Carousel Navigation -->
             <div class="carousel-navigation">
-              <button 
-                class="nav-button nav-prev" 
-                :disabled="!hasPrevUpdate"
-                @click="prevUpdate"
-              >
+              <button class="nav-button nav-prev" :disabled="!hasPrevUpdate" @click="prevUpdate">
                 <LeftArrowIcon />
               </button>
-              
-              <button 
-                class="nav-button nav-next" 
-                :disabled="!hasNextUpdate"
-                @click="nextUpdate"
-              >
+
+              <button class="nav-button nav-next" :disabled="!hasNextUpdate" @click="nextUpdate">
                 <RightArrowIcon />
               </button>
             </div>
           </div>
-          
+
           <!-- Bottom Dot Indicators -->
           <div class="bottom-indicators">
             <div class="indicator-dots">
-              <button 
-                v-for="(update, index) in updates" 
+              <button
+                v-for="(update, index) in updates"
                 :key="update.id"
                 class="indicator-dot"
                 :class="{ active: index === currentCarouselIndex }"
-                @click="goToUpdate(index)"
                 type="button"
+                @click="goToUpdate(index)"
               ></button>
             </div>
           </div>
         </div>
       </Transition>
-      
+
       <!-- Detail View -->
       <Transition name="detail-fade" mode="out-in">
         <div v-if="showDetailView && selectedUpdate" key="detail" class="update-detail">
@@ -403,11 +398,11 @@ onUnmounted(() => {
               Back to News
             </button>
           </div>
-          
+
           <Card class="detail-card">
             <div class="detail-content">
               <h1 class="detail-title">{{ selectedUpdate.title }}</h1>
-              
+
               <div class="detail-meta">
                 <div class="detail-labels">
                   <div class="detail-label detail-type-label">
@@ -421,18 +416,16 @@ onUnmounted(() => {
                   </div>
                 </div>
               </div>
-              
+
               <div v-if="selectedUpdate.featuredImage" class="detail-image">
                 <img :src="selectedUpdate.featuredImage" :alt="selectedUpdate.title" />
               </div>
-              
+
               <div class="markdown-body detail-body" v-html="selectedUpdate.content"></div>
             </div>
           </Card>
         </div>
       </Transition>
-      
-
     </div>
   </ModalWrapper>
 </template>
@@ -490,8 +483,12 @@ onUnmounted(() => {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .no-updates {
@@ -877,63 +874,63 @@ onUnmounted(() => {
     width: 95vw !important;
     max-width: 500px !important;
   }
-  
+
   .updates-modal {
     width: 95vw;
     max-width: 500px;
     height: 500px;
   }
-  
+
   .title-text {
     font-size: 1.5rem;
   }
-  
+
   .title-subtitle {
     font-size: 0.8rem;
   }
-  
+
   .glassmorphism-card {
     bottom: 0.75rem;
     left: 0.75rem;
     right: 0.75rem;
     padding: 0.75rem;
   }
-  
+
   .card-title {
     font-size: 1.1rem;
   }
-  
+
   .card-summary {
     font-size: 0.75rem;
   }
-  
+
   .nav-button {
     width: 2rem;
     height: 2rem;
   }
-  
+
   .nav-button svg {
     width: 1rem;
     height: 1rem;
   }
-  
+
   .bottom-indicators {
     padding: 0.75rem 0;
   }
-  
+
   .indicator-dots {
     padding: 0.5rem 0.75rem;
   }
-  
+
   .indicator-dot {
     width: 0.4rem !important;
     height: 0.4rem !important;
   }
-  
+
   .indicator-dot.active {
     transform: scale(1.3);
   }
-  
+
   .indicator-dot:hover {
     transform: scale(1.05);
   }
@@ -1143,12 +1140,24 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
-.markdown-body h1 { font-size: 1.75rem; }
-.markdown-body h2 { font-size: 1.5rem; }
-.markdown-body h3 { font-size: 1.25rem; }
-.markdown-body h4 { font-size: 1.125rem; }
-.markdown-body h5 { font-size: 1rem; }
-.markdown-body h6 { font-size: 0.875rem; }
+.markdown-body h1 {
+  font-size: 1.75rem;
+}
+.markdown-body h2 {
+  font-size: 1.5rem;
+}
+.markdown-body h3 {
+  font-size: 1.25rem;
+}
+.markdown-body h4 {
+  font-size: 1.125rem;
+}
+.markdown-body h5 {
+  font-size: 1rem;
+}
+.markdown-body h6 {
+  font-size: 0.875rem;
+}
 
 .markdown-body p {
   margin: 0 0 1rem 0;
@@ -1242,7 +1251,7 @@ onUnmounted(() => {
   border-radius: 0.5rem;
 }
 
-.markdown-body span[style*="color"] {
+.markdown-body span[style*='color'] {
   /* Preserve custom colors from RSS content */
   color: inherit !important;
 }
@@ -1273,4 +1282,4 @@ onUnmounted(() => {
   font-size: 1rem;
   padding: 0.75rem 1.5rem;
 }
-</style> 
+</style>

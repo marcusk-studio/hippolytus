@@ -2,38 +2,31 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import {
-  ArrowBigUpDashIcon,
   BellIcon,
   CompassIcon,
-  DownloadIcon,
   HomeIcon,
   LeftArrowIcon,
   LibraryIcon,
-  LogInIcon,
-  LogOutIcon,
   MaximizeIcon,
   MinimizeIcon,
-  PlusIcon,
   RestoreIcon,
   RightArrowIcon,
   SettingsIcon,
   XIcon,
 } from '@modrinth/assets'
-import { Avatar, Button, ButtonStyled, Notifications, OverflowMenu } from '@modrinth/ui'
+import { Button, ButtonStyled, Notifications } from '@modrinth/ui'
 import { useLoading, useTheming } from '@/store/state'
 import ModrinthAppLogo from '@/assets/modrinth_app.svg?component'
 import AccountsCard from '@/components/ui/AccountsCard.vue'
-import InstanceCreationModal from '@/components/ui/InstanceCreationModal.vue'
 import { get } from '@/helpers/settings'
 import Breadcrumbs from '@/components/ui/Breadcrumbs.vue'
 import RunningAppBar from '@/components/ui/RunningAppBar.vue'
 import SplashScreen from '@/components/ui/SplashScreen.vue'
 import ErrorModal from '@/components/ui/ErrorModal.vue'
-import ModrinthLoadingIndicator from '@/components/LoadingIndicatorBar.vue'
 import { handleError, useNotifications } from '@/store/notifications.js'
 import { command_listener, warning_listener } from '@/helpers/events.js'
 import { type } from '@tauri-apps/plugin-os'
-import { getOS, isDev, restartApp } from '@/helpers/utils.js'
+import { getOS, isDev } from '@/helpers/utils.js'
 import { debugAnalytics, initAnalytics, optOutAnalytics, trackEvent } from '@/helpers/analytics'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { getVersion } from '@tauri-apps/api/app'
@@ -48,20 +41,15 @@ import { useInstall } from '@/store/install.js'
 import { invoke } from '@tauri-apps/api/core'
 import { get_opening_command, initialize_state } from '@/helpers/state'
 import { saveWindowState, StateFlags } from '@tauri-apps/plugin-window-state'
-import { renderString } from '@modrinth/utils'
 import { useFetch } from '@/helpers/fetch.js'
 import { check } from '@tauri-apps/plugin-updater'
 import NavButton from '@/components/ui/NavButton.vue'
-import { get as getCreds, login, logout } from '@/helpers/mr_auth.js'
+import { get as getCreds } from '@/helpers/mr_auth.js'
 import { get_user } from '@/helpers/cache.js'
 import AppSettingsModal from '@/components/ui/modal/AppSettingsModal.vue'
 import UpdatesModal from '@/components/ui/UpdatesModal.vue'
-import dayjs from 'dayjs'
-import PromotionWrapper from '@/components/ui/PromotionWrapper.vue'
 import { hide_ads_window, init_ads_window } from '@/helpers/ads.js'
-import FriendsList from '@/components/ui/friends/FriendsList.vue'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import QuickInstanceSwitcher from '@/components/ui/QuickInstanceSwitcher.vue'
 
 const themeStore = useTheming()
 
@@ -194,12 +182,12 @@ async function setupApp() {
   get_opening_command().then(handleCommand)
   checkUpdates()
   fetchCredentials()
-  
+
   setTimeout(() => {
     if (updatesModal.value) {
       updatesModal.value.checkAndShowModal()
     }
-  }, 1000) 
+  }, 1000)
 }
 
 const stateFailed = ref(false)
@@ -252,21 +240,7 @@ async function fetchCredentials() {
   credentials.value = creds
 }
 
-async function signIn() {
-  await login().catch(handleError)
-  await fetchCredentials()
-}
-
-async function logOut() {
-  await logout().catch(handleError)
-  await fetchCredentials()
-}
-
-const MIDAS_BITFLAG = 1 << 0
-const hasPlus = computed(
-  () =>
-    true,
-)
+const hasPlus = computed(() => true)
 
 const sidebarToggled = ref(true)
 
@@ -303,8 +277,6 @@ onMounted(() => {
   install.setInstallConfirmModal(installConfirmModal)
   install.setModInstallModal(modInstallModal)
 })
-
-const accounts = ref(null)
 
 command_listener(handleCommand)
 async function handleCommand(e) {
@@ -373,31 +345,33 @@ function handleAuxClick(e) {
 }
 
 function getTransitionKey(route) {
-  return route.path;
+  return route.path
 }
 
 function shouldApplyTransition(route) {
   const mainSection = route.path.split('/')[1] || 'home'
-  
+
   if (mainSection === 'project' || mainSection === 'instance') {
     return false
   }
-  
-  return route.path === '/' || 
-         route.path === '/browse' || 
-         route.path.startsWith('/browse/') ||
-         route.path === '/library'
+
+  return (
+    route.path === '/' ||
+    route.path === '/browse' ||
+    route.path.startsWith('/browse/') ||
+    route.path === '/library'
+  )
 }
 
 function getTransitionType(route) {
   if (route.path === '/') {
-    return 'main-page-transition' 
+    return 'main-page-transition'
   } else if (route.path.startsWith('/browse')) {
-    return 'discover-transition' 
+    return 'discover-transition'
   } else if (route.path === '/library') {
     return 'library-transition'
   } else {
-    return 'main-page-transition' 
+    return 'main-page-transition'
   }
 }
 </script>
@@ -405,22 +379,30 @@ function getTransitionType(route) {
 <template>
   <SplashScreen v-if="!stateFailed" ref="splashScreen" data-tauri-drag-region />
   <div id="teleports"></div>
-  <div v-if="stateInitialized" class="flex overflow-hidden flex-col px-8 py-7 bg-[#0B0101] h-screen">
+  <div
+    v-if="stateInitialized"
+    class="flex overflow-hidden flex-col px-8 py-7 bg-[#0B0101] h-screen"
+  >
     <Suspense>
       <AppSettingsModal ref="settingsModal" />
     </Suspense>
     <!-- Top Navigation Bar -->
-    <div data-tauri-drag-region class="app-grid-statusbar bg-bg-raised h-[--top-bar-height] flex rounded-[25px]">
+    <div
+      data-tauri-drag-region
+      class="app-grid-statusbar bg-bg-raised h-[--top-bar-height] flex rounded-[25px]"
+    >
       <div data-tauri-drag-region class="flex p-3 w-full items-center relative">
         <div class="flex items-center gap-1">
           <button
             class="cursor-pointer p-0 m-0 border-none outline-none bg-button-bg rounded-full flex items-center justify-center w-6 h-6 hover:brightness-75 transition-all"
-            @click="router.back()">
+            @click="router.back()"
+          >
             <LeftArrowIcon />
           </button>
           <button
             class="cursor-pointer p-0 m-0 border-none outline-none bg-button-bg rounded-full flex items-center justify-center w-6 h-6 hover:brightness-75 transition-all"
-            @click="router.forward()">
+            @click="router.forward()"
+          >
             <RightArrowIcon />
           </button>
         </div>
@@ -429,15 +411,23 @@ function getTransitionType(route) {
             <Breadcrumbs class="pt-[2px]" />
           </div>
         </div>
-        <div class="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
+        <div
+          class="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 flex items-center pointer-events-none"
+        >
           <ModrinthAppLogo class="h-16 w-auto text-contrast" />
         </div>
         <div class="flex-grow"></div>
         <div class="flex items-center gap-3">
-          <ButtonStyled v-if="!forceSidebar && themeStore.toggleSidebar"
-            :type="sidebarToggled ? 'standard' : 'transparent'" circular>
-            <button class="mr-3 transition-transform" :class="{ 'rotate-180': !sidebarToggled }"
-              @click="sidebarToggled = !sidebarToggled">
+          <ButtonStyled
+            v-if="!forceSidebar && themeStore.toggleSidebar"
+            :type="sidebarToggled ? 'standard' : 'transparent'"
+            circular
+          >
+            <button
+              class="mr-3 transition-transform"
+              :class="{ 'rotate-180': !sidebarToggled }"
+              @click="sidebarToggled = !sidebarToggled"
+            >
               <RightArrowIcon />
             </button>
           </ButtonStyled>
@@ -448,7 +438,11 @@ function getTransitionType(route) {
             <Button class="titlebar-button" icon-only @click="() => getCurrentWindow().minimize()">
               <MinimizeIcon />
             </Button>
-            <Button class="titlebar-button" icon-only @click="() => getCurrentWindow().toggleMaximize()">
+            <Button
+              class="titlebar-button"
+              icon-only
+              @click="() => getCurrentWindow().toggleMaximize()"
+            >
               <RestoreIcon v-if="isMaximized" />
               <MaximizeIcon v-else />
             </Button>
@@ -461,76 +455,110 @@ function getTransitionType(route) {
     </div>
 
     <!-- Main Content Area -->
-    <div class="flex gap-5 mt-6" :style="{
-    height: '90%',
-  }">
-
+    <div
+      class="flex gap-5 mt-6"
+      :style="{
+        height: '90%',
+      }"
+    >
       <!-- Left Sidebar -->
-      <div class="app-grid-navbar bg-bg-raised flex flex-col p-4 w-[--left-bar-width] rounded-[25px] h-full">
+      <div
+        class="app-grid-navbar bg-bg-raised flex flex-col p-4 w-[--left-bar-width] rounded-[25px] h-full"
+      >
         <div class="flex flex-col h-full">
           <div class="w-full">
             <suspense>
               <AccountsCard mode="normal" class="mb-4" />
             </suspense>
-
           </div>
 
           <!-- Main Navigation -->
-          <nav class="flex flex-col justify-center items-start px-5 py-2.5 rounded-3xl bg-zinc-800 bg-opacity-50"
-            role="navigation" aria-label="Main navigation">
+          <nav
+            class="flex flex-col justify-center items-start px-5 py-2.5 rounded-3xl bg-zinc-800 bg-opacity-50"
+            role="navigation"
+            aria-label="Main navigation"
+          >
             <div class="flex flex-col items-start w-full gap-2">
-              <NavButton v-tooltip.right="'Home'" to="/"
+              <NavButton
+                v-tooltip.right="'Home'"
+                to="/"
                 class="flex gap-4 justify-center items-center px-2 py-1.5 rounded-xl min-h-[45px] w-full hover:bg-zinc-700 focus:outline-none"
-                tabindex="0" aria-label="Navigate to home page">
+                tabindex="0"
+                aria-label="Navigate to home page"
+              >
                 <HomeIcon class="object-contain shrink-0 self-stretch my-auto w-6 aspect-square" />
                 <span class="self-stretch my-auto">Home</span>
               </NavButton>
 
-              <NavButton v-tooltip.right="'Discover content'" to="/browse/modpack"
+              <NavButton
+                v-tooltip.right="'Discover content'"
+                to="/browse/modpack"
                 :is-primary="() => route.path.startsWith('/browse') && !route.query.i"
                 :is-subpage="(route) => route.path.startsWith('/project') && !route.query.i"
                 class="flex gap-4 justify-center items-center px-2 py-1.5 rounded-xl min-h-[45px] w-full hover:bg-zinc-700 focus:outline-none"
-                tabindex="0" aria-label="Navigate to discover page">
-                <CompassIcon class="object-contain shrink-0 self-stretch my-auto w-6 aspect-square" />
+                tabindex="0"
+                aria-label="Navigate to discover page"
+              >
+                <CompassIcon
+                  class="object-contain shrink-0 self-stretch my-auto w-6 aspect-square"
+                />
                 <span class="self-stretch my-auto">Discover</span>
               </NavButton>
 
-              <NavButton v-tooltip.right="'Library'" to="/library" :is-subpage="() =>
-    route.path.startsWith('/instance') ||
-    ((route.path.startsWith('/browse') || route.path.startsWith('/project')) &&
-      route.query.i)
-    " class="flex gap-4 justify-center items-center px-2 py-1.5 rounded-xl min-h-[45px] w-full hover:bg-zinc-700 focus:outline-none"
-                tabindex="0" aria-label="Access your library">
-                <LibraryIcon class="object-contain shrink-0 self-stretch my-auto w-6 aspect-square" />
+              <NavButton
+                v-tooltip.right="'Library'"
+                to="/library"
+                :is-subpage="
+                  () =>
+                    route.path.startsWith('/instance') ||
+                    ((route.path.startsWith('/browse') || route.path.startsWith('/project')) &&
+                      route.query.i)
+                "
+                class="flex gap-4 justify-center items-center px-2 py-1.5 rounded-xl min-h-[45px] w-full hover:bg-zinc-700 focus:outline-none"
+                tabindex="0"
+                aria-label="Access your library"
+              >
+                <LibraryIcon
+                  class="object-contain shrink-0 self-stretch my-auto w-6 aspect-square"
+                />
                 <span class="self-stretch my-auto">Library</span>
               </NavButton>
             </div>
           </nav>
         </div>
         <div class="flex flex-grow"></div>
-        <nav class="flex flex-col justify-center items-start px-5 py-2.5 rounded-3xl bg-zinc-800 bg-opacity-50 gap-3">
+        <nav
+          class="flex flex-col justify-center items-start px-5 py-2.5 rounded-3xl bg-zinc-800 bg-opacity-50 gap-3"
+        >
           <NavButton
+            v-tooltip.right="'News'"
             class="flex gap-4 justify-center items-center px-2 py-1.5 rounded-xl min-h-[45px] w-full hover:bg-zinc-700 focus:outline-none"
-            v-tooltip.right="'News'" :to="() => $refs.updatesModal.show()">
+            :to="() => $refs.updatesModal.show()"
+          >
             <BellIcon />
             <span class="self-stretch my-auto">News</span>
           </NavButton>
-          
+
           <NavButton
+            v-tooltip.right="'Settings'"
             class="flex gap-4 justify-center items-center px-2 py-1.5 rounded-xl min-h-[45px] w-full hover:bg-zinc-700 focus:outline-none"
-            v-tooltip.right="'Settings'" :to="() => $refs.settingsModal.show()">
+            :to="() => $refs.settingsModal.show()"
+          >
             <SettingsIcon />
             <span class="self-stretch my-auto">Settings</span>
           </NavButton>
         </nav>
       </div>
       <!-- Main Content -->
-      <div class="flex-grow rounded-[25px] overflow-hidden mt-4 mb-4" :style="{
-    backgroundImage: randomBackground ? `url(${randomBackground})` : undefined,
-    backgroundSize: 'cover',
-    backgroundPosition: 'center',
-    position: 'relative',
-  }">
+      <div
+        class="flex-grow rounded-[25px] overflow-hidden mt-4 mb-4"
+        :style="{
+          backgroundImage: randomBackground ? `url(${randomBackground})` : undefined,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          position: 'relative',
+        }"
+      >
         <div v-if="route.path !== '/'" class="backdrop-blur-md absolute inset-0 z-0"></div>
         <div class="relative z-10 h-full overflow-auto">
           <RouterView v-slot="{ Component, route }">
@@ -538,11 +566,7 @@ function getTransitionType(route) {
               <Suspense @pending="loading.startLoading()" @resolve="loading.stopLoading()">
                 <template v-if="shouldApplyTransition(route)">
                   <div class="transition-container">
-                    <Transition
-                      :name="getTransitionType(route)"
-                      mode="out-in"
-                      appear
-                    >
+                    <Transition :name="getTransitionType(route)" mode="out-in" appear>
                       <component :is="Component" :key="getTransitionKey(route)"></component>
                     </Transition>
                   </div>
@@ -555,7 +579,6 @@ function getTransitionType(route) {
           </RouterView>
         </div>
       </div>
-
     </div>
   </div>
   <URLConfirmModal ref="urlModal" />
@@ -614,7 +637,6 @@ function getTransitionType(route) {
     }
 
     &.close {
-
       &:hover,
       &:active {
         color: var(--color-accent-contrast);
@@ -756,7 +778,7 @@ function getTransitionType(route) {
   display: none;
 }
 
-.sidebar-teleport-content:empty+.sidebar-default-content.sidebar-enabled {
+.sidebar-teleport-content:empty + .sidebar-default-content.sidebar-enabled {
   display: contents;
 }
 

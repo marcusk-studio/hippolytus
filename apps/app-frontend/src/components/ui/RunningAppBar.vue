@@ -11,13 +11,15 @@
         <span> Offline </span>
       </div>
     </div>
-    <div 
-      v-if="selectedProcess" 
+    <div
+      v-if="selectedProcess"
       class="instance-status-indicator running-state flex h-8 overflow-hidden gap-3 justify-center items-center px-2 rounded-[9px] shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] bg-gradient-to-r from-[#FF6B35] via-[#F05B32] to-[#E59256] [box-shadow:_0_0_20px_rgba(249,115,22,0.9)] animate-pulse"
     >
-      <span class="circle running w-4 h-4 rounded-full m-0 [box-shadow:_0_0_12px_rgba(34,197,94,0.9)] animate-pulse" />
+      <span
+        class="circle running w-4 h-4 rounded-full m-0 [box-shadow:_0_0_12px_rgba(34,197,94,0.9)] animate-pulse"
+      />
       <div ref="profileButton" class="self-stretch my-auto flex items-center gap-1">
-        <router-link 
+        <router-link
           :to="`/instance/${encodeURIComponent(selectedProcess.profile.path)}`"
           class="text-sm leading-4 font-medium text-white"
         >
@@ -40,17 +42,17 @@
       >
         <StopCircleIcon />
       </Button>
-      <Button 
-        v-tooltip="'View logs'" 
-        icon-only 
-        class="icon-button text-white" 
+      <Button
+        v-tooltip="'View logs'"
+        icon-only
+        class="icon-button text-white"
         @click="goToTerminal()"
       >
         <TerminalSquareIcon />
       </Button>
     </div>
-    <div 
-      v-else 
+    <div
+      v-else
       class="instance-status-indicator stopped-state flex h-8 overflow-hidden gap-3 justify-center items-center px-2 rounded-[9px] shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] bg-gradient-to-r from-gray-400 via-gray-500 to-gray-600"
       role="status"
       aria-live="polite"
@@ -293,19 +295,19 @@ onBeforeUnmount(() => {
 .instance-status-indicator {
   transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
   transform-origin: center;
-  
+
   &.running-state {
     animation: runningGlow 2s ease-in-out infinite alternate;
-    
+
     &:hover {
       transform: scale(1.05);
       box-shadow: 0 0 25px rgba(249, 115, 22, 1);
     }
   }
-  
+
   &.stopped-state {
     animation: stoppedGlow 3s ease-in-out infinite;
-    
+
     &:hover {
       transform: scale(1.02);
     }
@@ -317,16 +319,24 @@ onBeforeUnmount(() => {
     box-shadow: 0 0 20px rgba(249, 115, 22, 0.7);
   }
   100% {
-    box-shadow: 0 0 25px rgba(249, 115, 22, 0.8), 0 0 30px rgba(255, 107, 53, 0.4);
+    box-shadow:
+      0 0 25px rgba(249, 115, 22, 0.8),
+      0 0 30px rgba(255, 107, 53, 0.4);
   }
 }
 
 @keyframes stoppedGlow {
-  0%, 100% {
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  0%,
+  100% {
+    box-shadow:
+      0 4px 6px -1px rgba(0, 0, 0, 0.1),
+      0 2px 4px -2px rgba(0, 0, 0, 0.1);
   }
   50% {
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1), 0 0 10px rgba(156, 163, 175, 0.2);
+    box-shadow:
+      0 4px 6px -1px rgba(0, 0, 0, 0.1),
+      0 2px 4px -2px rgba(0, 0, 0, 0.1),
+      0 0 10px rgba(156, 163, 175, 0.2);
   }
 }
 
@@ -339,7 +349,7 @@ onBeforeUnmount(() => {
   transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
 
   &.running {
-    background-color: #22C55E;
+    background-color: #22c55e;
     animation: greenPulse 1.5s ease-in-out infinite alternate;
   }
 
@@ -355,13 +365,16 @@ onBeforeUnmount(() => {
     transform: scale(1);
   }
   100% {
-    box-shadow: 0 0 15px rgba(34, 197, 94, 0.8), 0 0 20px rgba(34, 197, 94, 0.4);
+    box-shadow:
+      0 0 15px rgba(34, 197, 94, 0.8),
+      0 0 20px rgba(34, 197, 94, 0.4);
     transform: scale(1.05);
   }
 }
 
 @keyframes grayPulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     opacity: 0.8;
   }
@@ -424,13 +437,13 @@ onBeforeUnmount(() => {
 
   &.stop {
     color: var(--color-red);
-    
+
     &:hover {
       transform: scale(1.1);
       color: #dc2626;
     }
   }
-  
+
   &:hover {
     transform: scale(1.05);
   }
@@ -535,7 +548,7 @@ onBeforeUnmount(() => {
   .text {
     margin-right: auto;
   }
-  
+
   &:hover {
     transform: translateX(2px);
     background-color: var(--color-raised-bg-hover);

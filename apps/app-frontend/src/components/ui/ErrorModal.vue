@@ -136,8 +136,8 @@ async function repairInstance() {
           <template v-else-if="metadata.hostsFile">
             <h3>Network issues</h3>
             <p>
-              The Marcusk Launcher tried to connect to Microsoft / Xbox / Minecraft services, but the
-              remote server rejected the connection. This may indicate that these services are
+              The Marcusk Launcher tried to connect to Microsoft / Xbox / Minecraft services, but
+              the remote server rejected the connection. This may indicate that these services are
               blocked by the hosts file.
             </p>
           </template>
@@ -201,7 +201,9 @@ async function repairInstance() {
           <p>
             To play this instance, you must sign in through Microsoft below. If you don't have a
             Minecraft account, you can purchase the game on the
-            <a href="https://www.minecraft.net/en-us/store/minecraft-java-bedrock-edition-pc">Minecraft website</a>.
+            <a href="https://www.minecraft.net/en-us/store/minecraft-java-bedrock-edition-pc"
+              >Minecraft website</a
+            >.
           </p>
           <div class="cta-button">
             <button class="btn btn-primary" :disabled="loadingMinecraft" @click="loginMinecraft">
@@ -232,11 +234,14 @@ async function repairInstance() {
         <template v-else>
           {{ error.message ?? error }}
         </template>
-        <template v-if="errorType === 'directory_move' ||
-    errorType === 'minecraft_auth' ||
-    errorType === 'state_init' ||
-    errorType === 'no_loader_version'
-    ">
+        <template
+          v-if="
+            errorType === 'directory_move' ||
+            errorType === 'minecraft_auth' ||
+            errorType === 'state_init' ||
+            errorType === 'no_loader_version'
+          "
+        >
           <hr />
           <p>
             If nothing is working and you need help, visit
@@ -251,12 +256,8 @@ async function repairInstance() {
         </template>
       </div>
       <div class="input-group push-right">
-        <a :href="supportLink" class="btn" @click="errorModal.hide()">
-          <ChatIcon /> Get support
-        </a>
-        <button v-if="closable" class="btn" @click="errorModal.hide()">
-          <XIcon /> Close
-        </button>
+        <a :href="supportLink" class="btn" @click="errorModal.hide()"> <ChatIcon /> Get support </a>
+        <button v-if="closable" class="btn" @click="errorModal.hide()"><XIcon /> Close</button>
       </div>
     </div>
   </ModalWrapper>
