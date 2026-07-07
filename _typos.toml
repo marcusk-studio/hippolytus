@@ -12,6 +12,10 @@ extend-exclude = [
   "apps/labrinth/src/queue/payouts/mod.rs",
 ]
 
+[default]
+# PostHog project API keys are random tokens (e.g. `...eKIy...` flagged as "It")
+extend-ignore-re = ["phc_[A-Za-z0-9]+"]
+
 [default.extend-words]
 # Terms Of Use in `tou-link`
 tou = "tou"
