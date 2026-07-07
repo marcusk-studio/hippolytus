@@ -1,0 +1,39 @@
+name: macOS Preview Build (unsigned)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/upstream-sync-eymet7]
+    paths: ['.github/workflows/macos-preview.yml']
+
+jobs:
+  build:
+    name: Build unsigned macOS app
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust setup
+        uses: dtolnay/rust-toolchain@stable
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install pnpm via corepack
+        shell: bash
+        run: |
+          corepack enable
+          corepack prepare --activate
+      - name: Install dependencies
+        run: pnpm install
+      - name: Configure app environment
+        run: cp packages/app-lib/.env.prod packages/app-lib/.env
+      - name: Build app (unsigned, native arch)
+        run: pnpm --filter=@modrinth/app run tauri build
+      - name: Upload macOS bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: marcusk-launcher-macos-unsigned
+          path: |
+            target/release/bundle/dmg/*.dmg
+            target/release/bundle/macos/*.app
+          if-no-files-found: error
