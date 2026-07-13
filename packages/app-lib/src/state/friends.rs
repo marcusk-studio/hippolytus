@@ -1,29 +1,45 @@
-use crate::config::{MODRINTH_API_URL_V3, MODRINTH_SOCKET_URL};
+use crate::ErrorKind;
 use crate::data::ModrinthCredentials;
-use crate::event::emit::emit_friend;
 use crate::event::FriendPayload;
-use crate::state::{ProcessManager, Profile};
-use crate::util::fetch::{fetch_advanced, fetch_json, FetchSemaphore};
-use async_tungstenite::tokio::{connect_async, ConnectStream};
-use async_tungstenite::tungstenite::client::IntoClientRequest;
+use crate::event::emit::{emit_friend, emit_notification};
+use crate::state::tunnel::InternalTunnelSocket;
+use crate::state::{ProcessManager, TunnelSocket};
+use crate::util::fetch::{FetchSemaphore, fetch_advanced, fetch_json};
+use ariadne::ids::UserId;
+use ariadne::networking::message::{
+    ClientToServerMessage, ServerToClientMessage,
+};
+use ariadne::users::UserStatus;
+use async_tungstenite::WebSocketSender;
+use async_tungstenite::tokio::{ConnectStream, connect_async};
 use async_tungstenite::tungstenite::Message;
-use async_tungstenite::WebSocketStream;
+use async_tungstenite::tungstenite::client::IntoClientRequest;
+use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
-use futures::stream::SplitSink;
+use either::Either;
 use futures::{SinkExt, StreamExt};
-use reqwest::header::HeaderValue;
 use reqwest::Method;
+use reqwest::header::HeaderValue;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::net::SocketAddr;
+use std::ops::Deref;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
+use tokio::net::tcp::OwnedReadHalf;
+use tokio::sync::{Mutex, RwLock};
+use uuid::Uuid;
 
-type WriteSocket =
-    Arc<RwLock<Option<SplitSink<WebSocketStream<ConnectStream>, Message>>>>;
+pub(super) type WriteSocket =
+    Arc<RwLock<Option<WebSocketSender<ConnectStream>>>>;
+pub(super) type TunnelSockets = Arc<DashMap<Uuid, Arc<InternalTunnelSocket>>>;
 
 pub struct FriendsSocket {
     write: WriteSocket,
-    user_statuses: Arc<DashMap<String, UserStatus>>,
+    user_statuses: Arc<DashMap<UserId, UserStatus>>,
+    tunnel_sockets: TunnelSockets,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -32,28 +48,6 @@ pub struct UserFriend {
     pub friend_id: String,
     pub accepted: bool,
     pub created: DateTime<Utc>,
-}
-
-#[derive(Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ClientToServerMessage {
-    StatusUpdate { profile_name: Option<String> },
-}
-
-#[derive(Deserialize, Debug)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ServerToClientMessage {
-    StatusUpdate { status: UserStatus },
-    UserOffline { id: String },
-    FriendStatuses { statuses: Vec<UserStatus> },
-    FriendRequest { from: String },
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct UserStatus {
-    pub user_id: String,
-    pub profile_name: Option<String>,
-    pub last_update: DateTime<Utc>,
 }
 
 impl Default for FriendsSocket {
@@ -67,6 +61,7 @@ impl FriendsSocket {
         Self {
             write: Arc::new(RwLock::new(None)),
             user_statuses: Arc::new(DashMap::new()),
+            tunnel_sockets: Arc::new(DashMap::new()),
         }
     }
 
@@ -82,18 +77,15 @@ impl FriendsSocket {
 
         if let Some(credentials) = credentials {
             let mut request = format!(
-                "{MODRINTH_SOCKET_URL}_internal/launcher_socket?code={}",
+                "{}_internal/launcher_socket?code={}",
+                env!("MODRINTH_SOCKET_URL"),
                 credentials.session
             )
             .into_client_request()?;
 
-            let user_agent = format!(
-                "modrinth/theseus/{} (support@modrinth.com)",
-                env!("CARGO_PKG_VERSION")
-            );
             request.headers_mut().insert(
                 "User-Agent",
-                HeaderValue::from_str(&user_agent).unwrap(),
+                HeaderValue::from_str(&crate::launcher_user_agent()).unwrap(),
             );
 
             let res = connect_async(request).await;
@@ -109,17 +101,14 @@ impl FriendsSocket {
                     }
 
                     if let Some(process) = process_manager.get_all().first() {
-                        let profile =
-                            Profile::get(&process.profile_path, exec).await?;
-
-                        if let Some(profile) = profile {
-                            let _ =
-                                self.update_status(Some(profile.name)).await;
-                        }
+                        let _ = self
+                            .update_status(Some(process.instance_name.clone()))
+                            .await;
                     }
 
                     let write_handle = self.write.clone();
                     let statuses = self.user_statuses.clone();
+                    let sockets = self.tunnel_sockets.clone();
 
                     tokio::spawn(async move {
                         let mut read_stream = read;
@@ -128,20 +117,34 @@ impl FriendsSocket {
                                 Ok(msg) => {
                                     let server_message = match msg {
                                         Message::Text(text) => {
-                                            serde_json::from_str::<
-                                                ServerToClientMessage,
-                                            >(
-                                                &text
-                                            )
-                                            .ok()
+                                            match ServerToClientMessage::deserialize(
+                                                Either::Left(&text),
+                                            ) {
+                                                Ok(message) => Some(message),
+                                                Err(_) => {
+                                                    if let Ok(notification) =
+                                                        serde_json::from_str::<Value>(&text)
+                                                    {
+                                                        let _ = Self::handle_notification(notification).await;
+                                                    }
+                                                    None
+                                                }
+                                            }
                                         }
                                         Message::Binary(bytes) => {
-                                            serde_json::from_slice::<
-                                                ServerToClientMessage,
-                                            >(
-                                                &bytes
-                                            )
-                                            .ok()
+                                            match ServerToClientMessage::deserialize(
+                                                Either::Right(&bytes),
+                                            ) {
+                                                Ok(message) => Some(message),
+                                                Err(_) => {
+                                                    if let Ok(notification) =
+                                                        serde_json::from_slice::<Value>(&bytes)
+                                                    {
+                                                        let _ = Self::handle_notification(notification).await;
+                                                    }
+                                                    None
+                                                }
+                                            }
                                         }
                                         Message::Ping(bytes) => {
                                             if let Some(write) = write_handle
@@ -165,7 +168,7 @@ impl FriendsSocket {
                                     {
                                         match server_message {
                                             ServerToClientMessage::StatusUpdate { status } => {
-                                                statuses.insert(status.user_id.clone(), status.clone());
+                                                statuses.insert(status.user_id, status.clone());
                                                 let _ = emit_friend(FriendPayload::StatusUpdate { user_status: status }).await;
                                             },
                                             ServerToClientMessage::UserOffline { id } => {
@@ -175,18 +178,46 @@ impl FriendsSocket {
                                             ServerToClientMessage::FriendStatuses { statuses: new_statuses } => {
                                                 statuses.clear();
                                                 new_statuses.into_iter().for_each(|status| {
-                                                    statuses.insert(status.user_id.clone(), status);
+                                                    statuses.insert(status.user_id, status);
                                                 });
                                                 let _ = emit_friend(FriendPayload::StatusSync).await;
                                             }
                                             ServerToClientMessage::FriendRequest { from } => {
                                                 let _ = emit_friend(FriendPayload::FriendRequest { from }).await;
                                             }
+                                            ServerToClientMessage::FriendRequestRejected { .. } => {}, // TODO
+
+                                            ServerToClientMessage::FriendSocketListening { .. } => {}, // TODO
+                                            ServerToClientMessage::FriendSocketStoppedListening { .. } => {}, // TODO
+
+                                            ServerToClientMessage::SocketConnected { to_socket, new_socket } => {
+                                                if let Some(connected_to) = sockets.get(&to_socket)
+                                                    && let InternalTunnelSocket::Listening(local_addr) = *connected_to.value().clone()
+                                                        && let Ok(new_stream) = TcpStream::connect(local_addr).await {
+                                                            let (read, write) = new_stream.into_split();
+                                                            sockets.insert(new_socket, Arc::new(InternalTunnelSocket::Connected(Mutex::new(write))));
+                                                            Self::socket_read_loop(write_handle.clone(), read, new_socket);
+                                                            continue;
+                                                        }
+                                                let _ = Self::send_message(&write_handle, ClientToServerMessage::SocketClose { socket: new_socket }).await;
+                                            },
+                                            ServerToClientMessage::SocketClosed { socket } => {
+                                                sockets.remove_if(&socket, |_, x| matches!(*x.clone(), InternalTunnelSocket::Connected(_)));
+                                            },
+                                            ServerToClientMessage::SocketData { socket, data } => {
+                                                if let Some(mut socket) = sockets.get_mut(&socket)
+                                                    && let InternalTunnelSocket::Connected(ref stream) = *socket.value_mut().clone() {
+                                                        let _ = stream.lock().await.write_all(&data).await;
+                                                    }
+                                            },
                                         }
                                     }
                                 }
                                 Err(e) => {
-                                    tracing::error!("Error handling message from websocket server: {:?}", e);
+                                    tracing::error!(
+                                        "Error handling message from websocket server: {:?}",
+                                        e
+                                    );
                                 }
                             }
                         }
@@ -208,6 +239,19 @@ impl FriendsSocket {
         Ok(())
     }
 
+    async fn handle_notification(notification: Value) -> crate::Result<()> {
+        if notification
+            .get("body")
+            .and_then(|body| body.get("type"))
+            .and_then(Value::as_str)
+            .is_some()
+        {
+            emit_notification(notification).await?;
+        }
+
+        Ok(())
+    }
+
     #[tracing::instrument(skip_all)]
     pub async fn socket_loop() -> crate::Result<()> {
         let state = crate::State::get().await?;
@@ -217,10 +261,7 @@ impl FriendsSocket {
             let mut last_ping = Utc::now();
 
             loop {
-                let connected = {
-                    let read = state.friends_socket.write.read().await;
-                    read.is_some()
-                };
+                let connected = state.friends_socket.is_connected().await;
 
                 if !connected
                     && Utc::now().signed_duration_since(last_connection)
@@ -243,7 +284,7 @@ impl FriendsSocket {
                     last_ping = Utc::now();
                     let mut write = state.friends_socket.write.write().await;
                     if let Some(write) = write.as_mut() {
-                        let _ = write.send(Message::Ping(Vec::new())).await;
+                        let _ = write.send(Message::Ping(Bytes::new())).await;
                     }
                 }
 
@@ -258,7 +299,7 @@ impl FriendsSocket {
     pub async fn disconnect(&self) -> crate::Result<()> {
         let mut write_lock = self.write.write().await;
         if let Some(ref mut write_half) = *write_lock {
-            write_half.close().await?;
+            SinkExt::close(write_half).await?;
             *write_lock = None;
         }
         Ok(())
@@ -267,18 +308,15 @@ impl FriendsSocket {
     #[tracing::instrument(skip(self))]
     pub async fn update_status(
         &self,
-        profile_name: Option<String>,
+        instance_name: Option<String>,
     ) -> crate::Result<()> {
-        let mut write_lock = self.write.write().await;
-        if let Some(ref mut write_half) = *write_lock {
-            write_half
-                .send(Message::Text(serde_json::to_string(
-                    &ClientToServerMessage::StatusUpdate { profile_name },
-                )?))
-                .await?;
-        }
-
-        Ok(())
+        Self::send_message(
+            &self.write,
+            ClientToServerMessage::StatusUpdate {
+                profile_name: instance_name,
+            },
+        )
+        .await
     }
 
     #[tracing::instrument(skip_all)]
@@ -288,9 +326,10 @@ impl FriendsSocket {
     ) -> crate::Result<Vec<UserFriend>> {
         fetch_json(
             Method::GET,
-            &format!("{MODRINTH_API_URL_V3}friends"),
+            concat!(env!("MODRINTH_API_URL_V3"), "friends"),
             None,
             None,
+            Some("/v3/friends"),
             semaphore,
             exec,
         )
@@ -311,17 +350,30 @@ impl FriendsSocket {
         exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite> + Copy,
         semaphore: &FetchSemaphore,
     ) -> crate::Result<()> {
-        fetch_advanced(
+        let result = fetch_advanced(
             Method::POST,
-            &format!("{MODRINTH_API_URL_V3}friend/{user_id}"),
+            &format!("{}friend/{user_id}", env!("MODRINTH_API_URL_V3")),
             None,
             None,
             None,
             None,
+            None,
+            Some("/v3/friend/:user_id"),
             semaphore,
             exec,
         )
-        .await?;
+        .await;
+
+        if let Err(ref e) = result
+            && let ErrorKind::LabrinthError(e) = &*e.raw
+            && e.error == "not_found"
+        {
+            return Err(ErrorKind::OtherError(format!(
+                "No user found with username \"{user_id}\""
+            ))
+            .into());
+        }
+        result?;
 
         Ok(())
     }
@@ -334,15 +386,94 @@ impl FriendsSocket {
     ) -> crate::Result<()> {
         fetch_advanced(
             Method::DELETE,
-            &format!("{MODRINTH_API_URL_V3}friend/{user_id}"),
+            &format!("{}friend/{user_id}", env!("MODRINTH_API_URL_V3")),
             None,
             None,
             None,
             None,
+            None,
+            Some("/v3/friend/:user_id"),
             semaphore,
             exec,
         )
         .await?;
+
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self))]
+    pub async fn open_port(&self, port: u16) -> crate::Result<TunnelSocket> {
+        let socket_id = Uuid::new_v4();
+        let socket = self.tunnel_sockets.entry(socket_id).insert(Arc::new(
+            InternalTunnelSocket::Listening(SocketAddr::new(
+                "127.0.0.1".parse().unwrap(),
+                port,
+            )),
+        ));
+        Self::send_message(
+            &self.write,
+            ClientToServerMessage::SocketListen { socket: socket_id },
+        )
+        .await?;
+        self.create_tunnel_socket(socket_id, socket)
+    }
+
+    pub async fn is_connected(&self) -> bool {
+        self.write.read().await.is_some()
+    }
+
+    fn create_tunnel_socket(
+        &self,
+        socket_id: Uuid,
+        socket: impl Deref<Target = Arc<InternalTunnelSocket>>,
+    ) -> crate::Result<TunnelSocket> {
+        Ok(TunnelSocket {
+            socket_id,
+            write: self.write.clone(),
+            sockets: self.tunnel_sockets.clone(),
+            internal: socket.clone(),
+        })
+    }
+
+    fn socket_read_loop(
+        write: WriteSocket,
+        mut read_half: OwnedReadHalf,
+        socket_id: Uuid,
+    ) {
+        tokio::spawn(async move {
+            let mut read_buffer = [0u8; 8192];
+            loop {
+                match read_half.read(&mut read_buffer).await {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => {
+                        let _ = Self::send_message(
+                            &write,
+                            ClientToServerMessage::SocketSend {
+                                socket: socket_id,
+                                data: read_buffer[..n].to_vec(),
+                            },
+                        )
+                        .await;
+                    }
+                };
+            }
+        });
+    }
+
+    #[tracing::instrument(skip(write))]
+    pub(super) async fn send_message(
+        write: &WriteSocket,
+        message: ClientToServerMessage,
+    ) -> crate::Result<()> {
+        let serialized = match message.serialize()? {
+            Either::Left(text) => Message::text(text),
+            Either::Right(bytes) => Message::binary(bytes),
+        };
+
+        let mut write_lock = write.write().await;
+        if let Some(ref mut write_half) = *write_lock {
+            write_half.send(serialized).await?;
+        }
 
         Ok(())
     }

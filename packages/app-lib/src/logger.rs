@@ -18,26 +18,25 @@
 // Handling for the live development logging
 // This will log to the console, and will not log to a file
 #[cfg(debug_assertions)]
-pub fn start_logger() -> Option<()> {
+pub fn start_logger(_app_identifier: &str) -> Option<()> {
     use tracing_subscriber::prelude::*;
 
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| {
             tracing_subscriber::EnvFilter::new("theseus=info,theseus_gui=info")
         });
-    let subscriber = tracing_subscriber::registry()
+    tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
         .with(filter)
-        .with(tracing_error::ErrorLayer::default());
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("setting default subscriber failed");
+        .with(tracing_error::ErrorLayer::default())
+        .init();
     Some(())
 }
 
 // Handling for the live production logging
 // This will log to a file in the logs directory, and will not show any logs in the console
 #[cfg(not(debug_assertions))]
-pub fn start_logger() -> Option<()> {
+pub fn start_logger(app_identifier: &str) -> Option<()> {
     use crate::prelude::DirectoryInfo;
     use chrono::Local;
     use std::fs::OpenOptions;
@@ -45,7 +44,9 @@ pub fn start_logger() -> Option<()> {
     use tracing_subscriber::prelude::*;
 
     // Initialize and get logs directory path
-    let logs_dir = if let Some(d) = DirectoryInfo::launcher_logs_dir() {
+    let logs_dir = if let Some(d) =
+        DirectoryInfo::launcher_logs_dir_path(app_identifier)
+    {
         d
     } else {
         eprintln!("Could not start logger");
@@ -76,7 +77,7 @@ pub fn start_logger() -> Option<()> {
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("theseus=info"));
 
-    let subscriber = tracing_subscriber::registry()
+    tracing_subscriber::registry()
         .with(
             tracing_subscriber::fmt::layer()
                 .with_writer(file)
@@ -84,10 +85,8 @@ pub fn start_logger() -> Option<()> {
                 .with_timer(ChronoLocal::rfc_3339()),
         )
         .with(filter)
-        .with(tracing_error::ErrorLayer::default());
-
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("Setting default subscriber failed");
+        .with(tracing_error::ErrorLayer::default())
+        .init();
 
     Some(())
 }

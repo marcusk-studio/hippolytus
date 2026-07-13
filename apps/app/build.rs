@@ -12,6 +12,7 @@ fn main() {
                 "auth",
                 InlinedPlugin::new()
                     .commands(&[
+                        "check_reachable",
                         "login",
                         "remove_user",
                         "get_default_user",
@@ -28,6 +29,8 @@ fn main() {
                     .commands(&[
                         "get_project",
                         "get_project_many",
+                        "get_project_v3",
+                        "get_project_v3_many",
                         "get_version",
                         "get_version_many",
                         "get_user",
@@ -38,7 +41,10 @@ fn main() {
                         "get_organization_many",
                         "get_search_results",
                         "get_search_results_many",
+                        "get_search_results_v3",
+                        "get_search_results_v3_many",
                         "purge_cache_types",
+                        "get_project_versions",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,
@@ -83,6 +89,8 @@ fn main() {
                         "logs_delete_logs",
                         "logs_delete_logs_by_filename",
                         "logs_get_latest_log_cursor",
+                        "logs_get_live_log_buffer",
+                        "logs_clear_live_log_buffer",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,
@@ -100,17 +108,56 @@ fn main() {
                     ),
             )
             .plugin(
-                "mr-auth",
+                "minecraft-skins",
                 InlinedPlugin::new()
-                    .commands(&["modrinth_login", "logout", "get"])
+                    .commands(&[
+                        "get_available_capes",
+                        "get_available_skins",
+                        "add_and_equip_custom_skin",
+                        "equip_skin",
+                        "remove_custom_skin",
+                        "save_custom_skin",
+                        "set_custom_skin_order",
+                        "unequip_skin",
+                        "flush_pending_skin_change",
+                        "flush_pending_skin_change_for_profile",
+                        "normalize_skin_texture",
+                        "get_dragged_skin_data",
+                    ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,
                     ),
             )
             .plugin(
-                "pack",
+                "mr-auth",
                 InlinedPlugin::new()
-                    .commands(&["pack_install", "pack_get_profile_from_pack"])
+                    .commands(&[
+                        "modrinth_login",
+                        "logout",
+                        "get",
+                        "cancel_modrinth_login",
+                    ])
+                    .default_permission(
+                        DefaultPermissionRule::AllowAllCommands,
+                    ),
+            )
+            .plugin(
+                "install",
+                InlinedPlugin::new()
+                    .commands(&[
+                        "install_get_modpack_preview",
+                        "install_create_instance",
+                        "install_create_modpack_instance",
+                        "install_import_instance",
+                        "install_duplicate_instance",
+                        "install_existing_instance",
+                        "install_pack_to_existing_instance",
+                        "install_job_list",
+                        "install_job_get",
+                        "install_job_retry",
+                        "install_job_cancel",
+                        "install_job_dismiss",
+                    ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,
                     ),
@@ -120,7 +167,7 @@ fn main() {
                 InlinedPlugin::new()
                     .commands(&[
                         "process_get_all",
-                        "process_get_by_profile_path",
+                        "process_get_by_instance_id",
                         "process_kill",
                         "process_wait_for",
                     ])
@@ -129,43 +176,42 @@ fn main() {
                     ),
             )
             .plugin(
-                "profile",
+                "instance",
                 InlinedPlugin::new()
                     .commands(&[
-                        "profile_remove",
-                        "profile_get",
-                        "profile_get_many",
-                        "profile_get_projects",
-                        "profile_get_optimal_jre_key",
-                        "profile_get_full_path",
-                        "profile_get_mod_full_path",
-                        "profile_list",
-                        "profile_check_installed",
-                        "profile_install",
-                        "profile_update_all",
-                        "profile_update_project",
-                        "profile_add_project_from_version",
-                        "profile_add_project_from_path",
-                        "profile_toggle_disable_project",
-                        "profile_remove_project",
-                        "profile_update_managed_modrinth_version",
-                        "profile_repair_managed_modrinth",
-                        "profile_run",
-                        "profile_run_credentials",
-                        "profile_kill",
-                        "profile_edit",
-                        "profile_edit_icon",
-                        "profile_export_mrpack",
-                        "profile_get_pack_export_candidates",
+                        "instance_remove",
+                        "instance_get",
+                        "instance_get_many",
+                        "instance_get_projects",
+                        "instance_get_installed_project_ids",
+                        "instance_get_install_candidates",
+                        "instance_content",
+                        "instance_get_content_items",
+                        "instance_get_dependencies_as_content_items",
+                        "instance_get_linked_modpack_info",
+                        "instance_get_linked_modpack_content",
+                        "instance_get_optimal_jre_key",
+                        "instance_get_full_path",
+                        "instance_get_mod_full_path",
+                        "instance_list",
+                        "instance_check_installed",
+                        "instance_update_all",
+                        "instance_update_project",
+                        "instance_add_project_from_version",
+                        "instance_install_project_with_dependencies",
+                        "instance_switch_project_version_with_dependencies",
+                        "instance_add_project_from_path",
+                        "instance_toggle_disable_project",
+                        "instance_remove_project",
+                        "instance_update_managed_modrinth_version",
+                        "instance_repair_managed_modrinth",
+                        "instance_run",
+                        "instance_kill",
+                        "instance_edit",
+                        "instance_edit_icon",
+                        "instance_export_mrpack",
+                        "instance_get_pack_export_candidates",
                     ])
-                    .default_permission(
-                        DefaultPermissionRule::AllowAllCommands,
-                    ),
-            )
-            .plugin(
-                "profile-create",
-                InlinedPlugin::new()
-                    .commands(&["profile_create", "profile_duplicate"])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,
                     ),
@@ -197,14 +243,24 @@ fn main() {
                     ),
             )
             .plugin(
+                "shortcuts",
+                InlinedPlugin::new()
+                    .commands(&["create_instance_shortcut"])
+                    .default_permission(
+                        DefaultPermissionRule::AllowAllCommands,
+                    ),
+            )
+            .plugin(
                 "utils",
                 InlinedPlugin::new()
                     .commands(&[
                         "get_os",
+                        "is_network_metered",
                         "should_disable_mouseover",
                         "highlight_in_folder",
                         "open_path",
                         "show_launcher_logs_folder",
+                        "show_app_db_backups_folder",
                         "progress_bars_list",
                         "get_opening_command",
                     ])
@@ -229,6 +285,18 @@ fn main() {
                     ),
             )
             .plugin(
+                "files",
+                InlinedPlugin::new()
+                    .commands(&[
+                        "file_extract_zip",
+                        "file_save_as",
+                        "file_read_dragged_file",
+                    ])
+                    .default_permission(
+                        DefaultPermissionRule::AllowAllCommands,
+                    ),
+            )
+            .plugin(
                 "friends",
                 InlinedPlugin::new()
                     .commands(&[
@@ -236,6 +304,30 @@ fn main() {
                         "friend_statuses",
                         "add_friend",
                         "remove_friend",
+                    ])
+                    .default_permission(
+                        DefaultPermissionRule::AllowAllCommands,
+                    ),
+            )
+            .plugin(
+                "worlds",
+                InlinedPlugin::new()
+                    .commands(&[
+                        "get_recent_worlds",
+                        "get_instance_worlds",
+                        "get_singleplayer_world",
+                        "set_world_display_status",
+                        "rename_world",
+                        "reset_world_icon",
+                        "backup_world",
+                        "delete_world",
+                        "add_server_to_instance",
+                        "edit_server_in_instance",
+                        "remove_server_from_instance",
+                        "get_instance_protocol_version",
+                        "get_server_status",
+                        "start_join_singleplayer_world",
+                        "start_join_server",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,

@@ -1,5 +1,7 @@
 use super::project_creation::{CreateError, UploadedFile};
 use crate::auth::get_user_from_headers;
+use crate::database::PgPool;
+use crate::database::PgTransaction;
 use crate::database::models::loader_fields::{
     LoaderField, LoaderFieldEnumValue, VersionField,
 };
@@ -7,35 +9,38 @@ use crate::database::models::notification_item::NotificationBuilder;
 use crate::database::models::version_item::{
     DependencyBuilder, VersionBuilder, VersionFileBuilder,
 };
-use crate::database::models::{self, image_item, Organization};
+use crate::database::models::{self, DBOrganization, image_item};
 use crate::database::redis::RedisPool;
-use crate::file_hosting::FileHost;
-use crate::models::images::{Image, ImageContext, ImageId};
+use crate::env::ENV;
+use crate::file_hosting::{FileHost, FileHostPublicity};
+use crate::models::exp;
+use crate::models::ids::{ImageId, ProjectId, VersionId};
+use crate::models::images::{Image, ImageContext};
 use crate::models::notifications::NotificationBody;
 use crate::models::pack::PackFileHash;
 use crate::models::pats::Scopes;
-use crate::models::projects::{skip_nulls, DependencyType, ProjectStatus};
 use crate::models::projects::{
-    Dependency, FileType, Loader, ProjectId, Version, VersionFile, VersionId,
-    VersionStatus, VersionType,
+    Dependency, FileType, Loader, Version, VersionFile, VersionStatus,
+    VersionType,
 };
+use crate::models::projects::{DependencyType, skip_nulls};
 use crate::models::teams::ProjectPermissions;
-use crate::queue::moderation::AutomatedModerationQueue;
 use crate::queue::session::AuthQueue;
+use crate::search::SearchState;
+use crate::util::http::HttpClient;
 use crate::util::routes::read_from_field;
 use crate::util::validate::validation_errors_to_string;
-use crate::validate::{validate_file, ValidationResult};
+use crate::validate::{ValidationResult, validate_file};
 use actix_multipart::{Field, Multipart};
 use actix_web::web::Data;
-use actix_web::{web, HttpRequest, HttpResponse};
+use actix_web::{HttpRequest, HttpResponse, post, web};
 use chrono::Utc;
 use futures::stream::StreamExt;
+use hex::ToHex;
 use itertools::Itertools;
-use log::error;
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::PgPool;
+use sha1::Digest;
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 use validator::Validate;
 
 fn default_requested_status() -> VersionStatus {
@@ -50,7 +55,7 @@ pub struct InitialVersionData {
     pub file_parts: Vec<String>,
     #[validate(
         length(min = 1, max = 32),
-        regex = "crate::util::validate::RE_URL_SAFE"
+        regex(path = *crate::util::validate::RE_URL_SAFE_RELAXED)
     )]
     pub version_number: String,
     #[validate(
@@ -99,14 +104,57 @@ struct InitialFileData {
 }
 
 // under `/api/v1/version`
+/// Create a version on an existing project.
+#[utoipa::path(
+	tag = "versions",
+	post,
+	request_body(
+		content(("multipart/form-data")),
+		description = "Multipart payload containing `data` and uploaded files"
+	),
+	responses(
+		(status = 200, description = "Expected response to a valid request", body = Version),
+		(status = 400, description = "Request was invalid, see given error"),
+		(
+			status = 401,
+			description = "Incorrect token scopes or no authorization to access the requested item(s)"
+		)
+	),
+	security(("bearer_auth" = ["VERSION_CREATE"]))
+)]
+#[post("/version")]
+pub async fn version_create_route(
+    req: HttpRequest,
+    payload: Multipart,
+    client: Data<PgPool>,
+    redis: Data<RedisPool>,
+    file_host: Data<dyn FileHost>,
+    session_queue: Data<AuthQueue>,
+    http: web::Data<HttpClient>,
+    search_state: Data<SearchState>,
+) -> Result<HttpResponse, CreateError> {
+    version_create(
+        req,
+        payload,
+        client,
+        redis,
+        file_host,
+        session_queue,
+        http,
+        search_state,
+    )
+    .await
+}
+
 pub async fn version_create(
     req: HttpRequest,
     mut payload: Multipart,
     client: Data<PgPool>,
     redis: Data<RedisPool>,
-    file_host: Data<Arc<dyn FileHost + Send + Sync>>,
+    file_host: Data<dyn FileHost>,
     session_queue: Data<AuthQueue>,
-    moderation_queue: web::Data<AutomatedModerationQueue>,
+    http: web::Data<HttpClient>,
+    search_state: Data<SearchState>,
 ) -> Result<HttpResponse, CreateError> {
     let mut transaction = client.begin().await?;
     let mut uploaded_files = Vec::new();
@@ -116,17 +164,17 @@ pub async fn version_create(
         &mut payload,
         &mut transaction,
         &redis,
-        &***file_host,
+        &**file_host,
         &mut uploaded_files,
         &client,
         &session_queue,
-        &moderation_queue,
+        &http,
     )
     .await;
 
     if result.is_err() {
         let undo_result = super::project_creation::undo_uploads(
-            &***file_host,
+            &**file_host,
             &uploaded_files,
         )
         .await;
@@ -136,27 +184,33 @@ pub async fn version_create(
         if let Err(e) = rollback_result {
             return Err(e.into());
         }
-    } else {
+    } else if let Ok((_, project_id)) = &result {
         transaction.commit().await?;
+        super::projects::clear_project_cache_and_queue_search(
+            &redis,
+            &search_state,
+            *project_id,
+            None,
+            Some(true),
+        )
+        .await?;
     }
 
-    result
+    result.map(|(response, _)| response)
 }
 
 #[allow(clippy::too_many_arguments)]
 async fn version_create_inner(
     req: HttpRequest,
     payload: &mut Multipart,
-    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    transaction: &mut PgTransaction<'_>,
     redis: &RedisPool,
     file_host: &dyn FileHost,
     uploaded_files: &mut Vec<UploadedFile>,
     pool: &PgPool,
     session_queue: &AuthQueue,
-    moderation_queue: &AutomatedModerationQueue,
-) -> Result<HttpResponse, CreateError> {
-    let cdn_url = dotenvy::var("CDN_URL")?;
-
+    http: &reqwest::Client,
+) -> Result<(HttpResponse, models::DBProjectId), CreateError> {
     let mut initial_version_data = None;
     let mut version_builder = None;
     let mut selected_loaders = None;
@@ -166,7 +220,7 @@ async fn version_create_inner(
         pool,
         redis,
         session_queue,
-        Some(&[Scopes::VERSION_CREATE]),
+        Scopes::VERSION_CREATE,
     )
     .await?
     .1;
@@ -180,7 +234,7 @@ async fn version_create_inner(
         }
 
         let result = async {
-            let content_disposition = field.content_disposition().clone();
+            let content_disposition = field.content_disposition().unwrap().clone();
             let name = content_disposition.get_name().ok_or_else(|| {
                 CreateError::MissingValueError("Missing content name".to_string())
             })?;
@@ -210,10 +264,10 @@ async fn version_create_inner(
                     ));
                 }
 
-                let project_id: models::ProjectId = version_create_data.project_id.unwrap().into();
+                let project_id: models::DBProjectId = version_create_data.project_id.unwrap().into();
 
                 // Ensure that the project this version is being added to exists
-                if models::Project::get_id(project_id, &mut **transaction, redis)
+                if models::DBProject::get_id(project_id, &mut *transaction, redis)
                     .await?
                     .is_none()
                 {
@@ -224,26 +278,26 @@ async fn version_create_inner(
 
                 // Check that the user creating this version is a team member
                 // of the project the version is being added to.
-                let team_member = models::TeamMember::get_from_user_id_project(
+                let team_member = models::DBTeamMember::get_from_user_id_project(
                     project_id,
                     user.id.into(),
                     false,
-                    &mut **transaction,
+                    &mut *transaction,
                 )
                 .await?;
 
                 // Get organization attached, if exists, and the member project permissions
-                let organization = models::Organization::get_associated_organization_project_id(
+                let organization = models::DBOrganization::get_associated_organization_project_id(
                     project_id,
-                    &mut **transaction,
+                    &mut *transaction,
                 )
                 .await?;
 
                 let organization_team_member = if let Some(organization) = &organization {
-                    models::TeamMember::get_from_user_id(
+                    models::DBTeamMember::get_from_user_id(
                         organization.team_id,
                         user.id.into(),
-                        &mut **transaction,
+                        &mut *transaction,
                     )
                     .await?
                 } else {
@@ -266,7 +320,7 @@ async fn version_create_inner(
                 let version_id: VersionId = models::generate_version_id(transaction).await?.into();
 
                 let all_loaders =
-                    models::loader_fields::Loader::list(&mut **transaction, redis).await?;
+                    models::loader_fields::Loader::list(&mut *transaction, redis).await?;
                 let loaders = version_create_data
                     .loaders
                     .iter()
@@ -282,10 +336,10 @@ async fn version_create_inner(
                 let loader_ids: Vec<models::LoaderId> = loaders.iter().map(|y| y.id).collect_vec();
 
                 let loader_fields =
-                    LoaderField::get_fields(&loader_ids, &mut **transaction, redis).await?;
+                    LoaderField::get_fields(&loader_ids, &mut *transaction, redis).await?;
                 let mut loader_field_enum_values = LoaderFieldEnumValue::list_many_loader_fields(
                     &loader_fields,
-                    &mut **transaction,
+                    &mut *transaction,
                     redis,
                 )
                 .await?;
@@ -323,6 +377,7 @@ async fn version_create_inner(
                     status: version_create_data.status,
                     requested_status: None,
                     ordering: version_create_data.ordering,
+                    components: exp::VersionSerial::default(),
                 });
 
                 return Ok(());
@@ -352,7 +407,6 @@ async fn version_create_inner(
                 uploaded_files,
                 &mut version.files,
                 &mut version.dependencies,
-                &cdn_url,
                 &content_disposition,
                 version.project_id.into(),
                 version.version_id.into(),
@@ -397,14 +451,15 @@ async fn version_create_inner(
 
     let users = sqlx::query!(
         "
-        SELECT follower_id FROM mod_follows
-        WHERE mod_id = $1
+        SELECT mf.follower_id FROM mod_follows mf
+        INNER JOIN users u ON u.id = follower_id
+        WHERE mf.mod_id = $1
         ",
-        builder.project_id as crate::database::models::ids::ProjectId
+        builder.project_id as crate::database::models::ids::DBProjectId
     )
-    .fetch(&mut **transaction)
-    .map_ok(|m| models::ids::UserId(m.follower_id))
-    .try_collect::<Vec<models::ids::UserId>>()
+    .fetch(&mut *transaction)
+    .map_ok(|m| models::ids::DBUserId(m.follower_id))
+    .try_collect::<Vec<models::ids::DBUserId>>()
     .await?;
 
     let project_id: ProjectId = builder.project_id.into();
@@ -436,7 +491,7 @@ async fn version_create_inner(
         version_number: builder.version_number.clone(),
         project_types: all_project_types,
         games: all_games,
-        changelog: builder.changelog.clone(),
+        changelog: Some(builder.changelog.clone()),
         date_published: Utc::now(),
         downloads: 0,
         version_type: version_data.release_channel,
@@ -447,6 +502,7 @@ async fn version_create_inner(
             .files
             .iter()
             .map(|file| VersionFile {
+                id: None,
                 hashes: file
                     .hashes
                     .iter()
@@ -471,14 +527,16 @@ async fn version_create_inner(
         dependencies: version_data.dependencies,
         loaders: version_data.loaders,
         fields: version_data.fields,
+        components: exp::VersionQuery::default(),
+        files_missing_attribution: Vec::new(),
     };
 
     let project_id = builder.project_id;
-    builder.insert(transaction).await?;
+    builder.insert(transaction, redis, file_host, http).await?;
 
     for image_id in version_data.uploaded_images {
         if let Some(db_image) =
-            image_item::Image::get(image_id.into(), &mut **transaction, redis)
+            image_item::DBImage::get(image_id.into(), &mut *transaction, redis)
                 .await?
         {
             let image: Image = db_image.into();
@@ -486,8 +544,7 @@ async fn version_create_inner(
                 || image.context.inner_id().is_some()
             {
                 return Err(CreateError::InvalidInput(format!(
-                    "Image {} is not unused and in the 'version' context",
-                    image_id
+                    "Image {image_id} is not unused and in the 'version' context"
                 )));
             }
 
@@ -500,34 +557,68 @@ async fn version_create_inner(
                 version_id.0 as i64,
                 image_id.0 as i64
             )
-            .execute(&mut **transaction)
+            .execute(&mut *transaction)
             .await?;
 
-            image_item::Image::clear_cache(image.id.into(), redis).await?;
+            image_item::DBImage::clear_cache(image.id.into(), redis).await?;
         } else {
             return Err(CreateError::InvalidInput(format!(
-                "Image {} does not exist",
-                image_id
+                "Image {image_id} does not exist"
             )));
         }
     }
 
-    models::Project::clear_cache(project_id, None, Some(true), redis).await?;
+    Ok((HttpResponse::Ok().json(response), project_id))
+}
 
-    let project_status = sqlx::query!(
-        "SELECT status FROM mods WHERE id = $1",
-        project_id as models::ProjectId,
+/// Add files to an existing version.
+#[utoipa::path(
+	tag = "versions",
+	post,
+	params(
+		("version_id" = VersionId, Path, description = "The ID of the version")
+	),
+	request_body(
+		content(("multipart/form-data")),
+		description = "Multipart payload containing files to upload"
+	),
+	responses(
+		(status = NO_CONTENT, description = "Expected response to a valid request"),
+		(
+			status = 401,
+			description = "Incorrect token scopes or no authorization to access the requested item(s)"
+		),
+		(
+			status = 404,
+			description = "The requested item(s) were not found or no authorization to access the requested item(s)"
+		)
+	),
+	security(("bearer_auth" = ["VERSION_WRITE"]))
+)]
+#[post("/version/{version_id}/file")]
+pub async fn upload_file_to_version_route(
+    req: HttpRequest,
+    url_data: web::Path<(VersionId,)>,
+    payload: Multipart,
+    client: Data<PgPool>,
+    redis: Data<RedisPool>,
+    file_host: Data<dyn FileHost>,
+    session_queue: web::Data<AuthQueue>,
+    http: web::Data<HttpClient>,
+    search_state: Data<SearchState>,
+) -> Result<HttpResponse, CreateError> {
+    upload_file_to_version(
+        req,
+        url_data,
+        payload,
+        client,
+        redis,
+        file_host,
+        session_queue,
+        http,
+        search_state,
     )
-    .fetch_optional(pool)
-    .await?;
-
-    if let Some(project_status) = project_status {
-        if project_status.status == ProjectStatus::Processing.as_str() {
-            moderation_queue.projects.insert(project_id.into());
-        }
-    }
-
-    Ok(HttpResponse::Ok().json(response))
+    .await
 }
 
 pub async fn upload_file_to_version(
@@ -536,30 +627,33 @@ pub async fn upload_file_to_version(
     mut payload: Multipart,
     client: Data<PgPool>,
     redis: Data<RedisPool>,
-    file_host: Data<Arc<dyn FileHost + Send + Sync>>,
+    file_host: Data<dyn FileHost>,
     session_queue: web::Data<AuthQueue>,
+    http: web::Data<HttpClient>,
+    search_state: Data<SearchState>,
 ) -> Result<HttpResponse, CreateError> {
     let mut transaction = client.begin().await?;
     let mut uploaded_files = Vec::new();
 
-    let version_id = models::VersionId::from(url_data.into_inner().0);
+    let version_id = models::DBVersionId::from(url_data.into_inner().0);
 
     let result = upload_file_to_version_inner(
         req,
         &mut payload,
         client,
         &mut transaction,
-        redis,
-        &***file_host,
+        redis.clone(),
+        &**file_host,
         &mut uploaded_files,
         version_id,
         &session_queue,
+        &http,
     )
     .await;
 
     if result.is_err() {
         let undo_result = super::project_creation::undo_uploads(
-            &***file_host,
+            &**file_host,
             &uploaded_files,
         )
         .await;
@@ -569,11 +663,19 @@ pub async fn upload_file_to_version(
         if let Err(e) = rollback_result {
             return Err(e.into());
         }
-    } else {
+    } else if let Ok((_, project_id)) = &result {
         transaction.commit().await?;
+        super::projects::clear_project_cache_and_queue_search(
+            &redis,
+            &search_state,
+            *project_id,
+            None,
+            Some(true),
+        )
+        .await?;
     }
 
-    result
+    result.map(|(response, _)| response)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -581,15 +683,14 @@ async fn upload_file_to_version_inner(
     req: HttpRequest,
     payload: &mut Multipart,
     client: Data<PgPool>,
-    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    transaction: &mut PgTransaction<'_>,
     redis: Data<RedisPool>,
     file_host: &dyn FileHost,
     uploaded_files: &mut Vec<UploadedFile>,
-    version_id: models::VersionId,
+    version_id: models::DBVersionId,
     session_queue: &AuthQueue,
-) -> Result<HttpResponse, CreateError> {
-    let cdn_url = dotenvy::var("CDN_URL")?;
-
+    http: &reqwest::Client,
+) -> Result<(HttpResponse, models::DBProjectId), CreateError> {
     let mut initial_file_data: Option<InitialFileData> = None;
     let mut file_builders: Vec<VersionFileBuilder> = Vec::new();
 
@@ -598,24 +699,21 @@ async fn upload_file_to_version_inner(
         &**client,
         &redis,
         session_queue,
-        Some(&[Scopes::VERSION_WRITE]),
+        Scopes::VERSION_WRITE,
     )
     .await?
     .1;
 
-    let result = models::Version::get(version_id, &**client, &redis).await?;
+    let result = models::DBVersion::get(version_id, &**client, &redis).await?;
 
-    let version = match result {
-        Some(v) => v,
-        None => {
-            return Err(CreateError::InvalidInput(
-                "An invalid version id was supplied".to_string(),
-            ));
-        }
+    let Some(version) = result else {
+        return Err(CreateError::InvalidInput(
+            "An invalid version id was supplied".to_string(),
+        ));
     };
 
     let all_loaders =
-        models::loader_fields::Loader::list(&mut **transaction, &redis).await?;
+        models::loader_fields::Loader::list(&mut *transaction, &redis).await?;
     let selected_loaders = version
         .loaders
         .iter()
@@ -628,9 +726,9 @@ async fn upload_file_to_version_inner(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    if models::Project::get_id(
+    if models::DBProject::get_id(
         version.inner.project_id,
-        &mut **transaction,
+        &mut *transaction,
         &redis,
     )
     .await?
@@ -642,16 +740,16 @@ async fn upload_file_to_version_inner(
     }
 
     if !user.role.is_admin() {
-        let team_member = models::TeamMember::get_from_user_id_project(
+        let team_member = models::DBTeamMember::get_from_user_id_project(
             version.inner.project_id,
             user.id.into(),
             false,
-            &mut **transaction,
+            &mut *transaction,
         )
         .await?;
 
         let organization =
-            Organization::get_associated_organization_project_id(
+            DBOrganization::get_associated_organization_project_id(
                 version.inner.project_id,
                 &**client,
             )
@@ -659,10 +757,10 @@ async fn upload_file_to_version_inner(
 
         let organization_team_member = if let Some(organization) = &organization
         {
-            models::TeamMember::get_from_user_id(
+            models::DBTeamMember::get_from_user_id(
                 organization.team_id,
                 user.id.into(),
-                &mut **transaction,
+                &mut *transaction,
             )
             .await?
         } else {
@@ -685,6 +783,7 @@ async fn upload_file_to_version_inner(
     }
 
     let project_id = ProjectId(version.inner.project_id.0 as u64);
+    let db_project_id = version.inner.project_id;
     let mut error = None;
     while let Some(item) = payload.next().await {
         let mut field: Field = item?;
@@ -694,7 +793,8 @@ async fn upload_file_to_version_inner(
         }
 
         let result = async {
-            let content_disposition = field.content_disposition().clone();
+            let content_disposition =
+                field.content_disposition().unwrap().clone();
             let name = content_disposition.get_name().ok_or_else(|| {
                 CreateError::MissingValueError(
                     "Missing content name".to_string(),
@@ -741,7 +841,6 @@ async fn upload_file_to_version_inner(
                 uploaded_files,
                 &mut file_builders,
                 &mut dependencies,
-                &cdn_url,
                 &content_disposition,
                 project_id,
                 version_id.into(),
@@ -774,15 +873,25 @@ async fn upload_file_to_version_inner(
             "At least one file must be specified".to_string(),
         ));
     } else {
+        let project_id = version.inner.project_id;
+
         for file in file_builders {
-            file.insert(version_id, &mut *transaction).await?;
+            file.insert(
+                version_id,
+                project_id,
+                &mut *transaction,
+                &redis,
+                file_host,
+                http,
+            )
+            .await?;
         }
     }
 
     // Clear version cache
-    models::Version::clear_cache(&version, &redis).await?;
+    models::DBVersion::clear_cache(&version, &redis).await?;
 
-    Ok(HttpResponse::NoContent().body(""))
+    Ok((HttpResponse::NoContent().body(""), db_project_id))
 }
 
 // This function is used for adding a file to a version, uploading the initial
@@ -795,7 +904,6 @@ pub async fn upload_file(
     uploaded_files: &mut Vec<UploadedFile>,
     version_files: &mut Vec<VersionFileBuilder>,
     dependencies: &mut Vec<DependencyBuilder>,
-    cdn_url: &str,
     content_disposition: &actix_web::http::header::ContentDisposition,
     project_id: ProjectId,
     version_id: VersionId,
@@ -805,12 +913,12 @@ pub async fn upload_file(
     force_primary: bool,
     file_type: Option<FileType>,
     other_file_names: Vec<String>,
-    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    transaction: &mut PgTransaction<'_>,
     redis: &RedisPool,
 ) -> Result<(), CreateError> {
     let (file_name, file_extension) = get_name_ext(content_disposition)?;
 
-    if other_file_names.contains(&format!("{}.{}", file_name, file_extension)) {
+    if other_file_names.contains(&format!("{file_name}.{file_extension}")) {
         return Err(CreateError::InvalidInput(
             "Duplicate files are not allowed to be uploaded to Modrinth!"
                 .to_string(),
@@ -833,7 +941,7 @@ pub async fn upload_file(
         "Project file exceeds the maximum of 500MiB. Contact a moderator or admin to request permission to upload larger files."
     ).await?;
 
-    let hash = sha1::Sha1::from(&data).hexdigest();
+    let hash = sha1::Sha1::digest(&data).encode_hex::<String>();
     let exists = sqlx::query!(
         "
         SELECT EXISTS(SELECT 1 FROM hashes h
@@ -845,7 +953,7 @@ pub async fn upload_file(
         "sha1",
         project_id.0 as i64
     )
-    .fetch_one(&mut **transaction)
+    .fetch_one(&mut *transaction)
     .await?
     .exists
     .unwrap_or(false);
@@ -857,8 +965,10 @@ pub async fn upload_file(
         ));
     }
 
+    let data = data.freeze();
+
     let validation_result = validate_file(
-        data.clone().into(),
+        data.clone(),
         file_extension.to_string(),
         loaders.clone(),
         file_type,
@@ -872,16 +982,16 @@ pub async fn upload_file(
         ref format,
         ref files,
     } = validation_result
+        && dependencies.is_empty()
     {
-        if dependencies.is_empty() {
-            let hashes: Vec<Vec<u8>> = format
-                .files
-                .iter()
-                .filter_map(|x| x.hashes.get(&PackFileHash::Sha1))
-                .map(|x| x.as_bytes().to_vec())
-                .collect();
+        let hashes: Vec<Vec<u8>> = format
+            .files
+            .iter()
+            .filter_map(|x| x.hashes.get(&PackFileHash::Sha1))
+            .map(|x| x.as_bytes().to_vec())
+            .collect();
 
-            let res = sqlx::query!(
+        let res = sqlx::query!(
                 "
                     SELECT v.id version_id, v.mod_id project_id, h.hash hash FROM hashes h
                     INNER JOIN files f on h.file_id = f.id
@@ -890,53 +1000,51 @@ pub async fn upload_file(
                     ",
                 &*hashes
             )
-            .fetch_all(&mut **transaction)
+            .fetch_all(&mut *transaction)
             .await?;
 
-            for file in &format.files {
-                if let Some(dep) = res.iter().find(|x| {
-                    Some(&*x.hash)
-                        == file
-                            .hashes
-                            .get(&PackFileHash::Sha1)
-                            .map(|x| x.as_bytes())
-                }) {
-                    dependencies.push(DependencyBuilder {
-                        project_id: Some(models::ProjectId(dep.project_id)),
-                        version_id: Some(models::VersionId(dep.version_id)),
-                        file_name: None,
-                        dependency_type: DependencyType::Embedded.to_string(),
-                    });
-                } else if let Some(first_download) = file.downloads.first() {
-                    dependencies.push(DependencyBuilder {
-                        project_id: None,
-                        version_id: None,
-                        file_name: Some(
-                            first_download
-                                .rsplit('/')
-                                .next()
-                                .unwrap_or(first_download)
-                                .to_string(),
-                        ),
-                        dependency_type: DependencyType::Embedded.to_string(),
-                    });
-                }
+        for file in &format.files {
+            if let Some(dep) = res.iter().find(|x| {
+                Some(&*x.hash)
+                    == file
+                        .hashes
+                        .get(&PackFileHash::Sha1)
+                        .map(|x| x.as_bytes())
+            }) {
+                dependencies.push(DependencyBuilder {
+                    project_id: Some(models::DBProjectId(dep.project_id)),
+                    version_id: Some(models::DBVersionId(dep.version_id)),
+                    file_name: None,
+                    dependency_type: DependencyType::Embedded.to_string(),
+                });
+            } else if let Some(first_download) = file.downloads.first() {
+                dependencies.push(DependencyBuilder {
+                    project_id: None,
+                    version_id: None,
+                    file_name: Some(
+                        first_download
+                            .rsplit('/')
+                            .next()
+                            .unwrap_or(first_download)
+                            .to_string(),
+                    ),
+                    dependency_type: DependencyType::Embedded.to_string(),
+                });
             }
+        }
 
-            for file in files {
-                if !file.is_empty() {
-                    dependencies.push(DependencyBuilder {
-                        project_id: None,
-                        version_id: None,
-                        file_name: Some(file.to_string()),
-                        dependency_type: DependencyType::Embedded.to_string(),
-                    });
-                }
+        for file in files {
+            if !file.is_empty() {
+                dependencies.push(DependencyBuilder {
+                    project_id: None,
+                    version_id: None,
+                    file_name: Some(file.to_string()),
+                    dependency_type: DependencyType::Embedded.to_string(),
+                });
             }
         }
     }
 
-    let data = data.freeze();
     let primary = (validation_result.is_passed()
         && version_files.iter().all(|x| !x.primary)
         && !ignore_primary)
@@ -944,21 +1052,19 @@ pub async fn upload_file(
         || total_files_len == 1;
 
     let file_path_encode = format!(
-        "data/{}/versions/{}/{}",
-        project_id,
-        version_id,
+        "data/{project_id}/versions/{version_id}/{}",
         urlencoding::encode(file_name)
     );
     let file_path =
-        format!("data/{}/versions/{}/{}", project_id, version_id, &file_name);
+        format!("data/{project_id}/versions/{version_id}/{file_name}");
 
     let upload_data = file_host
-        .upload_file(content_type, &file_path, data)
+        .upload_file(content_type, &file_path, FileHostPublicity::Public, data)
         .await?;
 
     uploaded_files.push(UploadedFile {
-        file_id: upload_data.file_id,
-        file_name: file_path,
+        name: file_path,
+        publicity: FileHostPublicity::Public,
     });
 
     let sha1_bytes = upload_data.content_sha1.into_bytes();
@@ -975,33 +1081,15 @@ pub async fn upload_file(
         ));
     }
 
-    if let ValidationResult::Warning(msg) = validation_result {
-        if primary {
-            return Err(CreateError::InvalidInput(msg.to_string()));
-        }
-    }
-
-    let url = format!("{cdn_url}/{file_path_encode}");
-
-    let client = reqwest::Client::new();
-    let delphi_url = dotenvy::var("DELPHI_URL")?;
-    let res = client
-        .post(delphi_url)
-        .json(&serde_json::json!({
-            "url": url,
-            "project_id": project_id,
-            "version_id": version_id,
-        }))
-        .send()
-        .await?;
-
-    if !res.status().is_success() {
-        error!("Failed to upload file to Delphi: {url}");
+    if let ValidationResult::Warning(msg) = validation_result
+        && primary
+    {
+        return Err(CreateError::InvalidInput(msg.to_string()));
     }
 
     version_files.push(VersionFileBuilder {
         filename: file_name.to_string(),
-        url: format!("{cdn_url}/{file_path_encode}"),
+        url: format!("{}/{file_path_encode}", ENV.CDN_URL),
         hashes: vec![
             models::version_item::HashBuilder {
                 algorithm: "sha1".to_string(),
@@ -1057,7 +1145,7 @@ pub fn try_create_version_fields(
         .filter(|lf| !lf.optional)
         .map(|lf| lf.field.clone())
         .collect::<HashSet<_>>();
-    for (key, value) in submitted_fields.iter() {
+    for (key, value) in submitted_fields {
         let loader_field = loader_fields
             .iter()
             .find(|lf| &lf.field == key)

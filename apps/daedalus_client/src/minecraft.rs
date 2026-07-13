@@ -1,23 +1,20 @@
 use crate::util::fetch_json;
 use crate::{
-    util::download_file, util::format_url, util::sha1_async, Error,
-    MirrorArtifact, UploadFile,
+    Error, FetchResult, UploadFile, util::download_file, util::format_url,
+    util::sha1_async,
 };
 use daedalus::minecraft::{
-    merge_partial_library, Library, PartialLibrary, VersionInfo,
-    VersionManifest, VERSION_MANIFEST_URL,
+    Library, PartialLibrary, VERSION_MANIFEST_URL, VersionInfo,
+    VersionManifest, merge_partial_library,
 };
 use dashmap::DashMap;
 use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
-#[tracing::instrument(skip(semaphore, upload_files, _mirror_artifacts))]
-pub async fn fetch(
-    semaphore: Arc<Semaphore>,
-    upload_files: &DashMap<String, UploadFile>,
-    _mirror_artifacts: &DashMap<String, MirrorArtifact>,
-) -> Result<(), Error> {
+#[tracing::instrument(skip(semaphore))]
+pub async fn fetch(semaphore: Arc<Semaphore>) -> Result<FetchResult, Error> {
+    let upload_files = DashMap::new();
     let modrinth_manifest = fetch_json::<VersionManifest>(
         &format_url(&format!(
             "minecraft/v{}/manifest.json",
@@ -52,8 +49,7 @@ pub async fn fetch(
                     if modrinth_version
                         .original_sha1
                         .as_ref()
-                        .map(|x| x == &version.sha1)
-                        .unwrap_or(false)
+                        .is_some_and(|x| x == &version.sha1)
                     {
                         existing_versions.push(modrinth_version);
                     } else {
@@ -148,7 +144,7 @@ pub async fn fetch(
             .chain(existing_versions.into_iter())
             .collect::<Vec<_>>();
 
-        new_versions.sort_by(|a, b| b.release_time.cmp(&a.release_time));
+        new_versions.sort_by_key(|b| std::cmp::Reverse(b.release_time));
 
         // create and upload the new manifest
         let version_manifest_path = format!(
@@ -170,7 +166,10 @@ pub async fn fetch(
         );
     }
 
-    Ok(())
+    Ok(FetchResult {
+        upload_files,
+        mirror_artifacts: DashMap::new(),
+    })
 }
 
 #[derive(Deserialize, Debug)]
@@ -187,6 +186,8 @@ pub struct LibraryPatch {
 }
 
 fn fetch_library_patches() -> Result<Vec<LibraryPatch>, Error> {
+    // The file below is a copy of https://github.com/PrismLauncher/meta/blob/main/meta/common/mojang-library-patches.json.
+    // That file belongs to a repository licensed under the Microsoft Public License (Ms-PL)
     let patches = include_bytes!("../library-patches.json");
     Ok(serde_json::from_slice(patches)?)
 }

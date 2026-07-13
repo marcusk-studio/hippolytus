@@ -1,13 +1,10 @@
-use crate::models::ids::Base62Id;
-use crate::models::ids::UserId;
+use crate::models::ids::{
+    ChargeId, ProductId, ProductPriceId, UserSubscriptionId,
+};
+use ariadne::ids::UserId;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-
-#[derive(Copy, Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
-#[serde(from = "Base62Id")]
-#[serde(into = "Base62Id")]
-pub struct ProductId(pub u64);
 
 #[derive(Serialize, Deserialize)]
 pub struct Product {
@@ -27,12 +24,28 @@ pub enum ProductMetadata {
         swap: u32,
         storage: u32,
     },
+    Medal {
+        cpu: u32,
+        ram: u32,
+        swap: u32,
+        storage: u32,
+        region: String,
+    },
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
-#[serde(from = "Base62Id")]
-#[serde(into = "Base62Id")]
-pub struct ProductPriceId(pub u64);
+impl ProductMetadata {
+    pub fn is_pyro(&self) -> bool {
+        matches!(self, ProductMetadata::Pyro { .. })
+    }
+
+    pub fn is_medal(&self) -> bool {
+        matches!(self, ProductMetadata::Medal { .. })
+    }
+
+    pub fn is_midas(&self) -> bool {
+        matches!(self, ProductMetadata::Midas)
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct ProductPrice {
@@ -53,44 +66,73 @@ pub enum Price {
     },
 }
 
-#[derive(Serialize, Deserialize, Hash, Eq, PartialEq, Debug, Copy, Clone)]
+impl Price {
+    pub fn get_interval(&self, interval: PriceDuration) -> Option<i32> {
+        match self {
+            Price::OneTime { .. } => None,
+            Price::Recurring { intervals } => intervals.get(&interval).copied(),
+        }
+    }
+}
+
+#[derive(
+    Serialize,
+    Deserialize,
+    Hash,
+    Eq,
+    PartialEq,
+    Debug,
+    Copy,
+    Clone,
+    utoipa::ToSchema,
+)]
 #[serde(rename_all = "kebab-case")]
 pub enum PriceDuration {
+    FiveDays,
     Monthly,
+    Quarterly,
     Yearly,
 }
 
 impl PriceDuration {
     pub fn duration(&self) -> chrono::Duration {
         match self {
+            PriceDuration::FiveDays => chrono::Duration::days(5),
             PriceDuration::Monthly => chrono::Duration::days(30),
+            PriceDuration::Quarterly => chrono::Duration::days(90),
             PriceDuration::Yearly => chrono::Duration::days(365),
         }
     }
 
     pub fn from_string(string: &str) -> PriceDuration {
         match string {
+            "five-days" => PriceDuration::FiveDays,
             "monthly" => PriceDuration::Monthly,
+            "quarterly" => PriceDuration::Quarterly,
             "yearly" => PriceDuration::Yearly,
             _ => PriceDuration::Monthly,
         }
     }
+
     pub fn as_str(&self) -> &'static str {
         match self {
             PriceDuration::Monthly => "monthly",
+            PriceDuration::Quarterly => "quarterly",
             PriceDuration::Yearly => "yearly",
+            PriceDuration::FiveDays => "five-days",
         }
     }
 
     pub fn iterator() -> impl Iterator<Item = PriceDuration> {
-        vec![PriceDuration::Monthly, PriceDuration::Yearly].into_iter()
+        vec![
+            PriceDuration::Monthly,
+            PriceDuration::Quarterly,
+            PriceDuration::Yearly,
+            PriceDuration::FiveDays,
+        ]
+        .into_iter()
     }
 }
-
-#[derive(Copy, Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
-#[serde(from = "Base62Id")]
-#[serde(into = "Base62Id")]
-pub struct UserSubscriptionId(pub u64);
 
 #[derive(Serialize, Deserialize)]
 pub struct UserSubscription {
@@ -103,11 +145,11 @@ pub struct UserSubscription {
     pub metadata: Option<SubscriptionMetadata>,
 }
 
-impl From<crate::database::models::user_subscription_item::UserSubscriptionItem>
+impl From<crate::database::models::user_subscription_item::DBUserSubscription>
     for UserSubscription
 {
     fn from(
-        x: crate::database::models::user_subscription_item::UserSubscriptionItem,
+        x: crate::database::models::user_subscription_item::DBUserSubscription,
     ) -> Self {
         Self {
             id: x.id.into(),
@@ -148,20 +190,26 @@ impl SubscriptionStatus {
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum SubscriptionMetadata {
-    Pyro { id: String },
+    Pyro { id: String, region: Option<String> },
+    Medal { id: String },
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
-#[serde(from = "Base62Id")]
-#[serde(into = "Base62Id")]
-pub struct ChargeId(pub u64);
+impl SubscriptionMetadata {
+    pub fn is_medal(&self) -> bool {
+        matches!(self, SubscriptionMetadata::Medal { .. })
+    }
+
+    pub fn is_pyro(&self) -> bool {
+        matches!(self, SubscriptionMetadata::Pyro { .. })
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct Charge {
     pub id: ChargeId,
     pub user_id: UserId,
     pub price_id: ProductPriceId,
-    pub amount: u64,
+    pub amount: i64,
     pub currency_code: String,
     pub status: ChargeStatus,
     pub due: DateTime<Utc>,
@@ -171,9 +219,12 @@ pub struct Charge {
     pub subscription_id: Option<UserSubscriptionId>,
     pub subscription_interval: Option<PriceDuration>,
     pub platform: PaymentPlatform,
+
+    pub parent_charge_id: Option<ChargeId>,
+    pub net: Option<i64>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum ChargeType {
     OneTime,
@@ -186,8 +237,8 @@ impl ChargeType {
     pub fn as_str(&self) -> &'static str {
         match self {
             ChargeType::OneTime => "one-time",
-            ChargeType::Subscription { .. } => "subscription",
-            ChargeType::Proration { .. } => "proration",
+            ChargeType::Subscription => "subscription",
+            ChargeType::Proration => "proration",
             ChargeType::Refund => "refund",
         }
     }
@@ -206,12 +257,16 @@ impl ChargeType {
 #[derive(Serialize, Deserialize, Eq, PartialEq, Copy, Clone, Debug)]
 #[serde(rename_all = "kebab-case")]
 pub enum ChargeStatus {
-    // Open charges are for the next billing interval
+    /// Open charges are for the next billing interval
     Open,
     Processing,
     Succeeded,
     Failed,
     Cancelled,
+    /// Expiring charges are charges that aren't expected to be processed
+    /// but can be promoted to a full charge, like for trials/freebies. When
+    /// due, the underlying subscription is unprovisioned.
+    Expiring,
 }
 
 impl ChargeStatus {
@@ -222,6 +277,7 @@ impl ChargeStatus {
             "failed" => ChargeStatus::Failed,
             "open" => ChargeStatus::Open,
             "cancelled" => ChargeStatus::Cancelled,
+            "expiring" => ChargeStatus::Expiring,
             _ => ChargeStatus::Failed,
         }
     }
@@ -233,6 +289,7 @@ impl ChargeStatus {
             ChargeStatus::Failed => "failed",
             ChargeStatus::Open => "open",
             ChargeStatus::Cancelled => "cancelled",
+            ChargeStatus::Expiring => "expiring",
         }
     }
 }
@@ -240,12 +297,14 @@ impl ChargeStatus {
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PaymentPlatform {
     Stripe,
+    None,
 }
 
 impl PaymentPlatform {
     pub fn from_string(string: &str) -> PaymentPlatform {
         match string {
             "stripe" => PaymentPlatform::Stripe,
+            "none" => PaymentPlatform::None,
             _ => PaymentPlatform::Stripe,
         }
     }
@@ -253,6 +312,7 @@ impl PaymentPlatform {
     pub fn as_str(&self) -> &'static str {
         match self {
             PaymentPlatform::Stripe => "stripe",
+            PaymentPlatform::None => "none",
         }
     }
 }

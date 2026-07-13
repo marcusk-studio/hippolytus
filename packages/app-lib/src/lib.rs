@@ -11,9 +11,9 @@ and launching Modrinth mod packs
 mod util;
 
 mod api;
-mod config;
 mod error;
 mod event;
+pub mod install;
 mod launcher;
 mod logger;
 mod state;
@@ -21,8 +21,20 @@ mod state;
 pub use api::*;
 pub use error::*;
 pub use event::{
-    emit::emit_loading, emit::init_loading, EventState, LoadingBar,
-    LoadingBarType,
+    EventState, LoadingBar, LoadingBarType, emit::emit_loading,
+    emit::init_loading,
 };
 pub use logger::start_logger;
 pub use state::State;
+pub use util::fetch::DownloadReason;
+
+pub fn launcher_user_agent() -> String {
+    const LAUNCHER_BASE_USER_AGENT: &str =
+        concat!("modrinth/theseus/", env!("CARGO_PKG_VERSION"),);
+
+    format!(
+        "{} ({}; support@modrinth.com)",
+        LAUNCHER_BASE_USER_AGENT,
+        std::env::consts::OS
+    )
+}

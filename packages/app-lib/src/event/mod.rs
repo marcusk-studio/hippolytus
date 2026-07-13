@@ -1,5 +1,7 @@
 //! Theseus state management system
-use crate::state::UserStatus;
+use ariadne::ids::UserId;
+use ariadne::users::UserStatus;
+use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, sync::Arc};
@@ -143,46 +145,45 @@ pub enum LoadingBarType {
         version: u32,
     },
     PackFileDownload {
-        profile_path: String,
+        instance_id: String,
         pack_name: String,
         icon: Option<String>,
         pack_version: String,
     },
     PackDownload {
-        profile_path: String,
+        instance_id: String,
         pack_name: String,
         icon: Option<PathBuf>,
         pack_id: Option<String>,
         pack_version: Option<String>,
     },
     MinecraftDownload {
-        profile_path: String,
-        profile_name: String,
+        instance_id: String,
+        instance_name: String,
     },
-    ProfileUpdate {
-        profile_path: String,
-        profile_name: String,
+    InstanceUpdate {
+        instance_id: String,
+        instance_name: String,
     },
     ZipExtract {
-        profile_path: String,
-        profile_name: String,
+        instance_id: String,
+        instance_name: String,
     },
     ConfigChange {
         new_path: PathBuf,
     },
-    CopyProfile {
+    CopyInstance {
         import_location: PathBuf,
-        profile_name: String,
+        instance_name: String,
     },
-    CheckingForUpdates,
     LauncherUpdate {
         version: String,
         current_version: String,
     },
 }
 
-#[cfg(feature = "tauri")]
 #[derive(Serialize, Clone)]
+#[cfg(feature = "tauri")]
 pub struct LoadingPayload {
     pub event: LoadingBarType,
     pub loader_uuid: Uuid,
@@ -190,10 +191,27 @@ pub struct LoadingPayload {
     pub message: String,
 }
 
-#[cfg(feature = "tauri")]
 #[derive(Serialize, Clone)]
+#[cfg(feature = "tauri")]
 pub struct WarningPayload {
     pub message: String,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct InstanceBulkUpdateProgressPayload {
+    pub instance_id: String,
+    pub stage: InstanceBulkUpdateProgressStage,
+    pub current: usize,
+    pub total: usize,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum InstanceBulkUpdateProgressStage {
+    ResolvingVersions,
+    Downloading,
+    Finishing,
 }
 
 #[derive(Serialize, Clone)]
@@ -208,20 +226,29 @@ pub enum CommandPayload {
     InstallModpack {
         id: String,
     },
+    InstallServer {
+        id: String,
+    },
+    LaunchInstance {
+        id: String,
+        server: Option<String>,
+        singleplayer_world: Option<String>,
+    },
     RunMRPack {
         // run or install .mrpack
         path: PathBuf,
     },
 }
 
-#[cfg(feature = "tauri")]
 #[derive(Serialize, Clone)]
+#[cfg(feature = "tauri")]
 pub struct ProcessPayload {
-    pub profile_path_id: String,
+    pub instance_id: String,
     pub uuid: Uuid,
     pub event: ProcessPayloadType,
     pub message: String,
 }
+
 #[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum ProcessPayloadType {
@@ -229,19 +256,70 @@ pub enum ProcessPayloadType {
     Finished,
 }
 
+#[derive(Serialize, Clone)]
 #[cfg(feature = "tauri")]
-#[derive(Serialize, Clone)]
-pub struct ProfilePayload {
-    pub profile_path_id: String,
-    pub event: ProfilePayloadType,
+pub struct InstancePayload {
+    pub instance_id: String,
+    #[serde(flatten)]
+    pub event: InstancePayloadType,
 }
+
 #[derive(Serialize, Clone)]
-#[serde(rename_all = "snake_case")]
-pub enum ProfilePayloadType {
+#[serde(tag = "event", rename_all = "snake_case")]
+pub enum InstancePayloadType {
     Created,
     Synced,
+    ServersUpdated,
+    WorldUpdated {
+        world: String,
+    },
+    ServerJoined {
+        host: String,
+        port: u16,
+        timestamp: DateTime<Utc>,
+    },
     Edited,
+    ContentInstallFinished {
+        project_ids: Vec<String>,
+    },
+    ContentInstallFailed {
+        project_ids: Vec<String>,
+        message: String,
+    },
     Removed,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "event")]
+pub enum FriendPayload {
+    FriendRequest { from: UserId },
+    UserOffline { id: UserId },
+    StatusUpdate { user_status: UserStatus },
+    StatusSync,
+}
+
+#[cfg(feature = "tauri")]
+pub use self::log_types::*;
+
+#[cfg(feature = "tauri")]
+mod log_types {
+    use crate::state::Log4jEvent;
+    use serde::Serialize;
+
+    #[derive(Serialize, Clone)]
+    #[serde(tag = "type", rename_all = "snake_case")]
+    pub enum LogEvent {
+        Log4j(Log4jEvent),
+        Legacy { message: String },
+    }
+
+    #[derive(Serialize, Clone)]
+    pub struct LogPayload {
+        pub instance_id: String,
+        #[serde(flatten)]
+        pub event: LogEvent,
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -255,14 +333,4 @@ pub enum EventError {
     #[cfg(feature = "tauri")]
     #[error("Tauri error: {0}")]
     TauriError(#[from] tauri::Error),
-}
-
-#[derive(Serialize, Clone)]
-#[serde(rename_all = "snake_case")]
-#[serde(tag = "event")]
-pub enum FriendPayload {
-    FriendRequest { from: String },
-    UserOffline { id: String },
-    StatusUpdate { user_status: UserStatus },
-    StatusSync,
 }

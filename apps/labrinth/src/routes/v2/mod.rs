@@ -1,5 +1,6 @@
-mod moderation;
+pub(crate) mod moderation;
 mod notifications;
+mod openapi;
 pub(crate) mod project_creation;
 mod projects;
 mod reports;
@@ -14,16 +15,17 @@ mod versions;
 
 pub use super::ApiError;
 use crate::util::cors::default_cors;
+use actix_web::web;
+pub use openapi::ApiDoc;
 
-pub fn config(cfg: &mut actix_web::web::ServiceConfig) {
+pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
-        actix_web::web::scope("v2")
+        web::scope("/v2")
             .wrap(default_cors())
-            .configure(super::internal::admin::config)
-            // Todo: separate these- they need to also follow v2-v3 conversion
             .configure(super::internal::session::config)
             .configure(super::internal::flows::config)
             .configure(super::internal::pats::config)
+            .configure(super::internal::admin::config)
             .configure(moderation::config)
             .configure(notifications::config)
             .configure(project_creation::config)

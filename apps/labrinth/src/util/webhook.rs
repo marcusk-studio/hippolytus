@@ -1,11 +1,11 @@
 use crate::database::models::legacy_loader_fields::MinecraftGameVersion;
 use crate::database::redis::RedisPool;
-use crate::models::ids::base62_impl::to_base62;
-use crate::models::projects::ProjectId;
+use crate::models::ids::ProjectId;
 use crate::routes::ApiError;
+use crate::{database::PgPool, env::ENV};
+use ariadne::ids::base62_impl::to_base62;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use sqlx::PgPool;
 
 const PLUGIN_LOADERS: &[&str] = &[
     "bukkit",
@@ -45,9 +45,8 @@ async fn get_webhook_metadata(
     project_id: ProjectId,
     pool: &PgPool,
     redis: &RedisPool,
-    emoji: bool,
 ) -> Result<Option<WebhookMetadata>, ApiError> {
-    let project = crate::database::models::project_item::Project::get_id(
+    let project = crate::database::models::project_item::DBProject::get_id(
         project_id.into(),
         pool,
         redis,
@@ -58,7 +57,7 @@ async fn get_webhook_metadata(
         let mut owner = None;
 
         if let Some(organization_id) = project.inner.organization_id {
-            let organization = crate::database::models::organization_item::Organization::get_id(
+            let organization = crate::database::models::organization_item::DBOrganization::get_id(
                 organization_id,
                 pool,
                 redis,
@@ -70,14 +69,14 @@ async fn get_webhook_metadata(
                     name: organization.name,
                     url: format!(
                         "{}/organization/{}",
-                        dotenvy::var("SITE_URL").unwrap_or_default(),
-                        organization.slug
+                        ENV.SITE_URL,
+                        to_base62(organization.id.0 as u64)
                     ),
                     icon_url: organization.icon_url,
                 });
             }
         } else {
-            let team = crate::database::models::team_item::TeamMember::get_from_team_full(
+            let team = crate::database::models::team_item::DBTeamMember::get_from_team_full(
                 project.inner.team_id,
                 pool,
                 redis,
@@ -85,7 +84,7 @@ async fn get_webhook_metadata(
             .await?;
 
             if let Some(member) = team.into_iter().find(|x| x.is_owner) {
-                let user = crate::database::models::user_item::User::get_id(
+                let user = crate::database::models::user_item::DBUser::get_id(
                     member.user_id,
                     pool,
                     redis,
@@ -96,8 +95,8 @@ async fn get_webhook_metadata(
                     owner = Some(WebhookAuthor {
                         url: format!(
                             "{}/user/{}",
-                            dotenvy::var("SITE_URL").unwrap_or_default(),
-                            user.username
+                            ENV.SITE_URL,
+                            to_base62(user.id.0 as u64)
                         ),
                         name: user.username,
                         icon_url: user.avatar_url,
@@ -143,13 +142,9 @@ async fn get_webhook_metadata(
         Ok(Some(WebhookMetadata {
             project_url: format!(
                 "{}/{}/{}",
-                dotenvy::var("SITE_URL").unwrap_or_default(),
+                ENV.SITE_URL,
                 project_type,
-                project
-                    .inner
-                    .slug
-                    .clone()
-                    .unwrap_or_else(|| to_base62(project.inner.id.0 as u64))
+                to_base62(project.inner.id.0 as u64)
             ),
             project_title: project.inner.name,
             project_summary: project.inner.summary,
@@ -163,56 +158,13 @@ async fn get_webhook_metadata(
             categories_formatted: project
                 .categories
                 .into_iter()
-                .map(|mut x| format!("{}{x}", x.remove(0).to_uppercase()))
-                .collect::<Vec<_>>(),
+                .map(format_category_or_loader)
+                .collect(),
             loaders_formatted: project
                 .inner
                 .loaders
                 .into_iter()
-                .map(|loader| {
-                    let mut x = if &*loader == "datapack" {
-                        "Data Pack".to_string()
-                    } else if &*loader == "mrpack" {
-                        "Modpack".to_string()
-                    } else {
-                        loader.clone()
-                    };
-
-                    if emoji {
-                        let emoji_id: i64 = match &*loader {
-                            "bukkit" => 1049793345481883689,
-                            "bungeecord" => 1049793347067314220,
-                            "canvas" => 1107352170656968795,
-                            "datapack" => 1057895494652788866,
-                            "fabric" => 1049793348719890532,
-                            "folia" => 1107348745571537018,
-                            "forge" => 1049793350498275358,
-                            "iris" => 1107352171743281173,
-                            "liteloader" => 1049793351630733333,
-                            "minecraft" => 1049793352964526100,
-                            "modloader" => 1049793353962762382,
-                            "neoforge" => 1140437823783190679,
-                            "optifine" => 1107352174415052901,
-                            "paper" => 1049793355598540810,
-                            "purpur" => 1140436034505674762,
-                            "quilt" => 1049793857681887342,
-                            "rift" => 1049793359373414502,
-                            "spigot" => 1049793413886779413,
-                            "sponge" => 1049793416969605231,
-                            "vanilla" => 1107350794178678855,
-                            "velocity" => 1049793419108700170,
-                            "waterfall" => 1049793420937412638,
-                            _ => 1049805243866681424,
-                        };
-
-                        format!(
-                            "<:{loader}:{emoji_id}> {}{x}",
-                            x.remove(0).to_uppercase()
-                        )
-                    } else {
-                        format!("{}{x}", x.remove(0).to_uppercase())
-                    }
-                })
+                .map(format_category_or_loader)
                 .collect(),
             versions_formatted: formatted_game_versions,
             gallery_image: project
@@ -226,14 +178,92 @@ async fn get_webhook_metadata(
     }
 }
 
-pub async fn send_slack_webhook(
+pub enum PayoutSourceAlertType {
+    UnderThreshold {
+        source: String,
+        threshold: u64,
+        current_balance: u64,
+    },
+    CheckFailure {
+        source: String,
+        display_error: String,
+    },
+}
+
+impl PayoutSourceAlertType {
+    pub fn message(&self) -> String {
+        match self {
+            PayoutSourceAlertType::UnderThreshold {
+                source,
+                threshold,
+                current_balance,
+            } => format!(
+"\u{1f6a8} *Payout Source Alert*
+
+Payout source '{source}' has an available balance under the ${threshold} threshold.
+Balance: ${current_balance}."
+            ),
+            PayoutSourceAlertType::CheckFailure {
+                source,
+                display_error,
+            } => format!(
+"\u{1f6a8} *Payout Source Alert*
+
+Failed to check payout source '{source}' balance.
+Error:
+```
+{display_error}
+```"
+            ),
+        }
+    }
+}
+
+pub async fn send_slack_payout_source_alert_webhook(
+    alert: PayoutSourceAlertType,
+    webhook_url: &str,
+) -> Result<(), ApiError> {
+    let client = reqwest::Client::new();
+
+    client
+        .post(webhook_url)
+        .json(&serde_json::json!({
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": alert.message()
+                    }
+                },
+                {
+                    "type": "context",
+                    "elements": [
+                        {
+                            "type": "mrkdwn",
+                            "text": format!("via labrinth • <!date^{}^{{date_short_pretty}} at {{time}}|Unknown date>", Utc::now().timestamp())
+                        }
+                    ]
+                }
+            ],
+        }))
+        .send()
+        .await
+        .map_err(|_| {
+            ApiError::Slack("Error while sending projects webhook".to_string())
+        })?;
+
+    Ok(())
+}
+
+pub async fn send_slack_project_webhook(
     project_id: ProjectId,
     pool: &PgPool,
     redis: &RedisPool,
-    webhook_url: String,
+    webhook_url: &str,
     message: Option<String>,
 ) -> Result<(), ApiError> {
-    let metadata = get_webhook_metadata(project_id, pool, redis, false).await?;
+    let metadata = get_webhook_metadata(project_id, pool, redis).await?;
 
     if let Some(metadata) = metadata {
         let mut blocks = vec![];
@@ -286,17 +316,17 @@ pub async fn send_slack_webhook(
             }
         });
 
-        if let Some(icon_url) = metadata.project_icon_url {
-            if let Some(project_block) = project_block.as_object_mut() {
-                project_block.insert(
-                    "accessory".to_string(),
-                    serde_json::json!({
-                        "type": "image",
-                        "image_url": icon_url,
-                        "alt_text": metadata.project_title
-                    }),
-                );
-            }
+        if let Some(icon_url) = metadata.project_icon_url
+            && let Some(project_block) = project_block.as_object_mut()
+        {
+            project_block.insert(
+                "accessory".to_string(),
+                serde_json::json!({
+                    "type": "image",
+                    "image_url": icon_url,
+                    "alt_text": metadata.project_title
+                }),
+            );
         }
 
         blocks.push(project_block);
@@ -329,14 +359,14 @@ pub async fn send_slack_webhook(
         let client = reqwest::Client::new();
 
         client
-            .post(&webhook_url)
+            .post(webhook_url)
             .json(&serde_json::json!({
                 "blocks": blocks,
             }))
             .send()
             .await
             .map_err(|_| {
-                ApiError::Discord(
+                ApiError::Slack(
                     "Error while sending projects webhook".to_string(),
                 )
             })?;
@@ -401,10 +431,10 @@ pub async fn send_discord_webhook(
     project_id: ProjectId,
     pool: &PgPool,
     redis: &RedisPool,
-    webhook_url: String,
+    webhook_url: &str,
     message: Option<String>,
 ) -> Result<(), ApiError> {
-    let metadata = get_webhook_metadata(project_id, pool, redis, true).await?;
+    let metadata = get_webhook_metadata(project_id, pool, redis).await?;
 
     if let Some(project) = metadata {
         let mut fields = vec![];
@@ -461,7 +491,7 @@ pub async fn send_discord_webhook(
         let client = reqwest::Client::new();
 
         client
-            .post(&webhook_url)
+            .post(webhook_url)
             .json(&DiscordWebhook {
                 avatar_url: Some(
                     "https://cdn.modrinth.com/Modrinth_Dark_Logo.png"
@@ -488,10 +518,10 @@ fn get_gv_range(
     mut all_game_versions: Vec<MinecraftGameVersion>,
 ) -> Vec<String> {
     // both -> least to greatest
-    game_versions.sort_by(|a, b| a.created.cmp(&b.created));
+    game_versions.sort_by_key(|a| a.created);
     game_versions.dedup_by(|a, b| a.version == b.version);
 
-    all_game_versions.sort_by(|a, b| a.created.cmp(&b.created));
+    all_game_versions.sort_by_key(|a| a.created);
 
     let all_releases = all_game_versions
         .iter()
@@ -622,4 +652,36 @@ fn get_gv_range(
     }
 
     output
+}
+
+// Converted from knossos
+// See: packages/utils/utils.ts
+// https://github.com/modrinth/code/blob/47af459f24e541a844b42b1c8427af6a7b86381e/packages/utils/utils.ts#L147-L196
+fn format_category_or_loader(mut x: String) -> String {
+    match &*x {
+        "modloader" => "Risugami's ModLoader".to_string(),
+        "bungeecord" => "BungeeCord".to_string(),
+        "liteloader" => "LiteLoader".to_string(),
+        "neoforge" => "NeoForge".to_string(),
+        "game-mechanics" => "Game Mechanics".to_string(),
+        "worldgen" => "World Generation".to_string(),
+        "core-shaders" => "Core Shaders".to_string(),
+        "gui" => "GUI".to_string(),
+        "8x-" => "8x or lower".to_string(),
+        "512x+" => "512x or higher".to_string(),
+        "kitchen-sink" => "Kitchen Sink".to_string(),
+        "path-tracing" => "Path Tracing".to_string(),
+        "pbr" => "PBR".to_string(),
+        "datapack" => "Data Pack".to_string(),
+        "colored-lighting" => "Colored Lighting".to_string(),
+        "optifine" => "OptiFine".to_string(),
+        "bta-babric" => "BTA (Babric)".to_string(),
+        "legacy-fabric" => "Legacy Fabric".to_string(),
+        "java-agent" => "Java Agent".to_string(),
+        "nilloader" => "NilLoader".to_string(),
+        "mrpack" => "Modpack".to_string(),
+        "minecraft" => "Resource Pack".to_string(),
+        "vanilla" => "Vanilla Shader".to_string(),
+        _ => format!("{}{x}", x.remove(0).to_uppercase()),
+    }
 }

@@ -4,29 +4,30 @@ use crate::{
     assert_status,
     common::{
         api_common::{ApiProject, ApiVersion, AppendsOptionalPat},
-        api_v2::{request_data::get_public_project_creation_data_json, ApiV2},
+        api_v2::{ApiV2, request_data::get_public_project_creation_data_json},
         database::{
-            generate_random_name, ADMIN_USER_PAT, FRIEND_USER_ID,
-            FRIEND_USER_PAT, USER_USER_PAT,
+            ADMIN_USER_PAT, FRIEND_USER_ID, FRIEND_USER_PAT, USER_USER_PAT,
+            generate_random_name,
         },
         dummy_data::TestFile,
-        environment::{with_test_environment, TestEnvironment},
+        environment::{TestEnvironment, with_test_environment},
         permissions::{PermissionsTest, PermissionsTestContext},
     },
 };
 use actix_http::StatusCode;
 use actix_web::test;
+use ariadne::ids::base62_impl::parse_base62;
 use futures::StreamExt;
+use hex::ToHex;
 use itertools::Itertools;
+use labrinth::models::ids::ProjectId;
 use labrinth::{
     database::models::project_item::PROJECTS_SLUGS_NAMESPACE,
-    models::{
-        ids::base62_impl::parse_base62, projects::ProjectId,
-        teams::ProjectPermissions,
-    },
+    models::teams::ProjectPermissions,
     util::actix::{AppendsMultipart, MultipartSegment, MultipartSegmentData},
 };
 use serde_json::json;
+use sha1::Digest;
 
 #[actix_rt::test]
 async fn test_project_type_sanity() {
@@ -102,7 +103,7 @@ async fn test_project_type_sanity() {
                 );
             }
 
-            // As we get more complicated strucures with as v3 continues to expand, and alpha/beta get more complicated, we should add more tests here,
+            // As we get more complicated structures with as v3 continues to expand, and alpha/beta get more complicated, we should add more tests here,
             // to ensure that projects created with v3 routes are still valid and work with v3 routes.
         },
     )
@@ -204,9 +205,8 @@ async fn test_add_remove_project() {
             let uploaded_version_id = project.versions[0];
 
             // Checks files to ensure they were uploaded and correctly identify the file
-            let hash = sha1::Sha1::from(basic_mod_file.bytes())
-                .digest()
-                .to_string();
+            let hash = sha1::Sha1::digest(basic_mod_file.bytes())
+                .encode_hex::<String>();
             let version = api
                 .get_version_from_hash_deserialized(
                     &hash,
@@ -413,7 +413,7 @@ pub async fn test_patch_v2() {
 
             let alpha_project_slug = &test_env.dummy.project_alpha.project_slug;
 
-            // Sucessful request to patch many fields.
+            // Successful request to patch many fields.
             let resp = api
                 .edit_project(
                     alpha_project_slug,
@@ -433,7 +433,7 @@ pub async fn test_patch_v2() {
             // Note: the original V2 value of this was "optional",
             // but Required/Optional is no longer a carried combination in v3, as the changes made were lossy.
             // Now, the test Required/Unsupported combination is tested instead.
-            // Setting Required/Optional in v2 will not work, this is known and accepteed.
+            // Setting Required/Optional in v2 will not work, this is known and accepted.
             assert_eq!(project.client_side.as_str(), "unsupported");
             assert_eq!(project.server_side.as_str(), "required");
         },
@@ -470,7 +470,7 @@ async fn permissions_patch_project_v2() {
                 .map(|(key, value)| {
                     let test_env = test_env.clone();
                     async move {
-                        let req_gen = |ctx: PermissionsTestContext| async {
+                        let req_gen = async |ctx: PermissionsTestContext| {
                             api.edit_project(
                             &ctx.project_id.unwrap(),
                             json!({

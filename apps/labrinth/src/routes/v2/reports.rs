@@ -1,14 +1,14 @@
+use crate::database::PgPool;
 use crate::database::redis::RedisPool;
 use crate::models::reports::Report;
 use crate::models::v2::reports::LegacyReport;
 use crate::queue::session::AuthQueue;
-use crate::routes::{v2_reroute, v3, ApiError};
-use actix_web::{delete, get, patch, post, web, HttpRequest, HttpResponse};
+use crate::routes::{ApiError, v2_reroute, v3};
+use actix_web::{HttpRequest, HttpResponse, delete, get, patch, post, web};
 use serde::Deserialize;
-use sqlx::PgPool;
 use validator::Validate;
 
-pub fn config(cfg: &mut web::ServiceConfig) {
+pub fn config(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(reports_get);
     cfg.service(reports);
     cfg.service(report_create);
@@ -17,7 +17,23 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(report_get);
 }
 
-#[post("report")]
+/// Create a report for a project, version, or user.  
+#[utoipa::path(
+	tag = "reports",
+    post,
+    operation_id = "submitReport",
+    request_body = v3::reports::CreateReport,
+    responses(
+		(status = 200, description = "Expected response to a valid request", body = LegacyReport),
+        (status = 400, description = "Request was invalid, see given error"),
+        (
+            status = 401,
+            description = "Incorrect token scopes or no authorization to access the requested item(s)"
+        )
+    ),
+    security(("bearer_auth" = ["REPORT_CREATE"]))
+)]
+#[post("/report")]
 pub async fn report_create(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -40,27 +56,48 @@ pub async fn report_create(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct ReportsRequestOptions {
     #[serde(default = "default_count")]
-    count: i16,
+    count: u16,
     #[serde(default = "default_all")]
     all: bool,
 }
 
-fn default_count() -> i16 {
+fn default_count() -> u16 {
     100
 }
 fn default_all() -> bool {
     true
 }
 
-#[get("report")]
+/// Get open reports for the current user.  
+#[utoipa::path(
+	tag = "reports",
+    get,
+    operation_id = "getOpenReports",
+    params(
+        ("count" = Option<u16>, Query, description = "Maximum number of reports to return")
+    ),
+    responses(
+		(status = 200, description = "Expected response to a valid request", body = Vec<LegacyReport>),
+        (
+            status = 401,
+            description = "Incorrect token scopes or no authorization to access the requested item(s)"
+        ),
+        (
+            status = 404,
+            description = "The requested item(s) were not found or no authorization to access the requested item(s)"
+        )
+    ),
+    security(("bearer_auth" = ["REPORT_READ"]))
+)]
+#[get("/report")]
 pub async fn reports(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     redis: web::Data<RedisPool>,
-    count: web::Query<ReportsRequestOptions>,
+    request_opts: web::Query<ReportsRequestOptions>,
     session_queue: web::Data<AuthQueue>,
 ) -> Result<HttpResponse, ApiError> {
     let response = v3::reports::reports(
@@ -68,8 +105,9 @@ pub async fn reports(
         pool,
         redis,
         web::Query(v3::reports::ReportsRequestOptions {
-            count: count.count,
-            all: count.all,
+            count: request_opts.count,
+            offset: 0,
+            all: request_opts.all,
         }),
         session_queue,
     )
@@ -87,12 +125,33 @@ pub async fn reports(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct ReportIds {
     pub ids: String,
 }
 
-#[get("reports")]
+/// Get multiple reports by ID.  
+#[utoipa::path(
+	tag = "reports",
+    get,
+    operation_id = "getReports",
+    params(
+        ("ids" = String, Query, description = "The JSON array of report IDs")
+    ),
+    responses(
+		(status = 200, description = "Expected response to a valid request", body = Vec<LegacyReport>),
+        (
+            status = 401,
+            description = "Incorrect token scopes or no authorization to access the requested item(s)"
+        ),
+        (
+            status = 404,
+            description = "The requested item(s) were not found or no authorization to access the requested item(s)"
+        )
+    ),
+    security(("bearer_auth" = ["REPORT_READ"]))
+)]
+#[get("/reports")]
 pub async fn reports_get(
     req: HttpRequest,
     web::Query(ids): web::Query<ReportIds>,
@@ -121,12 +180,33 @@ pub async fn reports_get(
     }
 }
 
-#[get("report/{id}")]
+/// Get a report by ID.  
+#[utoipa::path(
+	tag = "reports",
+    get,
+    operation_id = "getReport",
+    params(
+        ("id" = crate::models::ids::ReportId, Path, description = "The ID of the report")
+    ),
+    responses(
+		(status = 200, description = "Expected response to a valid request", body = LegacyReport),
+        (
+            status = 401,
+            description = "Incorrect token scopes or no authorization to access the requested item(s)"
+        ),
+        (
+            status = 404,
+            description = "The requested item(s) were not found or no authorization to access the requested item(s)"
+        )
+    ),
+    security(("bearer_auth" = ["REPORT_READ"]))
+)]
+#[get("/report/{id}")]
 pub async fn report_get(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     redis: web::Data<RedisPool>,
-    info: web::Path<(crate::models::reports::ReportId,)>,
+    info: web::Path<(crate::models::ids::ReportId,)>,
     session_queue: web::Data<AuthQueue>,
 ) -> Result<HttpResponse, ApiError> {
     let response =
@@ -144,19 +224,42 @@ pub async fn report_get(
     }
 }
 
-#[derive(Deserialize, Validate)]
+#[derive(Deserialize, Validate, utoipa::ToSchema)]
 pub struct EditReport {
     #[validate(length(max = 65536))]
     pub body: Option<String>,
     pub closed: Option<bool>,
 }
 
-#[patch("report/{id}")]
+/// Update a report.  
+#[utoipa::path(
+	tag = "reports",
+    patch,
+    operation_id = "modifyReport",
+    params(
+        ("id" = crate::models::ids::ReportId, Path, description = "The ID of the report")
+    ),
+    request_body = EditReport,
+    responses(
+        (status = 204, description = "Expected response to a valid request"),
+        (status = 400, description = "Request was invalid, see given error"),
+        (
+            status = 401,
+            description = "Incorrect token scopes or no authorization to access the requested item(s)"
+        ),
+        (
+            status = 404,
+            description = "The requested item(s) were not found or no authorization to access the requested item(s)"
+        )
+    ),
+    security(("bearer_auth" = ["REPORT_WRITE"]))
+)]
+#[patch("/report/{id}")]
 pub async fn report_edit(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     redis: web::Data<RedisPool>,
-    info: web::Path<(crate::models::reports::ReportId,)>,
+    info: web::Path<(crate::models::ids::ReportId,)>,
     session_queue: web::Data<AuthQueue>,
     edit_report: web::Json<EditReport>,
 ) -> Result<HttpResponse, ApiError> {
@@ -177,11 +280,32 @@ pub async fn report_edit(
     .or_else(v2_reroute::flatten_404_error)
 }
 
-#[delete("report/{id}")]
+/// Delete a report by ID.  
+#[utoipa::path(
+	tag = "reports",
+    delete,
+    operation_id = "deleteReport",
+    params(
+        ("id" = crate::models::ids::ReportId, Path, description = "The ID of the report")
+    ),
+    responses(
+        (status = 204, description = "Expected response to a valid request"),
+        (
+            status = 401,
+            description = "Incorrect token scopes or no authorization to access the requested item(s)"
+        ),
+        (
+            status = 404,
+            description = "The requested item(s) were not found or no authorization to access the requested item(s)"
+        )
+    ),
+    security(("bearer_auth" = ["REPORT_DELETE"]))
+)]
+#[delete("/report/{id}")]
 pub async fn report_delete(
     req: HttpRequest,
     pool: web::Data<PgPool>,
-    info: web::Path<(crate::models::reports::ReportId,)>,
+    info: web::Path<(crate::models::ids::ReportId,)>,
     redis: web::Data<RedisPool>,
     session_queue: web::Data<AuthQueue>,
 ) -> Result<HttpResponse, ApiError> {

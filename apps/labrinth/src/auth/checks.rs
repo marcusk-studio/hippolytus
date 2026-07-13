@@ -1,13 +1,19 @@
 use crate::database;
-use crate::database::models::project_item::QueryProject;
-use crate::database::models::version_item::QueryVersion;
-use crate::database::models::Collection;
+use crate::database::models::project_item::ProjectQueryResult;
+use crate::database::models::version_item::VersionQueryResult;
+use crate::database::models::{DBCollection, DBOrganization, DBTeamMember};
 use crate::database::redis::RedisPool;
-use crate::database::{models, Project, Version};
+use crate::database::{DBProject, DBVersion, models};
+use crate::database::{PgPool, ReadOnlyPgPool};
+use crate::models::ids::FileId;
+use crate::models::projects::{
+    MissingAttributionFile, OverrideSource, Version,
+};
 use crate::models::users::User;
+use crate::queue::file_scan::get_files_missing_attribution;
 use crate::routes::ApiError;
+use futures::TryStreamExt;
 use itertools::Itertools;
-use sqlx::PgPool;
 
 pub trait ValidateAuthorized {
     fn validate_authorized(
@@ -38,7 +44,7 @@ where
 }
 
 pub async fn is_visible_project(
-    project_data: &Project,
+    project_data: &DBProject,
     user_option: &Option<User>,
     pool: &PgPool,
     hide_unlisted: bool,
@@ -54,7 +60,7 @@ pub async fn is_visible_project(
 }
 
 pub async fn is_team_member_project(
-    project_data: &Project,
+    project_data: &DBProject,
     user_option: &Option<User>,
     pool: &PgPool,
 ) -> Result<bool, ApiError> {
@@ -64,7 +70,7 @@ pub async fn is_team_member_project(
 }
 
 pub async fn filter_visible_projects(
-    mut projects: Vec<QueryProject>,
+    mut projects: Vec<ProjectQueryResult>,
     user_option: &Option<User>,
     pool: &PgPool,
     hide_unlisted: bool,
@@ -86,11 +92,11 @@ pub async fn filter_visible_projects(
 // - the user is a mod
 // This is essentially whether you can know of the project's existence
 pub async fn filter_visible_project_ids(
-    projects: Vec<&Project>,
+    projects: Vec<&DBProject>,
     user_option: &Option<User>,
     pool: &PgPool,
     hide_unlisted: bool,
-) -> Result<Vec<crate::database::models::ProjectId>, ApiError> {
+) -> Result<Vec<crate::database::models::DBProjectId>, ApiError> {
     let mut return_projects = Vec::new();
     let mut check_projects = Vec::new();
 
@@ -100,10 +106,7 @@ pub async fn filter_visible_project_ids(
             project.status.is_searchable()
         } else {
             !project.status.is_hidden()
-        }) || user_option
-            .as_ref()
-            .map(|x| x.role.is_mod())
-            .unwrap_or(false)
+        }) || user_option.as_ref().is_some_and(|x| x.role.is_mod())
         {
             return_projects.push(project.id);
         } else if user_option.is_some() {
@@ -126,16 +129,14 @@ pub async fn filter_visible_project_ids(
 // These are projects we have internal access to and can potentially see even if they are hidden
 // This is useful for getting visibility of versions, or seeing analytics or sensitive team-restricted data of a project
 pub async fn filter_enlisted_projects_ids(
-    projects: Vec<&Project>,
+    projects: Vec<&DBProject>,
     user_option: &Option<User>,
     pool: &PgPool,
-) -> Result<Vec<crate::database::models::ProjectId>, ApiError> {
+) -> Result<Vec<crate::database::models::DBProjectId>, ApiError> {
     let mut return_projects = vec![];
 
     if let Some(user) = user_option {
-        let user_id: models::ids::UserId = user.id.into();
-
-        use futures::TryStreamExt;
+        let user_id: models::ids::DBUserId = user.id.into();
 
         sqlx::query!(
             "
@@ -154,11 +155,11 @@ pub async fn filter_enlisted_projects_ids(
                 .iter()
                 .filter_map(|x| x.organization_id.map(|x| x.0))
                 .collect::<Vec<_>>(),
-            user_id as database::models::ids::UserId,
+            user_id as database::models::ids::DBUserId,
         )
         .fetch(pool)
         .map_ok(|row| {
-            for x in projects.iter() {
+            for x in &projects {
                 let bool =
                     Some(x.id.0) == row.id && Some(x.team_id.0) == row.team_id;
                 if bool {
@@ -173,7 +174,7 @@ pub async fn filter_enlisted_projects_ids(
 }
 
 pub async fn is_visible_version(
-    version_data: &Version,
+    version_data: &DBVersion,
     user_option: &Option<User>,
     pool: &PgPool,
     redis: &RedisPool,
@@ -184,7 +185,7 @@ pub async fn is_visible_version(
 }
 
 pub async fn is_team_member_version(
-    version_data: &Version,
+    version_data: &DBVersion,
     user_option: &Option<User>,
     pool: &PgPool,
     redis: &RedisPool,
@@ -195,9 +196,10 @@ pub async fn is_team_member_version(
 }
 
 pub async fn filter_visible_versions(
-    mut versions: Vec<QueryVersion>,
+    mut versions: Vec<VersionQueryResult>,
     user_option: &Option<User>,
     pool: &PgPool,
+    ro_pool: &ReadOnlyPgPool,
     redis: &RedisPool,
 ) -> Result<Vec<crate::models::projects::Version>, ApiError> {
     let filtered_version_ids = filter_visible_version_ids(
@@ -208,10 +210,43 @@ pub async fn filter_visible_versions(
     )
     .await?;
     versions.retain(|x| filtered_version_ids.contains(&x.inner.id));
-    Ok(versions.into_iter().map(|x| x.into()).collect())
+
+    let version_ids: Vec<_> = versions.iter().map(|v| v.inner.id).collect();
+    let missing = get_files_missing_attribution(&**ro_pool, &version_ids)
+        .await
+        .unwrap_or_default();
+
+    Ok(versions
+        .into_iter()
+        .map(|v| {
+            let files_missing = missing
+                .get(&v.inner.id)
+                .map(|entries| {
+                    entries
+                        .iter()
+                        .map(|(id, fp)| MissingAttributionFile {
+                            id: FileId(id.0 as u64),
+                            override_source: fp
+                                .as_ref()
+                                .map(|p| OverrideSource::Flame {
+                                    id: p.id,
+                                    title: p.title.clone(),
+                                    url: p.url.clone(),
+                                    icon_url: p.icon_url.clone(),
+                                })
+                                .or(Some(OverrideSource::Unknown)),
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let mut version = Version::from(v);
+            version.files_missing_attribution = files_missing;
+            version
+        })
+        .collect())
 }
 
-impl ValidateAuthorized for models::OAuthClient {
+impl ValidateAuthorized for models::DBOAuthClient {
     fn validate_authorized(
         &self,
         user_option: Option<&User>,
@@ -232,13 +267,12 @@ impl ValidateAuthorized for models::OAuthClient {
 }
 
 pub async fn filter_visible_version_ids(
-    versions: Vec<&Version>,
+    versions: Vec<&DBVersion>,
     user_option: &Option<User>,
     pool: &PgPool,
     redis: &RedisPool,
-) -> Result<Vec<crate::database::models::VersionId>, ApiError> {
+) -> Result<Vec<crate::database::models::DBVersionId>, ApiError> {
     let mut return_versions = Vec::new();
-    let mut check_versions = Vec::new();
 
     // First, filter out versions belonging to projects we can't see
     // (ie: a hidden project, but public version, should still be hidden)
@@ -247,7 +281,7 @@ pub async fn filter_visible_version_ids(
 
     // Get visible projects- ones we are allowed to see public versions for.
     let visible_project_ids = filter_visible_project_ids(
-        Project::get_many_ids(&project_ids, pool, redis)
+        DBProject::get_many_ids(&project_ids, pool, redis)
             .await?
             .iter()
             .map(|x| &x.inner)
@@ -263,23 +297,25 @@ pub async fn filter_visible_version_ids(
         filter_enlisted_version_ids(versions.clone(), user_option, pool, redis)
             .await?;
 
+    let version_ids: Vec<_> = versions.iter().map(|v| v.id).collect();
+    let withheld_versions = get_files_missing_attribution(pool, &version_ids)
+        .await
+        .unwrap_or_default();
+
     // Return versions that are not hidden, we are a mod of, or we are enlisted on the team of
     for version in versions {
+        let is_withheld = withheld_versions.contains_key(&version.id);
         // We can see the version if:
-        // - it's not hidden and we can see the project
+        // - it's not hidden and we can see the project and it's not withheld for attribution
         // - we are a mod
         // - we are enlisted on the team of the mod
         if (!version.status.is_hidden()
+            && !is_withheld
             && visible_project_ids.contains(&version.project_id))
-            || user_option
-                .as_ref()
-                .map(|x| x.role.is_mod())
-                .unwrap_or(false)
+            || user_option.as_ref().is_some_and(|x| x.role.is_mod())
             || enlisted_version_ids.contains(&version.id)
         {
             return_versions.push(version.id);
-        } else if user_option.is_some() {
-            check_versions.push(version);
         }
     }
 
@@ -287,11 +323,11 @@ pub async fn filter_visible_version_ids(
 }
 
 pub async fn filter_enlisted_version_ids(
-    versions: Vec<&Version>,
+    versions: Vec<&DBVersion>,
     user_option: &Option<User>,
     pool: &PgPool,
     redis: &RedisPool,
-) -> Result<Vec<crate::database::models::VersionId>, ApiError> {
+) -> Result<Vec<crate::database::models::DBVersionId>, ApiError> {
     let mut return_versions = Vec::new();
 
     // Get project ids of versions
@@ -299,7 +335,7 @@ pub async fn filter_enlisted_version_ids(
 
     // Get enlisted projects- ones we are allowed to see hidden versions for.
     let authorized_project_ids = filter_enlisted_projects_ids(
-        Project::get_many_ids(&project_ids, pool, redis)
+        DBProject::get_many_ids(&project_ids, pool, redis)
             .await?
             .iter()
             .map(|x| &x.inner)
@@ -310,10 +346,7 @@ pub async fn filter_enlisted_version_ids(
     .await?;
 
     for version in versions {
-        if user_option
-            .as_ref()
-            .map(|x| x.role.is_mod())
-            .unwrap_or(false)
+        if user_option.as_ref().is_some_and(|x| x.role.is_mod())
             || (user_option.is_some()
                 && authorized_project_ids.contains(&version.project_id))
         {
@@ -325,33 +358,39 @@ pub async fn filter_enlisted_version_ids(
 }
 
 pub async fn is_visible_collection(
-    collection_data: &Collection,
+    collection_data: &DBCollection,
     user_option: &Option<User>,
+    hide_unlisted: bool,
 ) -> Result<bool, ApiError> {
-    let mut authorized = !collection_data.status.is_hidden();
-    if let Some(user) = &user_option {
-        if !authorized
-            && (user.role.is_mod() || user.id == collection_data.user_id.into())
-        {
-            authorized = true;
-        }
+    let mut authorized = (if hide_unlisted {
+        collection_data.status.is_searchable()
+    } else {
+        !collection_data.status.is_hidden()
+    }) && !collection_data.projects.is_empty();
+    if let Some(user) = &user_option
+        && !authorized
+        && (user.role.is_mod() || user.id == collection_data.user_id.into())
+    {
+        authorized = true;
     }
     Ok(authorized)
 }
 
 pub async fn filter_visible_collections(
-    collections: Vec<Collection>,
+    collections: Vec<DBCollection>,
     user_option: &Option<User>,
+    hide_unlisted: bool,
 ) -> Result<Vec<crate::models::collections::Collection>, ApiError> {
     let mut return_collections = Vec::new();
     let mut check_collections = Vec::new();
 
     for collection in collections {
-        if !collection.status.is_hidden()
-            || user_option
-                .as_ref()
-                .map(|x| x.role.is_mod())
-                .unwrap_or(false)
+        if ((if hide_unlisted {
+            collection.status.is_searchable()
+        } else {
+            !collection.status.is_hidden()
+        }) && !collection.projects.is_empty())
+            || user_option.as_ref().is_some_and(|x| x.role.is_mod())
         {
             return_collections.push(collection.into());
         } else if user_option.is_some() {
@@ -361,12 +400,45 @@ pub async fn filter_visible_collections(
 
     for collection in check_collections {
         // Collections are simple- if we are the owner or a mod, we can see it
-        if let Some(user) = user_option {
-            if user.role.is_mod() || user.id == collection.user_id.into() {
-                return_collections.push(collection.into());
-            }
+        if let Some(user) = user_option
+            && (user.role.is_mod() || user.id == collection.user_id.into())
+        {
+            return_collections.push(collection.into());
         }
     }
 
     Ok(return_collections)
+}
+
+pub async fn is_visible_organization(
+    organization: &DBOrganization,
+    viewing_user: &Option<User>,
+    pool: &PgPool,
+    redis: &RedisPool,
+) -> Result<bool, ApiError> {
+    let members =
+        DBTeamMember::get_from_team_full(organization.team_id, pool, redis)
+            .await?;
+
+    // This is meant to match the same projects as the `Project::is_searchable` method, but we're not using
+    // it here because that'd entail pulling in all projects for the organization
+    let has_searchable_projects = sqlx::query_scalar!(
+        "SELECT TRUE FROM mods WHERE organization_id = $1 AND status IN ('approved', 'archived') LIMIT 1",
+        organization.id as database::models::ids::DBOrganizationId
+    )
+    .fetch_optional(pool)
+    .await?
+    .flatten()
+    .unwrap_or(false);
+
+    let visible = has_searchable_projects
+        || members.iter().filter(|member| member.accepted).count() > 1
+        || viewing_user.as_ref().is_some_and(|viewing_user| {
+            viewing_user.role.is_mod()
+                || members
+                    .iter()
+                    .any(|member| member.user_id == viewing_user.id.into())
+        });
+
+    Ok(visible)
 }

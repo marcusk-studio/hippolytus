@@ -31,8 +31,8 @@ import { listen } from '@tauri-apps/api/event'
           pack_name: name of the pack
           pack_id, optional, the id of the modpack
           pack_version, optional, the version of the modpack
-          profile_name: name of the profile
-          profile_uuid: unique identification of the profile
+          instance_name: name of the instance
+          instance_id: unique identification of the instance
 
         }
         loader_uuid: unique identification of the loading bar
@@ -41,7 +41,7 @@ import { listen } from '@tauri-apps/api/event'
     }
 */
 export async function loading_listener(callback) {
-  return await listen('loading', (event) => callback(event.payload))
+	return await listen('loading', (event) => callback(event.payload))
 }
 
 /// Payload for the 'process' event
@@ -54,21 +54,35 @@ export async function loading_listener(callback) {
     }
 */
 export async function process_listener(callback) {
-  return await listen('process', (event) => callback(event.payload))
+	return await listen('process', (event) => callback(event.payload))
 }
 
-/// Payload for the 'profile' event
+/// Payload for the 'instance' event
 /*
-    ProfilePayload {
-        uuid: unique identification of the process in the state (currently identified by path, but that will change)
-        name: name of the profile
-        profile_path: relative path to profile (used for path identification)
-        path: path to profile (used for opening the profile in the OS file explorer)
+    InstancePayload {
+        instance_id: unique identification of the instance
         event: event type ("Created", "Added", "Edited", "Removed")
     }
 */
-export async function profile_listener(callback) {
-  return await listen('profile', (event) => callback(event.payload))
+export async function instance_listener(callback) {
+	return await listen('instance', (event) => callback(event.payload))
+}
+
+/// Payload for the 'instance_bulk_update_progress' event
+/*
+    InstanceBulkUpdateProgress {
+        instanceId: string
+        stage: "resolving_versions" | "downloading" | "finishing"
+        current: number
+        total: number
+    }
+*/
+export async function instance_bulk_update_progress_listener(callback) {
+	return await listen('instance_bulk_update_progress', (event) => callback(event.payload))
+}
+
+export async function install_job_listener(callback) {
+	return await listen('install_job', (event) => callback(event.payload))
 }
 
 /// Payload for the 'command' event
@@ -79,9 +93,9 @@ export async function profile_listener(callback) {
   }
 */
 export async function command_listener(callback) {
-  return await listen('command', (event) => {
-    callback(event.payload)
-  })
+	return await listen('command', (event) => {
+		callback(event.payload)
+	})
 }
 
 /// Payload for the 'warning' event
@@ -91,9 +105,33 @@ export async function command_listener(callback) {
     }
 */
 export async function warning_listener(callback) {
-  return await listen('warning', (event) => callback(event.payload))
+	return await listen('warning', (event) => callback(event.payload))
 }
 
 export async function friend_listener(callback) {
-  return await listen('friend', (event) => callback(event.payload))
+	return await listen('friend', (event) => callback(event.payload))
+}
+
+export async function notification_listener(callback) {
+	return await listen('notification', (event) => callback(event.payload))
+}
+
+/// Payload for the 'log' event
+/*
+    LogPayload {
+        instance_id: string,
+        type: "log4j" | "legacy",
+        // log4j fields (when type === "log4j"):
+        timestamp_millis?: number,
+        logger_name?: string,
+        level?: string,
+        thread_name?: string,
+        message?: string,
+        throwable?: string,
+        // legacy fields (when type === "legacy"):
+        message?: string,
+    }
+*/
+export async function log_listener(callback) {
+	return await listen('log', (event) => callback(event.payload))
 }

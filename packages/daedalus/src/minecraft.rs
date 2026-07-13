@@ -179,6 +179,56 @@ pub enum Os {
     Unknown,
 }
 
+impl Os {
+    /// Returns the native OS of the build
+    pub fn native() -> Self {
+        match std::env::consts::OS {
+            "windows" => Self::Windows,
+            "macos" => Self::Osx,
+            "linux" => Self::Linux,
+            _ => Self::Unknown,
+        }
+    }
+
+    /// Returns the native OS variant of the build, taking into account the architecture of its Java runtime
+    pub fn native_arch(java_arch: &str) -> Self {
+        if std::env::consts::OS == "windows" {
+            if java_arch == "aarch64" {
+                Os::WindowsArm64
+            } else {
+                Os::Windows
+            }
+        } else if std::env::consts::OS == "linux" {
+            if java_arch == "aarch64" {
+                Os::LinuxArm64
+            } else if java_arch == "arm" {
+                Os::LinuxArm32
+            } else {
+                Os::Linux
+            }
+        } else if std::env::consts::OS == "macos" {
+            if java_arch == "aarch64" {
+                Os::OsxArm64
+            } else {
+                Os::Osx
+            }
+        } else {
+            Os::Unknown
+        }
+    }
+
+    /// Returns the base OS of a variant (e.g. OsxArm64 -> Osx)
+    pub fn get_os(&self) -> Self {
+        match self {
+            Os::OsxArm64 => Os::Osx,
+            Os::LinuxArm32 => Os::Linux,
+            Os::LinuxArm64 => Os::Linux,
+            Os::WindowsArm64 => Os::Windows,
+            _ => self.clone(),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 /// A rule which depends on what OS the user is on
 pub struct OsRule {
@@ -275,6 +325,24 @@ pub struct Library {
     #[serde(default = "default_downloadable")]
     /// Whether the library should be downloaded
     pub downloadable: bool,
+}
+
+impl Library {
+    /// Returns the OS key and classifiers for downloading natives, if applicable
+    pub fn natives_os_key_and_classifiers(
+        &self,
+        java_arch: &str,
+    ) -> Option<(&str, &HashMap<String, LibraryDownload>)> {
+        self.natives
+            .as_ref()
+            .and_then(|natives| natives.get(&Os::native_arch(java_arch)))
+            .and_then(|natives| {
+                self.downloads
+                    .as_ref()
+                    .and_then(|downloads| downloads.classifiers.as_ref())
+                    .map(|classifiers| (natives.as_str(), classifiers))
+            })
+    }
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -386,6 +454,7 @@ pub enum Argument {
     /// An argument which is only applied if certain conditions are met
     Ruled {
         /// The rules deciding whether the argument(s) is used or not
+        #[serde(default)]
         rules: Vec<Rule>,
         /// The container of the argument(s) that should be applied accordingly
         value: ArgumentValue,
@@ -393,13 +462,53 @@ pub enum Argument {
 }
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Hash, Clone, Copy)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 /// The type of argument
 pub enum ArgumentType {
     /// The argument is passed to the game
     Game,
     /// The argument is passed to the JVM
     Jvm,
+    /// Passed to JVM as well. Includes default arguments to the GC.
+    DefaultUserJvm,
+}
+
+#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Hash)]
+#[serde(rename_all = "snake_case")]
+/// The physical side of the logging configuration
+pub enum LoggingSide {
+    /// Client logging configuration
+    Client,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+/// File download information for a logging configuration
+pub struct LogConfigDownload {
+    /// The path that the logging configuration should be saved to
+    pub id: String,
+    /// The SHA1 hash of the logging configuration
+    pub sha1: String,
+    /// The size of the logging configuration
+    pub size: u32,
+    /// The URL where the logging configuration can be downloaded
+    pub url: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(
+    tag = "type",
+    rename_all = "kebab-case",
+    rename_all_fields = "camelCase"
+)]
+/// Information about a version's logging configuration
+pub enum LoggingConfiguration {
+    /// Use a log4j2 XML log config file
+    Log4j2Xml {
+        /// The JVM argument for passing the file to the Java process
+        argument: String,
+        /// The config file to download
+        file: LogConfigDownload,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -422,6 +531,9 @@ pub struct VersionInfo {
     pub java_version: Option<JavaVersion>,
     /// Libraries that the version depends on
     pub libraries: Vec<Library>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    /// The logging configuration data for the game
+    pub logging: Option<HashMap<LoggingSide, LoggingConfiguration>>,
     /// The classpath to the main class to launch the game
     pub main_class: String,
     #[serde(skip_serializing_if = "Option::is_none")]

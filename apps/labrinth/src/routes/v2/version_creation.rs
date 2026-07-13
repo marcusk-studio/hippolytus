@@ -1,27 +1,26 @@
+use crate::database::PgPool;
 use crate::database::models::loader_fields::VersionField;
 use crate::database::models::{project_item, version_item};
 use crate::database::redis::RedisPool;
 use crate::file_hosting::FileHost;
-use crate::models::ids::ImageId;
+use crate::models::ids::{ImageId, ProjectId, VersionId};
 use crate::models::projects::{
-    Dependency, FileType, Loader, ProjectId, Version, VersionId, VersionStatus,
-    VersionType,
+    Dependency, FileType, Loader, Version, VersionStatus, VersionType,
 };
 use crate::models::v2::projects::LegacyVersion;
-use crate::queue::moderation::AutomatedModerationQueue;
 use crate::queue::session::AuthQueue;
 use crate::routes::v3::project_creation::CreateError;
 use crate::routes::v3::version_creation;
 use crate::routes::{v2_reroute, v3};
+use crate::search::SearchState;
+use crate::util::http::HttpClient;
 use actix_multipart::Multipart;
 use actix_web::http::header::ContentDisposition;
 use actix_web::web::Data;
-use actix_web::{post, web, HttpRequest, HttpResponse};
+use actix_web::{HttpRequest, HttpResponse, post, web};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sqlx::postgres::PgPool;
 use std::collections::HashMap;
-use std::sync::Arc;
 use validator::Validate;
 
 pub fn default_requested_status() -> VersionStatus {
@@ -36,7 +35,7 @@ pub struct InitialVersionData {
     pub file_parts: Vec<String>,
     #[validate(
         length(min = 1, max = 32),
-        regex = "crate::util::validate::RE_URL_SAFE"
+        regex(path = *crate::util::validate::RE_URL_SAFE_RELAXED)
     )]
     pub version_number: String,
     #[validate(
@@ -55,6 +54,7 @@ pub struct InitialVersionData {
     pub dependencies: Vec<Dependency>,
     #[validate(length(min = 1))]
     pub game_versions: Vec<String>,
+    pub environment: Option<String>,
     #[serde(alias = "version_type")]
     pub release_channel: VersionType,
     #[validate(length(min = 1))]
@@ -74,22 +74,36 @@ pub struct InitialVersionData {
     pub ordering: Option<i32>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-struct InitialFileData {
-    #[serde(default = "HashMap::new")]
-    pub file_types: HashMap<String, Option<FileType>>,
-}
-
 // under `/api/v1/version`
-#[post("version")]
+/// Create a version on an existing project.  
+#[utoipa::path(
+	tag = "version creation",
+    post,
+    operation_id = "createVersion",
+    request_body(
+        content(("multipart/form-data")),
+        description = "Multipart payload containing `data` and uploaded files"
+    ),
+    responses(
+        (status = 200, description = "Expected response to a valid request", body = LegacyVersion),
+        (status = 400, description = "Request was invalid, see given error"),
+        (
+            status = 401,
+            description = "Incorrect token scopes or no authorization to access the requested item(s)"
+        )
+    ),
+    security(("bearer_auth" = ["VERSION_CREATE"]))
+)]
+#[post("/version")]
 pub async fn version_create(
     req: HttpRequest,
     payload: Multipart,
     client: Data<PgPool>,
     redis: Data<RedisPool>,
-    file_host: Data<Arc<dyn FileHost + Send + Sync>>,
+    file_host: Data<dyn FileHost>,
     session_queue: Data<AuthQueue>,
-    moderation_queue: Data<AutomatedModerationQueue>,
+    http: Data<HttpClient>,
+    search_state: Data<SearchState>,
 ) -> Result<HttpResponse, CreateError> {
     let payload = v2_reroute::alter_actix_multipart(
         payload,
@@ -106,7 +120,7 @@ pub async fn version_create(
                     json!(legacy_create.game_versions),
                 );
 
-                // Get all possible side-types for loaders given- we will use these to check if we need to convert/apply singleplayer, etc.
+                // Get all possible side-types for loaders given- we will use these to check if we need to convert/apply side types
                 let loaders =
                     match v3::tags::loader_list(client.clone(), redis.clone())
                         .await
@@ -137,58 +151,41 @@ pub async fn version_create(
                     .collect::<Vec<_>>();
 
                 // Copies side types of another version of the project.
-                // If no version exists, defaults to all false.
+                // If no version exists, defaults to an unknown side type.
                 // This is inherently lossy, but not much can be done about it, as side types are no longer associated with projects,
-                // so the 'missing' ones can't be easily accessed, and versions do need to have these fields explicitly set.
-                let side_type_loader_field_names = [
-                    "singleplayer",
-                    "client_and_server",
-                    "client_only",
-                    "server_only",
-                ];
+                // so the 'missing' ones can't be easily accessed, and versions do need to have that field explicitly set.
 
-                // Check if loader_fields_aggregate contains any of these side types
+                // Check if loader_fields_aggregate contains the side types
                 // We assume these four fields are linked together.
                 if loader_fields_aggregate
                     .iter()
-                    .any(|f| side_type_loader_field_names.contains(&f.as_str()))
+                    .any(|field| field == "environment")
                 {
-                    // If so, we get the fields of the example version of the project, and set the side types to match.
-                    fields.extend(
-                        side_type_loader_field_names
-                            .iter()
-                            .map(|f| (f.to_string(), json!(false))),
-                    );
-                    if let Some(example_version_fields) =
-                        get_example_version_fields(
-                            legacy_create.project_id,
-                            client,
-                            &redis,
-                        )
-                        .await?
-                    {
-                        fields.extend(
-                            example_version_fields.into_iter().filter_map(
-                                |f| {
-                                    if side_type_loader_field_names
-                                        .contains(&f.field_name.as_str())
-                                    {
-                                        Some((
-                                            f.field_name,
-                                            f.value.serialize_internal(),
-                                        ))
-                                    } else {
-                                        None
-                                    }
-                                },
-                            ),
-                        );
-                    }
+                    let environment =
+                        if let Some(environment) = legacy_create.environment {
+                            json!(environment)
+                        } else {
+                            // If so, we get the field of an example version of the project, and set the side types to match.
+                            get_example_version_fields(
+                                legacy_create.project_id,
+                                client,
+                                &redis,
+                            )
+                            .await?
+                            .into_iter()
+                            .flatten()
+                            .find(|f| f.field_name == "environment")
+                            .map_or(json!("unknown"), |f| {
+                                f.value.serialize_internal()
+                            })
+                        };
+
+                    fields.insert("environment".into(), environment);
                 }
                 // Handle project type via file extension prediction
                 let mut project_type = None;
                 for file_part in &legacy_create.file_parts {
-                    if let Some(ext) = file_part.split('.').last() {
+                    if let Some(ext) = file_part.split('.').next_back() {
                         match ext {
                             "mrpack" | "mrpack-primary" => {
                                 project_type = Some("modpack");
@@ -264,7 +261,8 @@ pub async fn version_create(
         redis.clone(),
         file_host,
         session_queue,
-        moderation_queue,
+        http,
+        search_state,
     )
     .await?;
 
@@ -284,38 +282,63 @@ async fn get_example_version_fields(
     pool: Data<PgPool>,
     redis: &RedisPool,
 ) -> Result<Option<Vec<VersionField>>, CreateError> {
-    let project_id = match project_id {
-        Some(project_id) => project_id,
-        None => return Ok(None),
+    let Some(project_id) = project_id else {
+        return Ok(None);
     };
 
-    let vid =
-        match project_item::Project::get_id(project_id.into(), &**pool, redis)
+    let Some(vid) =
+        project_item::DBProject::get_id(project_id.into(), &**pool, redis)
             .await?
-            .and_then(|p| p.versions.first().cloned())
-        {
-            Some(vid) => vid,
-            None => return Ok(None),
-        };
+            .and_then(|p| p.versions.first().copied())
+    else {
+        return Ok(None);
+    };
 
-    let example_version =
-        match version_item::Version::get(vid, &**pool, redis).await? {
-            Some(version) => version,
-            None => return Ok(None),
-        };
+    let Some(example_version) =
+        version_item::DBVersion::get(vid, &**pool, redis).await?
+    else {
+        return Ok(None);
+    };
     Ok(Some(example_version.version_fields))
 }
 
 // under /api/v1/version/{version_id}
-#[post("{version_id}/file")]
+/// Add files to an existing version.  
+#[utoipa::path(
+	tag = "version creation",
+    post,
+    operation_id = "addFilesToVersion",
+    params(
+        ("version_id" = VersionId, Path, description = "The ID of the version")
+    ),
+    request_body(
+        content(("multipart/form-data")),
+        description = "Multipart payload containing files to upload"
+    ),
+    responses(
+        (status = NO_CONTENT, description = "Expected response to a valid request"),
+        (
+            status = 401,
+            description = "Incorrect token scopes or no authorization to access the requested item(s)"
+        ),
+        (
+            status = 404,
+            description = "The requested item(s) were not found or no authorization to access the requested item(s)"
+        )
+    ),
+    security(("bearer_auth" = ["VERSION_WRITE"]))
+)]
+#[post("/{version_id}/file")]
 pub async fn upload_file_to_version(
     req: HttpRequest,
     url_data: web::Path<(VersionId,)>,
     payload: Multipart,
     client: Data<PgPool>,
     redis: Data<RedisPool>,
-    file_host: Data<Arc<dyn FileHost + Send + Sync>>,
+    file_host: Data<dyn FileHost>,
     session_queue: web::Data<AuthQueue>,
+    http: web::Data<HttpClient>,
+    search_state: Data<SearchState>,
 ) -> Result<HttpResponse, CreateError> {
     // Returns NoContent, so no need to convert to V2
     let response = v3::version_creation::upload_file_to_version(
@@ -326,6 +349,8 @@ pub async fn upload_file_to_version(
         redis.clone(),
         file_host,
         session_queue,
+        http,
+        search_state,
     )
     .await?;
     Ok(response)

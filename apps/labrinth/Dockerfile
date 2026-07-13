@@ -1,27 +1,20 @@
-FROM rust:1.84.0 as build
-ENV PKG_CONFIG_ALLOW_CROSS=1
+# syntax=docker/dockerfile:1
 
-WORKDIR /usr/src/labrinth
-COPY . .
-RUN cargo build --release
-
-
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 LABEL org.opencontainers.image.source=https://github.com/modrinth/code
+LABEL org.opencontainers.image.title=labrinth
 LABEL org.opencontainers.image.description="Modrinth API"
-LABEL org.opencontainers.image.licenses=AGPL-3.0
+LABEL org.opencontainers.image.licenses=AGPL-3.0-only
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates openssl \
- && apt-get clean \
- && rm -rf /var/lib/apt/lists/*
+	&& apt-get install -y --no-install-recommends ca-certificates dumb-init curl \
+	&& rm -rf /var/lib/apt/lists/*
 
-RUN update-ca-certificates
+COPY labrinth /labrinth/labrinth
+COPY migrations /labrinth/migrations
+COPY assets /labrinth/assets
 
-COPY --from=build /usr/src/labrinth/target/release/labrinth /labrinth/labrinth
-COPY --from=build /usr/src/labrinth/migrations/* /labrinth/migrations/
-COPY --from=build /usr/src/labrinth/assets /labrinth/assets
 WORKDIR /labrinth
-
-CMD /labrinth/labrinth
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["/labrinth/labrinth"]

@@ -1,6 +1,7 @@
+use crate::database::PgTransaction;
+use crate::database::models::DatabaseError;
 use crate::database::models::legacy_loader_fields::MinecraftGameVersion;
 use crate::database::models::loader_fields::VersionField;
-use crate::database::models::DatabaseError;
 use crate::database::redis::RedisPool;
 use crate::models::pack::PackFormat;
 use crate::models::projects::{FileType, Loader};
@@ -17,10 +18,14 @@ use crate::validate::rift::RiftValidator;
 use crate::validate::shader::{
     CanvasShaderValidator, CoreShaderValidator, ShaderValidator,
 };
+use bytes::Bytes;
 use chrono::{DateTime, Utc};
-use std::io::Cursor;
+use std::io::{self, Cursor};
+use std::mem;
+use std::sync::LazyLock;
 use thiserror::Error;
 use zip::ZipArchive;
+use zip::result::ZipError;
 
 mod datapack;
 mod fabric;
@@ -77,18 +82,46 @@ pub enum SupportedGameVersions {
     All,
     PastDate(DateTime<Utc>),
     Range(DateTime<Utc>, DateTime<Utc>),
-    #[allow(dead_code)]
     Custom(Vec<MinecraftGameVersion>),
+}
+
+pub enum MaybeProtectedZipFile {
+    Unprotected(ZipArchive<Cursor<Bytes>>),
+    MaybeProtected { read_error: ZipError, data: Bytes },
 }
 
 pub trait Validator: Sync {
     fn get_file_extensions(&self) -> &[&str];
     fn get_supported_loaders(&self) -> &[&str];
     fn get_supported_game_versions(&self) -> SupportedGameVersions;
+
     fn validate(
         &self,
         archive: &mut ZipArchive<Cursor<bytes::Bytes>>,
-    ) -> Result<ValidationResult, ValidationError>;
+    ) -> Result<ValidationResult, ValidationError> {
+        // By default, any non-protected ZIP archive is valid
+        let _ = archive;
+        Ok(ValidationResult::Pass)
+    }
+
+    fn validate_maybe_protected_zip(
+        &self,
+        file: &mut MaybeProtectedZipFile,
+    ) -> Result<ValidationResult, ValidationError> {
+        // By default, validate that the ZIP file is not protected, and if so,
+        // delegate to the inner validate method with a known good archive
+        match file {
+            MaybeProtectedZipFile::Unprotected(archive) => {
+                self.validate(archive)
+            }
+            MaybeProtectedZipFile::MaybeProtected { read_error, .. } => {
+                Err(ValidationError::Zip(mem::replace(
+                    read_error,
+                    ZipError::Io(io::Error::other("ZIP archive reading error")),
+                )))
+            }
+        }
+    }
 }
 
 static ALWAYS_ALLOWED_EXT: &[&str] = &["zip", "txt"];
@@ -114,6 +147,29 @@ static VALIDATORS: &[&dyn Validator] = &[
     &NeoForgeValidator,
 ];
 
+/// A regex that matches a potentially protected ZIP archive containing
+/// a vanilla Minecraft pack, with a requisite `pack.mcmeta` file.
+///
+/// Please note that this regex avoids false negatives at the cost of false
+/// positives being possible, i.e. it may match files that are not actually
+/// Minecraft packs, but it will not miss packs that the game can load.
+static PLAUSIBLE_PACK_REGEX: LazyLock<regex::bytes::Regex> =
+    LazyLock::new(|| {
+        regex::bytes::RegexBuilder::new(concat!(
+            r"\x50\x4b\x01\x02", // CEN signature
+            r".{24}",            // CEN fields
+            r"[\x0B\x0C]\x00",   // CEN file name length
+            r".{16}",            // More CEN fields
+            r"pack\.mcmeta/?",   // CEN file name
+            r".*",               // Rest of CEN entries and records
+            r"\x50\x4b\x05\x06", // EOCD signature
+        ))
+        .unicode(false)
+        .dot_matches_new_line(true)
+        .build()
+        .unwrap()
+    });
+
 /// The return value is whether this file should be marked as primary or not, based on the analysis of the file
 #[allow(clippy::too_many_arguments)]
 pub async fn validate_file(
@@ -122,7 +178,7 @@ pub async fn validate_file(
     loaders: Vec<Loader>,
     file_type: Option<FileType>,
     version_fields: Vec<VersionField>,
-    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    transaction: &mut PgTransaction<'_>,
     redis: &RedisPool,
 ) -> Result<ValidationResult, ValidationError> {
     let game_versions = version_fields
@@ -145,7 +201,7 @@ pub async fn validate_file(
 }
 
 async fn validate_minecraft_file(
-    data: bytes::Bytes,
+    data: Bytes,
     file_extension: String,
     loaders: Vec<Loader>,
     game_versions: Vec<MinecraftGameVersion>,
@@ -153,14 +209,31 @@ async fn validate_minecraft_file(
     file_type: Option<FileType>,
 ) -> Result<ValidationResult, ValidationError> {
     actix_web::web::block(move || {
-        let reader = Cursor::new(data);
-        let mut zip = ZipArchive::new(reader)?;
+        let mut zip = match ZipArchive::new(Cursor::new(Bytes::clone(&data))) {
+            Ok(zip) => MaybeProtectedZipFile::Unprotected(zip),
+            Err(read_error) => MaybeProtectedZipFile::MaybeProtected {
+                read_error,
+                data,
+            },
+        };
 
         if let Some(file_type) = file_type {
             match file_type {
                 FileType::RequiredResourcePack | FileType::OptionalResourcePack => {
-                    return PackValidator.validate(&mut zip);
+                    return PackValidator.validate_maybe_protected_zip(&mut zip);
                 }
+                FileType::Signature => {
+                    // Not sure if we have a better way to detect if a file is a signature
+                    // should look into this?
+                    return if ["asc", "gpg", "sig"].contains(&file_extension.as_str()) {
+                        Ok(ValidationResult::Pass)
+                    } else {
+                        Err(ValidationError::InvalidInput(
+                            format!("File extension {file_extension} is invalid for input file").into(),
+                        ))
+                    };
+                }
+                FileType::DevJar | FileType::SourcesJar | FileType::JavadocJar => {},
                 FileType::Unknown => {}
             }
         }
@@ -178,7 +251,7 @@ async fn validate_minecraft_file(
                 )
             {
                 if validator.get_file_extensions().contains(&&*file_extension) {
-                    let result = validator.validate(&mut zip)?;
+                    let result = validator.validate_maybe_protected_zip(&mut zip)?;
                     match result {
                         ValidationResult::PassWithPackDataAndFiles { .. } => {
                             saved_result = Some(result);
@@ -232,8 +305,7 @@ fn game_version_supported(
                 all_game_versions
                     .iter()
                     .find(|y| y.version == x.version)
-                    .map(|x| x.created > date)
-                    .unwrap_or(false)
+                    .is_some_and(|x| x.created > date)
             })
         }
         SupportedGameVersions::Range(before, after) => {
@@ -241,8 +313,7 @@ fn game_version_supported(
                 all_game_versions
                     .iter()
                     .find(|y| y.version == x.version)
-                    .map(|x| x.created > before && x.created < after)
-                    .unwrap_or(false)
+                    .is_some_and(|x| x.created > before && x.created < after)
             })
         }
         SupportedGameVersions::Custom(versions) => {
@@ -255,9 +326,10 @@ fn game_version_supported(
     }
 }
 
-pub fn filter_out_packs(
-    archive: &mut ZipArchive<Cursor<bytes::Bytes>>,
-) -> Result<ValidationResult, ValidationError> {
+#[must_use]
+pub fn validate_pack_formats(
+    archive: &mut ZipArchive<Cursor<Bytes>>,
+) -> ValidationResult {
     if (archive.by_name("modlist.html").is_ok()
         && archive.by_name("manifest.json").is_ok())
         || archive
@@ -267,10 +339,10 @@ pub fn filter_out_packs(
             .file_names()
             .any(|x| x.starts_with("override/mods/") && x.ends_with(".jar"))
     {
-        return Ok(ValidationResult::Warning(
-            "Invalid modpack file. You must upload a valid .MRPACK file.",
-        ));
+        return ValidationResult::Warning(
+            "Invalid modpack file. Modpacks must be uploaded in the .mrpack format, not as a ZIP file.",
+        );
     }
 
-    Ok(ValidationResult::Pass)
+    ValidationResult::Pass
 }

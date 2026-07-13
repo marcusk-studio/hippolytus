@@ -1,27 +1,24 @@
-use std::sync::Arc;
-
 use super::threads::is_authorized_thread;
 use crate::auth::checks::{is_team_member_project, is_team_member_version};
 use crate::auth::get_user_from_headers;
 use crate::database;
+use crate::database::PgPool;
 use crate::database::models::{
     project_item, report_item, thread_item, version_item,
 };
 use crate::database::redis::RedisPool;
-use crate::file_hosting::FileHost;
-use crate::models::ids::{ThreadMessageId, VersionId};
+use crate::file_hosting::{FileHost, FileHostPublicity};
+use crate::models::ids::{ReportId, ThreadMessageId, VersionId};
 use crate::models::images::{Image, ImageContext};
-use crate::models::reports::ReportId;
 use crate::queue::session::AuthQueue;
 use crate::routes::ApiError;
 use crate::util::img::upload_image_optimized;
-use crate::util::routes::read_from_payload;
-use actix_web::{web, HttpRequest, HttpResponse};
+use crate::util::routes::read_limited_from_payload;
+use actix_web::{HttpRequest, HttpResponse, post, web};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 
-pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg.route("image", web::post().to(images_add));
+pub fn config(cfg: &mut actix_web::web::ServiceConfig) {
+    cfg.service(images_add);
 }
 
 #[derive(Serialize, Deserialize)]
@@ -39,10 +36,24 @@ pub struct ImageUpload {
     pub report_id: Option<ReportId>,
 }
 
+#[utoipa::path(
+	tag = "images",
+	params(
+		("ext" = String, Query),
+		("context" = String, Query),
+		("project_id" = Option<String>, Query),
+		("version_id" = Option<VersionId>, Query),
+		("thread_message_id" = Option<ThreadMessageId>, Query),
+		("report_id" = Option<ReportId>, Query)
+	),
+	request_body(content = Vec<u8>, content_type = "application/octet-stream"),
+	responses((status = OK))
+)]
+#[post("/image")]
 pub async fn images_add(
     req: HttpRequest,
     web::Query(data): web::Query<ImageUpload>,
-    file_host: web::Data<Arc<dyn FileHost + Send + Sync>>,
+    file_host: web::Data<dyn FileHost>,
     mut payload: web::Payload,
     pool: web::Data<PgPool>,
     redis: web::Data<RedisPool>,
@@ -50,14 +61,12 @@ pub async fn images_add(
 ) -> Result<HttpResponse, ApiError> {
     let mut context = ImageContext::from_str(&data.context, None);
 
-    let scopes = vec![context.relevant_scope()];
-
     let user = get_user_from_headers(
         &req,
         &**pool,
         &redis,
         &session_queue,
-        Some(&scopes),
+        context.relevant_scope(),
     )
     .await?
     .1;
@@ -68,7 +77,7 @@ pub async fn images_add(
         ImageContext::Project { project_id } => {
             if let Some(id) = data.project_id {
                 let project =
-                    project_item::Project::get(&id, &**pool, &redis).await?;
+                    project_item::DBProject::get(&id, &**pool, &redis).await?;
                 if let Some(project) = project {
                     if is_team_member_project(
                         &project.inner,
@@ -93,7 +102,7 @@ pub async fn images_add(
         ImageContext::Version { version_id } => {
             if let Some(id) = data.version_id {
                 let version =
-                    version_item::Version::get(id.into(), &**pool, &redis)
+                    version_item::DBVersion::get(id.into(), &**pool, &redis)
                         .await?;
                 if let Some(version) = version {
                     if is_team_member_version(
@@ -120,7 +129,7 @@ pub async fn images_add(
         ImageContext::ThreadMessage { thread_message_id } => {
             if let Some(id) = data.thread_message_id {
                 let thread_message =
-                    thread_item::ThreadMessage::get(id.into(), &**pool)
+                    thread_item::DBThreadMessage::get(id.into(), &**pool)
                         .await?
                         .ok_or_else(|| {
                             ApiError::InvalidInput(
@@ -128,7 +137,7 @@ pub async fn images_add(
                                     .to_string(),
                             )
                         })?;
-                let thread = thread_item::Thread::get(thread_message.thread_id, &**pool)
+                let thread = thread_item::DBThread::get(thread_message.thread_id, &**pool)
                     .await?
                     .ok_or_else(|| {
                         ApiError::InvalidInput(
@@ -148,14 +157,14 @@ pub async fn images_add(
         }
         ImageContext::Report { report_id } => {
             if let Some(id) = data.report_id {
-                let report = report_item::Report::get(id.into(), &**pool)
+                let report = report_item::DBReport::get(id.into(), &**pool)
                     .await?
                     .ok_or_else(|| {
                         ApiError::InvalidInput(
                             "The report could not be found.".to_string(),
                         )
                     })?;
-                let thread = thread_item::Thread::get(report.thread_id, &**pool)
+                let thread = thread_item::DBThread::get(report.thread_id, &**pool)
                     .await?
                     .ok_or_else(|| {
                         ApiError::InvalidInput(
@@ -179,7 +188,7 @@ pub async fn images_add(
     }
 
     // Upload the image to the file host
-    let bytes = read_from_payload(
+    let bytes = read_limited_from_payload(
         &mut payload,
         1_048_576,
         "Icons must be smaller than 1MiB",
@@ -189,29 +198,30 @@ pub async fn images_add(
     let content_length = bytes.len();
     let upload_result = upload_image_optimized(
         "data/cached_images",
+        FileHostPublicity::Public, // FIXME: Maybe use private images for threads
         bytes.freeze(),
         &data.ext,
         None,
         None,
-        &***file_host,
+        &**file_host,
     )
     .await?;
 
     let mut transaction = pool.begin().await?;
 
-    let db_image: database::models::Image = database::models::Image {
+    let db_image: database::models::DBImage = database::models::DBImage {
         id: database::models::generate_image_id(&mut transaction).await?,
         url: upload_result.url,
         raw_url: upload_result.raw_url,
         size: content_length as u64,
         created: chrono::Utc::now(),
-        owner_id: database::models::UserId::from(user.id),
+        owner_id: database::models::DBUserId::from(user.id),
         context: context.context_as_str().to_string(),
         project_id: if let ImageContext::Project {
             project_id: Some(id),
         } = context
         {
-            Some(crate::database::models::ProjectId::from(id))
+            Some(crate::database::models::DBProjectId::from(id))
         } else {
             None
         },
@@ -219,7 +229,7 @@ pub async fn images_add(
             version_id: Some(id),
         } = context
         {
-            Some(database::models::VersionId::from(id))
+            Some(database::models::DBVersionId::from(id))
         } else {
             None
         },
@@ -227,7 +237,7 @@ pub async fn images_add(
             thread_message_id: Some(id),
         } = context
         {
-            Some(database::models::ThreadMessageId::from(id))
+            Some(database::models::DBThreadMessageId::from(id))
         } else {
             None
         },
@@ -235,7 +245,7 @@ pub async fn images_add(
             report_id: Some(id),
         } = context
         {
-            Some(database::models::ReportId::from(id))
+            Some(database::models::DBReportId::from(id))
         } else {
             None
         },

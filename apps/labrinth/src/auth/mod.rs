@@ -1,28 +1,28 @@
 pub mod checks;
-pub mod email;
 pub mod oauth;
 pub mod templates;
 pub mod validate;
-pub use crate::auth::email::send_email;
 pub use checks::{
     filter_enlisted_projects_ids, filter_enlisted_version_ids,
     filter_visible_collections, filter_visible_project_ids,
     filter_visible_projects,
 };
 use serde::{Deserialize, Serialize};
-// pub use pat::{generate_pat, PersonalAccessToken};
-pub use validate::{check_is_moderator_from_headers, get_user_from_headers};
+pub use validate::{
+    check_is_moderator_from_headers, get_user_from_bearer_token,
+    get_user_from_headers,
+};
 
 use crate::file_hosting::FileHostingError;
 use crate::models::error::ApiError;
-use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
+use actix_web::http::StatusCode;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum AuthenticationError {
-    #[error("Environment Error")]
-    Env(#[from] dotenvy::Error),
+    #[error(transparent)]
+    Internal(#[from] eyre::Report),
     #[error("An unknown database error occurred: {0}")]
     Sqlx(#[from] sqlx::Error),
     #[error("Database Error: {0}")]
@@ -34,17 +34,25 @@ pub enum AuthenticationError {
     #[error("Error uploading user profile picture")]
     FileHosting(#[from] FileHostingError),
     #[error("Error while decoding PAT: {0}")]
-    Decoding(#[from] crate::models::ids::DecodingError),
+    Decoding(#[from] ariadne::ids::DecodingError),
     #[error("{0}")]
-    Mail(#[from] email::MailError),
+    Mail(#[from] crate::queue::email::MailError),
     #[error("Invalid Authentication Credentials")]
     InvalidCredentials,
     #[error("Authentication method was not valid")]
     InvalidAuthMethod,
     #[error("GitHub Token from incorrect Client ID")]
     InvalidClientId,
-    #[error("User email/account is already registered on Modrinth")]
-    DuplicateUser,
+    #[error(
+        "User email is already registered on Modrinth. Try 'Forgot password' to access your account."
+    )]
+    DuplicateEmail,
+    #[error("Username is already taken on Modrinth.")]
+    UsernameTaken,
+    #[error(
+        "This authentication provider is already linked to another Modrinth account."
+    )]
+    ProviderAlreadyLinked,
     #[error("Invalid state sent, you probably need to get a new websocket")]
     SocketError,
     #[error("Invalid callback URL specified")]
@@ -54,7 +62,9 @@ pub enum AuthenticationError {
 impl actix_web::ResponseError for AuthenticationError {
     fn status_code(&self) -> StatusCode {
         match self {
-            AuthenticationError::Env(..) => StatusCode::INTERNAL_SERVER_ERROR,
+            AuthenticationError::Internal(..) => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
             AuthenticationError::Sqlx(..) => StatusCode::INTERNAL_SERVER_ERROR,
             AuthenticationError::Database(..) => {
                 StatusCode::INTERNAL_SERVER_ERROR
@@ -72,7 +82,11 @@ impl actix_web::ResponseError for AuthenticationError {
             AuthenticationError::FileHosting(..) => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
-            AuthenticationError::DuplicateUser => StatusCode::BAD_REQUEST,
+            AuthenticationError::DuplicateEmail => StatusCode::BAD_REQUEST,
+            AuthenticationError::UsernameTaken => StatusCode::BAD_REQUEST,
+            AuthenticationError::ProviderAlreadyLinked => {
+                StatusCode::BAD_REQUEST
+            }
             AuthenticationError::SocketError => StatusCode::BAD_REQUEST,
         }
     }
@@ -81,6 +95,7 @@ impl actix_web::ResponseError for AuthenticationError {
         HttpResponse::build(self.status_code()).json(ApiError {
             error: self.error_name(),
             description: self.to_string(),
+            details: None,
         })
     }
 }
@@ -88,7 +103,7 @@ impl actix_web::ResponseError for AuthenticationError {
 impl AuthenticationError {
     pub fn error_name(&self) -> &'static str {
         match self {
-            AuthenticationError::Env(..) => "environment_error",
+            AuthenticationError::Internal(..) => "internal_error",
             AuthenticationError::Sqlx(..) => "database_error",
             AuthenticationError::Database(..) => "database_error",
             AuthenticationError::SerDe(..) => "invalid_input",
@@ -100,14 +115,26 @@ impl AuthenticationError {
             AuthenticationError::InvalidClientId => "invalid_client_id",
             AuthenticationError::Url => "url_error",
             AuthenticationError::FileHosting(..) => "file_hosting",
-            AuthenticationError::DuplicateUser => "duplicate_user",
+            AuthenticationError::DuplicateEmail => "duplicate_email",
+            AuthenticationError::UsernameTaken => "username_taken",
+            AuthenticationError::ProviderAlreadyLinked => {
+                "provider_already_linked"
+            }
             AuthenticationError::SocketError => "socket",
         }
     }
 }
 
 #[derive(
-    Serialize, Deserialize, Default, Eq, PartialEq, Clone, Copy, Debug,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    utoipa::ToSchema,
 )]
 #[serde(rename_all = "lowercase")]
 pub enum AuthProvider {

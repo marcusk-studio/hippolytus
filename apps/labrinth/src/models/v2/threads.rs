@@ -2,11 +2,12 @@ use crate::models::ids::{
     ImageId, ProjectId, ReportId, ThreadId, ThreadMessageId,
 };
 use crate::models::projects::ProjectStatus;
-use crate::models::users::{User, UserId};
+use crate::models::users::User;
+use ariadne::ids::UserId;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
 pub struct LegacyThread {
     pub id: ThreadId,
     #[serde(rename = "type")]
@@ -17,7 +18,7 @@ pub struct LegacyThread {
     pub members: Vec<User>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
 pub struct LegacyThreadMessage {
     pub id: ThreadMessageId,
     pub author_id: Option<UserId>,
@@ -25,7 +26,7 @@ pub struct LegacyThreadMessage {
     pub created: DateTime<Utc>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum LegacyMessageBody {
     Text {
@@ -48,7 +49,9 @@ pub enum LegacyMessageBody {
     },
 }
 
-#[derive(Serialize, Deserialize, Eq, PartialEq, Copy, Clone)]
+#[derive(
+    Serialize, Deserialize, Eq, PartialEq, Copy, Clone, utoipa::ToSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum LegacyThreadType {
     Report,
@@ -93,6 +96,32 @@ impl From<crate::models::v3::threads::MessageBody> for LegacyMessageBody {
                 new_status,
                 old_status,
             },
+            crate::models::v3::threads::MessageBody::TechReview { verdict } => {
+                LegacyMessageBody::Text {
+                    body: format!(
+                        "(legacy) Reviewed technical report and gave verdict {verdict:?}"
+                    ),
+                    private: true,
+                    replying_to: None,
+                    associated_images: Vec::new(),
+                }
+            }
+            crate::models::v3::threads::MessageBody::TechReviewEntered => {
+                LegacyMessageBody::Text {
+                    body: "(legacy) Entered technical review".into(),
+                    private: true,
+                    replying_to: None,
+                    associated_images: Vec::new(),
+                }
+            }
+            crate::models::v3::threads::MessageBody::TechReviewExitFileDeleted => {
+                LegacyMessageBody::Text {
+                    body: "(legacy) Exited technical review because file was deleted".into(),
+                    private: true,
+                    replying_to: None,
+                    associated_images: Vec::new(),
+                }
+            }
             crate::models::v3::threads::MessageBody::ThreadClosure => {
                 LegacyMessageBody::ThreadClosure
             }

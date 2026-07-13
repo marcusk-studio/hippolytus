@@ -1,13 +1,8 @@
-use super::ids::Base62Id;
-use crate::database::models::report_item::QueryReport as DBReport;
-use crate::models::ids::{ProjectId, ThreadId, UserId, VersionId};
+use crate::database::models::report_item::ReportQueryResult as DBReport;
+use crate::models::ids::{ProjectId, ReportId, ThreadId, VersionId};
+use ariadne::ids::UserId;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-
-#[derive(Copy, Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
-#[serde(from = "Base62Id")]
-#[serde(into = "Base62Id")]
-pub struct ReportId(pub u64);
 
 #[derive(Serialize, Deserialize)]
 pub struct Report {
@@ -22,7 +17,7 @@ pub struct Report {
     pub thread_id: ThreadId,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, utoipa::ToSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum ItemType {
     Project,

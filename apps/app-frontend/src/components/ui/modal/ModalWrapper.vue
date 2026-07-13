@@ -1,70 +1,56 @@
+<!-- @deprecated Use NewModal from @modrinth/ui directly. Ads/noblur now handled by injectModalBehavior. -->
 <script setup lang="ts">
-import { ref } from 'vue'
 import { NewModal as Modal } from '@modrinth/ui'
-import { show_ads_window, hide_ads_window } from '@/helpers/ads.js'
-import { useTheming } from '@/store/theme.js'
-
-const themeStore = useTheming()
+import { useTemplateRef } from 'vue'
 
 const props = defineProps({
-  header: {
-    type: String,
-    default: null,
-  },
-  closable: {
-    type: Boolean,
-    default: true,
-  },
-  onHide: {
-    type: Function,
-    default() {
-      return () => {}
-    },
-  },
-  showAdOnClose: {
-    type: Boolean,
-    default: true,
-  },
-  class: {
-    type: [String, Array, Object],
-    default: '',
-  },
+	header: {
+		type: String,
+		default: null,
+	},
+	hideHeader: {
+		type: Boolean,
+		default: false,
+	},
+	closable: {
+		type: Boolean,
+		default: true,
+	},
+	onHide: {
+		type: Function,
+		default() {
+			return () => {}
+		},
+	},
+	/** @deprecated No longer used — ads are handled by provideModalBehavior */
+	showAdOnClose: {
+		type: Boolean,
+		default: true,
+	},
 })
-const modal = ref<InstanceType<typeof Modal> | null>(null)
+const modal = useTemplateRef('modal')
 
 defineExpose({
-  show: () => {
-    hide_ads_window()
-    modal.value?.show()
-  },
-  hide: () => {
-    onModalHide()
-    modal.value?.hide()
-  },
+	show: (e?: MouseEvent) => {
+		modal.value?.show(e)
+	},
+	hide: () => {
+		modal.value?.hide()
+	},
 })
-
-function onModalHide() {
-  if (props.showAdOnClose) {
-    show_ads_window()
-  }
-  props.onHide()
-}
 </script>
 
 <template>
-  <Teleport to="body">
-    <Modal
-      ref="modal"
-      :header="header"
-      :noblur="!themeStore.advancedRendering"
-      :class="['modal-wrapper', props.class]"
-      v-bind="$attrs"
-      @hide="onModalHide"
-    >
-      <template #title>
-        <slot name="title" />
-      </template>
-      <slot />
-    </Modal>
-  </Teleport>
+	<Modal
+		ref="modal"
+		:header="header"
+		:closable="closable"
+		:hide-header="hideHeader"
+		:on-hide="() => props.onHide?.()"
+	>
+		<template #title>
+			<slot name="title" />
+		</template>
+		<slot />
+	</Modal>
 </template>

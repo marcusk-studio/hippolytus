@@ -1,3 +1,4 @@
+use crate::database::PgPool;
 use crate::database::models::version_item;
 use crate::database::redis::RedisPool;
 use crate::file_hosting::FileHost;
@@ -11,15 +12,15 @@ use crate::queue::session::AuthQueue;
 use crate::routes::v3::project_creation::default_project_type;
 use crate::routes::v3::project_creation::{CreateError, NewGalleryItem};
 use crate::routes::{v2_reroute, v3};
+use crate::search::SearchState;
+use crate::util::http::HttpClient;
 use actix_multipart::Multipart;
 use actix_web::web::Data;
-use actix_web::{post, HttpRequest, HttpResponse};
+use actix_web::{HttpRequest, HttpResponse, post};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sqlx::postgres::PgPool;
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use validator::Validate;
 
 use super::version_creation::InitialVersionData;
@@ -47,7 +48,7 @@ struct ProjectCreateData {
     pub project_type: String,
     #[validate(
         length(min = 3, max = 64),
-        regex = "crate::util::validate::RE_URL_SAFE"
+        regex(path = *crate::util::validate::RE_URL_SAFE)
     )]
     #[serde(alias = "mod_slug")]
     /// The slug of a project, used for vanity URLs
@@ -66,8 +67,7 @@ struct ProjectCreateData {
     /// The support range for the server project
     pub server_side: LegacySideType,
 
-    #[validate(length(max = 32))]
-    #[validate]
+    #[validate(nested, length(max = 32))]
     /// A list of initial versions to upload with the created project
     pub initial_versions: Vec<InitialVersionData>,
     #[validate(length(max = 3))]
@@ -109,7 +109,7 @@ struct ProjectCreateData {
     /// An optional link to the project's discord.
     pub discord_url: Option<String>,
     /// An optional list of all donation links the project has\
-    #[validate]
+    #[validate(nested)]
     pub donation_urls: Option<Vec<DonationLink>>,
 
     /// An optional boolean. If true, the project will be created as a draft.
@@ -118,8 +118,7 @@ struct ProjectCreateData {
     /// The license id that the project follows
     pub license_id: String,
 
-    #[validate(length(max = 64))]
-    #[validate]
+    #[validate(nested, length(max = 64))]
     /// The multipart names of the gallery items to upload
     pub gallery_items: Option<Vec<NewGalleryItem>>,
     #[serde(default = "default_requested_status")]
@@ -135,14 +134,35 @@ struct ProjectCreateData {
     pub organization_id: Option<models::ids::OrganizationId>,
 }
 
-#[post("project")]
+/// Create a new project with initial versions.  
+#[utoipa::path(
+	tag = "project creation",
+    post,
+    operation_id = "createProject",
+    request_body(
+        content(("multipart/form-data")),
+        description = "Multipart payload containing `data` and uploaded files"
+    ),
+    responses(
+        (status = 200, description = "Expected response to a valid request", body = LegacyProject),
+        (status = 400, description = "Request was invalid, see given error"),
+        (
+            status = 401,
+            description = "Incorrect token scopes or no authorization to access the requested item(s)"
+        )
+    ),
+    security(("bearer_auth" = ["PROJECT_CREATE"]))
+)]
+#[post("/project")]
 pub async fn project_create(
     req: HttpRequest,
     payload: Multipart,
     client: Data<PgPool>,
     redis: Data<RedisPool>,
-    file_host: Data<Arc<dyn FileHost + Send + Sync>>,
+    file_host: Data<dyn FileHost>,
     session_queue: Data<AuthQueue>,
+    http: Data<HttpClient>,
+    search_state: Data<SearchState>,
 ) -> Result<HttpResponse, CreateError> {
     // Convert V2 multipart payload to V3 multipart payload
     let payload = v2_reroute::alter_actix_multipart(
@@ -160,10 +180,18 @@ pub async fn project_create(
                 .into_iter()
                 .map(|v| {
                     let mut fields = HashMap::new();
-                    fields.extend(v2_reroute::convert_side_types_v3(
-                        client_side,
-                        server_side,
-                    ));
+                    fields.extend(
+                        v2_reroute::convert_v2_side_types_to_v3_side_types(
+                            client_side,
+                            server_side,
+                        ),
+                    );
+                    if let Some(environment) = v.environment {
+                        fields.insert(
+                            "environment".to_string(),
+                            json!(environment),
+                        );
+                    }
                     fields.insert(
                         "game_versions".to_string(),
                         json!(v.game_versions),
@@ -245,13 +273,15 @@ pub async fn project_create(
     .await?;
 
     // Call V3 project creation
-    let response = v3::project_creation::project_create(
+    let response = v3::project_creation::project_create_internal(
         req,
         payload,
         client.clone(),
         redis.clone(),
         file_host,
         session_queue,
+        http,
+        search_state,
     )
     .await?;
 
@@ -260,8 +290,12 @@ pub async fn project_create(
         Ok(project) => {
             let version_item = match project.versions.first() {
                 Some(vid) => {
-                    version_item::Version::get((*vid).into(), &**client, &redis)
-                        .await?
+                    version_item::DBVersion::get(
+                        (*vid).into(),
+                        &**client,
+                        &redis,
+                    )
+                    .await?
                 }
                 None => None,
             };

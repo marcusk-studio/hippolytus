@@ -1,25 +1,64 @@
 <script setup>
-import { XIcon, PlusIcon } from '@modrinth/assets'
-import { Button, Checkbox } from '@modrinth/ui'
-import { PackageIcon, VersionIcon } from '@/assets/icons'
+import { XIcon } from '@modrinth/assets'
+import {
+	ButtonStyled,
+	commonMessages,
+	defineMessages,
+	FileTreeSelect,
+	injectNotificationManager,
+	NewModal,
+	StyledInput,
+	useVIntl,
+} from '@modrinth/ui'
+import { save } from '@tauri-apps/plugin-dialog'
+import { readDir, stat } from '@tauri-apps/plugin-fs'
 import { ref } from 'vue'
-import { export_profile_mrpack, get_pack_export_candidates } from '@/helpers/profile.js'
-import { open } from '@tauri-apps/plugin-dialog'
-import { handleError } from '@/store/notifications.js'
-import ModalWrapper from '@/components/ui/modal/ModalWrapper.vue'
+
+import { PackageIcon } from '@/assets/icons'
+import {
+	export_instance_mrpack,
+	get_full_path,
+	get_pack_export_candidates,
+} from '@/helpers/instance'
+
+const { handleError } = injectNotificationManager()
+const { formatMessage } = useVIntl()
+
+const messages = defineMessages({
+	header: { id: 'app.export-modal.header', defaultMessage: 'Export modpack' },
+	modpackNameLabel: { id: 'app.export-modal.modpack-name-label', defaultMessage: 'Modpack name' },
+	modpackNamePlaceholder: {
+		id: 'app.export-modal.modpack-name-placeholder',
+		defaultMessage: 'Modpack name',
+	},
+	versionNumberLabel: {
+		id: 'app.export-modal.version-number-label',
+		defaultMessage: 'Version number',
+	},
+	versionNumberPlaceholder: {
+		id: 'app.export-modal.version-number-placeholder',
+		defaultMessage: '1.0.0',
+	},
+	descriptionPlaceholder: {
+		id: 'app.export-modal.description-placeholder',
+		defaultMessage: 'Enter modpack description...',
+	},
+	exportButton: { id: 'app.export-modal.export-button', defaultMessage: 'Export' },
+})
 
 const props = defineProps({
-  instance: {
-    type: Object,
-    required: true,
-  },
+	instance: {
+		type: Object,
+		required: true,
+	},
 })
 
 defineExpose({
-  show: () => {
-    exportModal.value.show()
-    initFiles()
-  },
+	show: () => {
+		resetExportState()
+		exportModal.value.show()
+		void initFiles().catch(handleError)
+	},
 })
 
 const exportModal = ref(null)
@@ -27,277 +66,239 @@ const nameInput = ref(props.instance.name)
 const exportDescription = ref('')
 const versionInput = ref('1.0.0')
 const files = ref([])
-const folders = ref([])
-const showingFiles = ref(false)
+const selectedFilePaths = ref([])
+const fileTreeKey = ref(0)
+const filesLoadId = ref(0)
+const instanceRoot = ref('')
+const loadedDirectories = ref(new Set())
 
-const initFiles = async () => {
-  const newFolders = new Map()
-  const sep = '/'
-  files.value = []
-  await get_pack_export_candidates(props.instance.path).then((filePaths) =>
-    filePaths
-      .map((folder) => ({
-        path: folder,
-        name: folder.split(sep).pop(),
-        selected:
-          folder.startsWith('mods') ||
-          folder.startsWith('datapacks') ||
-          folder.startsWith('resourcepacks') ||
-          folder.startsWith('shaderpacks') ||
-          folder.startsWith('config'),
-        disabled:
-          folder === 'profile.json' ||
-          folder.startsWith('modrinth_logs') ||
-          folder.startsWith('.fabric'),
-      }))
-      .filter((pathData) => !pathData.path.includes('.DS_Store'))
-      .forEach((pathData) => {
-        const parent = pathData.path.split(sep).slice(0, -1).join(sep)
-        if (parent !== '') {
-          if (newFolders.has(parent)) {
-            newFolders.get(parent).push(pathData)
-          } else {
-            newFolders.set(parent, [pathData])
-          }
-        } else {
-          files.value.push(pathData)
-        }
-      }),
-  )
-  folders.value = [...newFolders.entries()].map(([name, value]) => [
-    {
-      name,
-      showingMore: false,
-    },
-    value,
-  ])
+async function initFiles() {
+	const loadId = ++filesLoadId.value
+	const [filePaths, root] = await Promise.all([
+		get_pack_export_candidates(props.instance.id),
+		get_full_path(props.instance.id),
+	])
+	if (loadId !== filesLoadId.value) return
+
+	instanceRoot.value = root
+	const exportCandidates = await Promise.all(
+		filePaths.map((path) => buildExportCandidateItem(root, path)),
+	)
+	if (loadId !== filesLoadId.value) return
+
+	files.value = exportCandidates
+	selectedFilePaths.value = files.value
+		.filter((file) => !file.disabled && isDefaultSelectedExportCandidate(file.path))
+		.map((file) => file.path)
 }
 
-await initFiles()
-
 const exportPack = async () => {
-  const filesToExport = files.value.filter((file) => file.selected).map((file) => file.path)
-  folders.value.forEach((args) => {
-    args[1].forEach((child) => {
-      if (child.selected) {
-        filesToExport.push(child.path)
-      }
-    })
-  })
-  const outputPath = await open({
-    directory: true,
-    multiple: false,
-  })
+	const outputPath = await save({
+		defaultPath: `${nameInput.value} ${versionInput.value}.mrpack`,
+		filters: [
+			{
+				name: 'Modrinth Modpack',
+				extensions: ['mrpack'],
+			},
+		],
+	})
 
-  if (outputPath) {
-    export_profile_mrpack(
-      props.instance.path,
-      outputPath + `/${nameInput.value} ${versionInput.value}.mrpack`,
-      filesToExport,
-      versionInput.value,
-      exportDescription.value,
-      nameInput.value,
-    ).catch((err) => handleError(err))
-    exportModal.value.hide()
-  }
+	if (outputPath) {
+		export_instance_mrpack(
+			props.instance.id,
+			outputPath,
+			selectedFilePaths.value,
+			versionInput.value,
+			exportDescription.value,
+			nameInput.value,
+		).catch((err) => handleError(err))
+		exportModal.value.hide()
+	}
+}
+
+function resetExportState() {
+	nameInput.value = props.instance.name
+	exportDescription.value = ''
+	versionInput.value = '1.0.0'
+	files.value = []
+	selectedFilePaths.value = []
+	fileTreeKey.value += 1
+	instanceRoot.value = ''
+	loadedDirectories.value = new Set()
+}
+
+async function loadExportDirectory(path) {
+	if (!path || !instanceRoot.value || loadedDirectories.value.has(path)) return
+
+	const loadId = filesLoadId.value
+	loadedDirectories.value.add(path)
+
+	try {
+		const entries = await readDir(`${instanceRoot.value}/${path}`)
+		const childItems = await Promise.all(
+			entries.map((entry) => buildExportDirectoryChildItem(instanceRoot.value, path, entry)),
+		)
+		if (loadId !== filesLoadId.value) return
+
+		appendExportItems(childItems)
+	} catch {
+		loadedDirectories.value.delete(path)
+	}
+}
+
+async function buildExportCandidateItem(instanceRoot, path) {
+	try {
+		const entries = await readDir(`${instanceRoot}/${path}`)
+		const metadata = await getExportCandidateMetadata(instanceRoot, path)
+		return {
+			path,
+			type: 'directory',
+			disabled: isExportCandidateDisabled(path),
+			modified: metadata.modified,
+			count: entries.length,
+		}
+	} catch {
+		return buildExportFileItem(instanceRoot, path)
+	}
+}
+
+async function buildExportDirectoryChildItem(instanceRoot, parentPath, entry) {
+	const path = `${parentPath}/${entry.name}`
+	if (entry.isDirectory) {
+		const metadata = await getExportCandidateMetadata(instanceRoot, path)
+		return {
+			path,
+			type: 'directory',
+			disabled: isExportCandidateDisabled(path),
+			modified: metadata.modified,
+		}
+	}
+
+	return buildExportFileItem(instanceRoot, path)
+}
+
+async function buildExportFileItem(instanceRoot, path) {
+	const metadata = await getExportCandidateMetadata(instanceRoot, path)
+	return {
+		path,
+		type: 'file',
+		disabled: isExportCandidateDisabled(path),
+		size: metadata.size,
+		modified: metadata.modified,
+	}
+}
+
+function appendExportItems(items) {
+	const nextFiles = new Map(files.value.map((file) => [normalizeExportPath(file.path), file]))
+	for (const item of items) {
+		nextFiles.set(normalizeExportPath(item.path), item)
+	}
+	files.value = [...nextFiles.values()]
+}
+
+async function getExportCandidateMetadata(instanceRoot, path) {
+	try {
+		const metadata = await stat(`${instanceRoot}/${path}`)
+		return {
+			size: metadata.size,
+			modified: metadata.mtime ? Math.floor(metadata.mtime.getTime() / 1000) : undefined,
+		}
+	} catch {
+		return {}
+	}
+}
+
+function normalizeExportPath(path) {
+	return path.replaceAll('\\', '/').split('/').filter(Boolean).join('/')
+}
+
+function isDefaultSelectedExportCandidate(path) {
+	return (
+		path.startsWith('mods') ||
+		path.startsWith('datapacks') ||
+		path.startsWith('resourcepacks') ||
+		path.startsWith('shaderpacks') ||
+		path.startsWith('config')
+	)
+}
+
+function isExportCandidateDisabled(path) {
+	return (
+		path === 'profile.json' ||
+		path.startsWith('modrinth_logs') ||
+		path.startsWith('.fabric') ||
+		path.startsWith('__MACOSX')
+	)
 }
 </script>
 
 <template>
-  <ModalWrapper ref="exportModal" header="Export modpack">
-    <div class="modal-body">
-      <div class="labeled_input">
-        <p>Modpack Name</p>
-        <div class="iconified-input">
-          <PackageIcon />
-          <input v-model="nameInput" type="text" placeholder="Modpack name" class="input" />
-          <Button class="r-btn" @click="nameInput = ''">
-            <XIcon />
-          </Button>
-        </div>
-      </div>
-      <div class="labeled_input">
-        <p>Version number</p>
-        <div class="iconified-input">
-          <VersionIcon />
-          <input v-model="versionInput" type="text" placeholder="1.0.0" class="input" />
-          <Button class="r-btn" @click="versionInput = ''">
-            <XIcon />
-          </Button>
-        </div>
-      </div>
-      <div class="adjacent-input">
-        <div class="labeled_input">
-          <p>Description</p>
-
-          <div class="textarea-wrapper">
-            <textarea v-model="exportDescription" placeholder="Enter modpack description..." />
-          </div>
-        </div>
-      </div>
-
-      <div class="table">
-        <div class="table-head">
-          <div class="table-cell row-wise">
-            Select files and folders to include in pack
-            <Button
-              class="sleek-primary collapsed-button"
-              icon-only
-              @click="() => (showingFiles = !showingFiles)"
-            >
-              <PlusIcon v-if="!showingFiles" />
-              <XIcon v-else />
-            </Button>
-          </div>
-        </div>
-        <div v-if="showingFiles" class="table-content">
-          <div v-for="[path, children] of folders" :key="path.name" class="table-row">
-            <div class="table-cell file-entry">
-              <div class="file-primary">
-                <Checkbox
-                  :model-value="children.every((child) => child.selected)"
-                  :label="path.name"
-                  class="select-checkbox"
-                  :disabled="children.every((x) => x.disabled)"
-                  @update:model-value="
-                    (newValue) => children.forEach((child) => (child.selected = newValue))
-                  "
-                />
-                <Checkbox
-                  v-model="path.showingMore"
-                  class="select-checkbox dropdown"
-                  collapsing-toggle-style
-                />
-              </div>
-              <div v-if="path.showingMore" class="file-secondary">
-                <div v-for="child in children" :key="child.path" class="file-secondary-row">
-                  <Checkbox
-                    v-model="child.selected"
-                    :label="child.name"
-                    class="select-checkbox"
-                    :disabled="child.disabled"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-          <div v-for="file in files" :key="file.path" class="table-row">
-            <div class="table-cell file-entry">
-              <div class="file-primary">
-                <Checkbox
-                  v-model="file.selected"
-                  :label="file.name"
-                  :disabled="file.disabled"
-                  class="select-checkbox"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="button-row push-right">
-        <Button @click="exportModal.hide">
-          <XIcon />
-          Cancel
-        </Button>
-        <Button color="primary" @click="exportPack">
-          <PackageIcon />
-          Export
-        </Button>
-      </div>
-    </div>
-  </ModalWrapper>
+	<NewModal
+		ref="exportModal"
+		:header="formatMessage(messages.header)"
+		scrollable
+		width="46rem"
+		max-width="calc(100vw - 2rem)"
+	>
+		<div class="flex flex-col gap-4">
+			<div class="grid grid-cols-2 gap-4">
+				<div class="labeled_input w-full">
+					<p class="text-contrast font-semibold">{{ formatMessage(messages.modpackNameLabel) }}</p>
+					<StyledInput
+						v-model="nameInput"
+						type="text"
+						:placeholder="formatMessage(messages.modpackNamePlaceholder)"
+						clearable
+						wrapper-class="w-full"
+					/>
+				</div>
+				<div class="labeled_input w-full">
+					<p class="text-contrast font-semibold">
+						{{ formatMessage(messages.versionNumberLabel) }}
+					</p>
+					<StyledInput
+						v-model="versionInput"
+						type="text"
+						:placeholder="formatMessage(messages.versionNumberPlaceholder)"
+						clearable
+						wrapper-class="w-full"
+					/>
+				</div>
+			</div>
+			<div class="flex flex-col gap-2 min-w-0">
+				<p class="m-0 text-contrast font-semibold">
+					{{ formatMessage(commonMessages.descriptionLabel) }}
+				</p>
+				<StyledInput
+					v-model="exportDescription"
+					multiline
+					:placeholder="formatMessage(messages.descriptionPlaceholder)"
+					wrapper-class="w-full"
+				/>
+			</div>
+			<FileTreeSelect
+				:key="fileTreeKey"
+				v-model="selectedFilePaths"
+				class="min-w-0"
+				:items="files"
+				@navigate="loadExportDirectory"
+			/>
+		</div>
+		<template #actions>
+			<div class="flex items-center justify-end gap-2">
+				<ButtonStyled type="outlined">
+					<button @click="exportModal.hide">
+						<XIcon />
+						{{ formatMessage(commonMessages.cancelButton) }}
+					</button>
+				</ButtonStyled>
+				<ButtonStyled color="brand">
+					<button @click="exportPack">
+						<PackageIcon />
+						{{ formatMessage(messages.exportButton) }}
+					</button>
+				</ButtonStyled>
+			</div>
+		</template>
+	</NewModal>
 </template>
-
-<style scoped lang="scss">
-.modal-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap-md);
-}
-
-.labeled_input {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap-sm);
-
-  p {
-    margin: 0;
-  }
-}
-
-.select-checkbox {
-  gap: var(--gap-sm);
-
-  button.checkbox {
-    border: none;
-  }
-
-  &.dropdown {
-    margin-left: auto;
-  }
-}
-
-.table-content {
-  max-height: 18rem;
-  overflow-y: auto;
-}
-
-.table {
-  border: 1px solid var(--color-bg);
-}
-
-.file-entry {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap-sm);
-}
-
-.file-primary {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-sm);
-}
-
-.file-secondary {
-  margin-left: var(--gap-xl);
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap-sm);
-  height: 100%;
-  vertical-align: center;
-}
-
-.file-secondary-row {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-sm);
-}
-
-.button-row {
-  display: flex;
-  gap: var(--gap-sm);
-  align-items: center;
-}
-
-.row-wise {
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-}
-
-.textarea-wrapper {
-  // margin-top: 1rem;
-  height: 12rem;
-
-  textarea {
-    max-height: 12rem;
-  }
-
-  .preview {
-    overflow-y: auto;
-  }
-}
-</style>

@@ -1,5 +1,7 @@
 use crate::util::{download_file, fetch_json, fetch_xml, format_url};
-use crate::{insert_mirrored_artifact, Error, MirrorArtifact, UploadFile};
+use crate::{
+    Error, FetchResult, MirrorArtifact, UploadFile, insert_mirrored_artifact,
+};
 use chrono::{DateTime, Utc};
 use daedalus::get_path_from_artifact;
 use daedalus::modded::PartialVersionInfo;
@@ -7,18 +9,16 @@ use dashmap::DashMap;
 use futures::io::Cursor;
 use indexmap::IndexMap;
 use itertools::Itertools;
-use serde::de::DeserializeOwned;
 use serde::Deserialize;
+use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
-#[tracing::instrument(skip(semaphore, upload_files, mirror_artifacts))]
+#[tracing::instrument(skip(semaphore))]
 pub async fn fetch_forge(
     semaphore: Arc<Semaphore>,
-    upload_files: &DashMap<String, UploadFile>,
-    mirror_artifacts: &DashMap<String, MirrorArtifact>,
-) -> Result<(), Error> {
+) -> Result<FetchResult, Error> {
     let forge_manifest = fetch_json::<IndexMap<String, Vec<String>>>(
         "https://files.minecraftforge.net/net/minecraftforge/forge/maven-metadata.json",
         &semaphore,
@@ -57,7 +57,7 @@ pub async fn fetch_forge(
 
         ForgeVersion {
             format_version,
-            installer_url: format!("https://maven.minecraftforge.net/net/minecraftforge/forge/{0}/forge-{0}-installer.jar", loader_version),
+            installer_url: format!("https://maven.minecraftforge.net/net/minecraftforge/forge/{loader_version}/forge-{loader_version}-installer.jar"),
             raw: loader_version,
             loader_version: version_split,
             game_version: game_version.clone(),
@@ -90,18 +90,14 @@ pub async fn fetch_forge(
         "https://maven.minecraftforge.net/",
         forge_versions,
         semaphore,
-        upload_files,
-        mirror_artifacts,
     )
     .await
 }
 
-#[tracing::instrument(skip(semaphore, upload_files, mirror_artifacts))]
+#[tracing::instrument(skip(semaphore))]
 pub async fn fetch_neo(
     semaphore: Arc<Semaphore>,
-    upload_files: &DashMap<String, UploadFile>,
-    mirror_artifacts: &DashMap<String, MirrorArtifact>,
-) -> Result<(), Error> {
+) -> Result<FetchResult, Error> {
     #[derive(Debug, Deserialize)]
     struct Metadata {
         versioning: Versioning,
@@ -118,12 +114,12 @@ pub async fn fetch_neo(
     }
 
     let forge_versions = fetch_xml::<Metadata>(
-        "https://maven.neoforged.net/net/neoforged/forge/maven-metadata.xml",
+        "https://maven.neoforged.net/releases/net/neoforged/forge/maven-metadata.xml",
         &semaphore,
     )
     .await?;
     let neo_versions = fetch_xml::<Metadata>(
-        "https://maven.neoforged.net/net/neoforged/neoforge/maven-metadata.xml",
+        "https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml",
         &semaphore,
     )
     .await?;
@@ -137,7 +133,7 @@ pub async fn fetch_neo(
 
         Ok(ForgeVersion {
             format_version: 2,
-            installer_url: format!("https://maven.neoforged.net/net/neoforged/forge/{0}/forge-{0}-installer.jar", loader_version),
+            installer_url: format!("https://maven.neoforged.net/releases/net/neoforged/forge/{loader_version}/forge-{loader_version}-installer.jar"),
             raw: loader_version,
             loader_version: version_split,
             game_version: "1.20.1".to_string(), // All NeoForge Forge versions are for 1.20.1
@@ -145,9 +141,16 @@ pub async fn fetch_neo(
     }).chain(neo_versions.versioning.versions.version.into_iter().map(|loader_version| {
         let mut parts = loader_version.split('.');
 
-        // NeoForge Forge versions are in this format: 20.2.29-beta, 20.6.119
-        // Where the first number is the major MC version, the second is the minor MC version, and the third is the NeoForge version
-        let major = parts.next().ok_or_else(
+        // NeoForge Forge versions are in either of these formats:
+		// - 20.2.29-beta, 20.6.119
+		// - 26.1.0.10-beta, 26.1.0.16
+        //
+		// The first format is the "modern" format for Minecraft versions starting with 1, where the first number is the major MC version,
+		// the second is the minor MC version, and the third is the NeoForge version.
+		//
+		// The second format is the "new-modern" format for Minecraft versions in year-based format, where the first three numbers
+		// are the Minecraft version (year.release.hotfix), and the fourth, the NeoForge release version, with an optional "beta" suffix.
+        let major_or_year = parts.next().ok_or_else(
             || crate::ErrorKind::InvalidInput(format!("Unable to find major game version for NeoForge {loader_version}"))
         )?;
 
@@ -155,15 +158,28 @@ pub async fn fetch_neo(
             || crate::ErrorKind::InvalidInput(format!("Unable to find minor game version for NeoForge {loader_version}"))
         )?;
 
-        let game_version = if minor == "0" {
-            format!("1.{major}")
-        } else {
-            format!("1.{major}.{minor}")
-        };
+		let major_or_year = major_or_year.parse::<u32>()?;
+
+		// Year-based MC versions started in 2026
+		let game_version = match major_or_year {
+			26.. => {
+				let hotfix = parts.next().ok_or_else(
+					|| crate::ErrorKind::InvalidInput(format!("Unable to find hotfix version for NeoForge {loader_version}"))
+				)?;
+
+				if hotfix == "0" {
+					format!("{major_or_year}.{minor}")
+				} else {
+					format!("{major_or_year}.{minor}.{hotfix}")
+				}
+			}
+			..26 if minor == "0" => format!("1.{major_or_year}"),
+			..26 => format!("1.{major_or_year}.{minor}"),
+		};
 
         Ok(ForgeVersion {
             format_version: 2,
-            installer_url: format!("https://maven.neoforged.net/net/neoforged/neoforge/{0}/neoforge-{0}-installer.jar", loader_version),
+            installer_url: format!("https://maven.neoforged.net/releases/net/neoforged/neoforge/{loader_version}/neoforge-{loader_version}-installer.jar"),
             loader_version: loader_version.clone(),
             raw: loader_version,
             game_version,
@@ -188,27 +204,20 @@ pub async fn fetch_neo(
         "https://maven.neoforged.net/",
         parsed_versions,
         semaphore,
-        upload_files,
-        mirror_artifacts,
     )
     .await
 }
 
-#[tracing::instrument(skip(
-    forge_versions,
-    semaphore,
-    upload_files,
-    mirror_artifacts
-))]
+#[tracing::instrument(skip(forge_versions, semaphore))]
 async fn fetch(
     format_version: usize,
     mod_loader: &str,
     maven_url: &str,
     forge_versions: Vec<ForgeVersion>,
     semaphore: Arc<Semaphore>,
-    upload_files: &DashMap<String, UploadFile>,
-    mirror_artifacts: &DashMap<String, MirrorArtifact>,
-) -> Result<(), Error> {
+) -> Result<FetchResult, Error> {
+    let upload_files = DashMap::new();
+    let mirror_artifacts = DashMap::<String, MirrorArtifact>::new();
     let modrinth_manifest = fetch_json::<daedalus::modded::Manifest>(
         &format_url(&format!("{mod_loader}/v{format_version}/manifest.json",)),
         &semaphore,
@@ -502,31 +511,29 @@ async fn fetch(
                             )?;
 
                             artifact.url =
-                                format_url(&format!("maven/{}", artifact_path));
+                                format_url(&format!("maven/{artifact_path}"));
 
                             return Ok(lib);
                         }
-                    } else if let Some(url) = &lib.url {
-                        if !url.is_empty() {
-                            insert_mirrored_artifact(
-                                &lib.name,
-                                None,
-                                vec![
-                                    url.clone(),
-                                    "https://libraries.minecraft.net/"
-                                        .to_string(),
-                                    "https://maven.creeperhost.net/"
-                                        .to_string(),
-                                    maven_url.to_string(),
-                                ],
-                                false,
-                                mirror_artifacts,
-                            )?;
+                    } else if let Some(url) = &lib.url
+                        && !url.is_empty()
+                    {
+                        insert_mirrored_artifact(
+                            &lib.name,
+                            None,
+                            vec![
+                                url.clone(),
+                                "https://libraries.minecraft.net/".to_string(),
+                                "https://maven.creeperhost.net/".to_string(),
+                                maven_url.to_string(),
+                            ],
+                            false,
+                            mirror_artifacts,
+                        )?;
 
-                            lib.url = Some(format_url("maven/"));
+                        lib.url = Some(format_url("maven/"));
 
-                            return Ok(lib);
-                        }
+                        return Ok(lib);
                     }
 
                     // Other libraries are generally available in the "maven" directory of the installer. If they are
@@ -589,16 +596,18 @@ async fn fetch(
                         mod_loader: &str,
                         version: &ForgeVersion,
                     ) -> Result<String, Error> {
-                        let extract_file =
-                            read_file(zip, &value[1..value.len()])
-                                .await?
-                                .ok_or_else(|| {
-                                    crate::ErrorKind::InvalidInput(format!(
+                        let extract_file = read_file(
+                            zip,
+                            &value[1..value.len()],
+                        )
+                        .await?
+                        .ok_or_else(|| {
+                            crate::ErrorKind::InvalidInput(format!(
                                 "Unable reading data key {key} at path {value}",
                             ))
-                                })?;
+                        })?;
 
-                        let file_name = value.split('/').last()
+                        let file_name = value.split('/').next_back()
                             .ok_or_else(|| {
                                 crate::ErrorKind::InvalidInput(format!(
                                     "Unable reading filename for data key {key} at path {value}",
@@ -622,10 +631,7 @@ async fn fetch(
 
                         let path = format!(
                             "com.modrinth.daedalus:{}-installer-extracts:{}:{}@{}",
-                            mod_loader,
-                            version.raw,
-                            file_name,
-                            ext
+                            mod_loader, version.raw, file_name, ext
                         );
 
                         upload_files.insert(
@@ -711,8 +717,8 @@ async fn fetch(
                         loader,
                         maven_url,
                         mod_loader,
-                        upload_files,
-                        mirror_artifacts,
+                        &upload_files,
+                        &mirror_artifacts,
                     )
                 }),
         )
@@ -753,7 +759,8 @@ async fn fetch(
                 .rev()
                 .chunk_by(|x| x.game_version.clone())
                 .into_iter()
-                .map(|(game_version, loaders)| daedalus::modded::Version {
+                .map(|(game_version, loaders)| {
+                    daedalus::modded::Version {
                     id: game_version,
                     stable: true,
                     loaders: loaders
@@ -766,6 +773,7 @@ async fn fetch(
                             stable: false,
                         })
                         .collect(),
+                }
                 })
                 .collect(),
         };
@@ -779,7 +787,10 @@ async fn fetch(
         );
     }
 
-    Ok(())
+    Ok(FetchResult {
+        upload_files,
+        mirror_artifacts,
+    })
 }
 
 #[derive(Debug)]

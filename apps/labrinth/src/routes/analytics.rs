@@ -1,21 +1,27 @@
 use crate::auth::get_user_from_headers;
+use crate::database::PgPool;
+use crate::database::models::DBProject;
 use crate::database::redis::RedisPool;
-use crate::models::analytics::{PageView, Playtime};
+use crate::env::ENV;
+use crate::models::analytics::{MinecraftServerPlay, PageView, Playtime};
+use crate::models::ids::ProjectId;
 use crate::models::pats::Scopes;
 use crate::queue::analytics::AnalyticsQueue;
-use crate::queue::maxmind::MaxMindIndexer;
 use crate::queue::session::AuthQueue;
 use crate::routes::ApiError;
 use crate::util::date::get_current_tenths_of_ms;
-use crate::util::env::parse_strings_from_var;
-use actix_web::{post, web};
+use crate::util::error::Context;
+use crate::util::http::HttpClient;
 use actix_web::{HttpRequest, HttpResponse};
+use actix_web::{post, web};
+use eyre::eyre;
 use serde::Deserialize;
-use sqlx::PgPool;
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::sync::Arc;
+use tracing::trace;
 use url::Url;
+use uuid::Uuid;
 
 pub const FILTERED_HEADERS: &[&str] = &[
     "authorization",
@@ -39,42 +45,59 @@ pub const FILTERED_HEADERS: &[&str] = &[
     "x-vercel-ip-latitude",
     "x-vercel-ip-country",
 ];
-#[derive(Deserialize)]
+
+pub fn config(cfg: &mut actix_web::web::ServiceConfig) {
+    cfg.service(page_view_ingest)
+        .service(playtime_ingest)
+        .service(minecraft_server_play_ingest);
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct UrlInput {
     url: String,
 }
 
 //this route should be behind the cloudflare WAF to prevent non-browsers from calling it
-#[post("view")]
+#[utoipa::path(
+	context_path = "/analytics",
+	tag = "analytics",
+	request_body = UrlInput,
+	responses((status = NO_CONTENT))
+)]
+#[post("/view")]
 pub async fn page_view_ingest(
     req: HttpRequest,
-    maxmind: web::Data<Arc<MaxMindIndexer>>,
     analytics_queue: web::Data<Arc<AnalyticsQueue>>,
     session_queue: web::Data<AuthQueue>,
     url_input: web::Json<UrlInput>,
     pool: web::Data<PgPool>,
     redis: web::Data<RedisPool>,
 ) -> Result<HttpResponse, ApiError> {
-    let user =
-        get_user_from_headers(&req, &**pool, &redis, &session_queue, None)
-            .await
-            .ok();
+    let user = get_user_from_headers(
+        &req,
+        &**pool,
+        &redis,
+        &session_queue,
+        Scopes::empty(),
+    )
+    .await
+    .ok();
     let conn_info = req.connection_info().peer_addr().map(|x| x.to_string());
 
     let url = Url::parse(&url_input.url).map_err(|_| {
         ApiError::InvalidInput("invalid page view URL specified!".to_string())
     })?;
-
     let domain = url.host_str().ok_or_else(|| {
         ApiError::InvalidInput("invalid page view URL specified!".to_string())
     })?;
+    let url_origin = url.origin().ascii_serialization();
 
-    let allowed_origins =
-        parse_strings_from_var("CORS_ALLOWED_ORIGINS").unwrap_or_default();
-    if !(domain.ends_with(".modrinth.com")
-        || domain == "modrinth.com"
-        || allowed_origins.contains(&"*".to_string()))
-    {
+    let is_valid_url_origin = ENV
+        .ANALYTICS_ALLOWED_ORIGINS
+        .iter()
+        .any(|origin| origin == "*" || url_origin == *origin);
+
+    if !is_valid_url_origin {
         return Err(ApiError::InvalidInput(
             "invalid page view URL specified!".to_string(),
         ));
@@ -107,7 +130,7 @@ pub async fn page_view_ingest(
         user_id: 0,
         project_id: 0,
         ip,
-        country: maxmind.query(ip).await.unwrap_or_default(),
+        country: headers.get("cf-ipcountry").cloned().unwrap_or_default(),
         user_agent: headers.get("user-agent").cloned().unwrap_or_default(),
         headers: headers
             .into_iter()
@@ -130,7 +153,7 @@ pub async fn page_view_ingest(
             ];
 
             if PROJECT_TYPES.contains(&segments_vec[0]) {
-                let project = crate::database::models::Project::get(
+                let project = crate::database::models::DBProject::get(
                     segments_vec[1],
                     &**pool,
                     &redis,
@@ -148,12 +171,13 @@ pub async fn page_view_ingest(
         view.user_id = user.id.0;
     }
 
+    trace!("Ingested page view {view:?}");
     analytics_queue.add_view(view);
 
     Ok(HttpResponse::NoContent().body(""))
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, utoipa::ToSchema)]
 pub struct PlaytimeInput {
     seconds: u16,
     loader: String,
@@ -161,7 +185,13 @@ pub struct PlaytimeInput {
     parent: Option<crate::models::ids::VersionId>,
 }
 
-#[post("playtime")]
+#[utoipa::path(
+	context_path = "/analytics",
+	tag = "analytics",
+	request_body = serde_json::Value,
+	responses((status = NO_CONTENT))
+)]
+#[post("/playtime")]
 pub async fn playtime_ingest(
     req: HttpRequest,
     analytics_queue: web::Data<Arc<AnalyticsQueue>>,
@@ -177,7 +207,7 @@ pub async fn playtime_ingest(
         &**pool,
         &redis,
         &session_queue,
-        Some(&[Scopes::PERFORM_ANALYTICS]),
+        Scopes::PERFORM_ANALYTICS,
     )
     .await?;
 
@@ -189,12 +219,14 @@ pub async fn playtime_ingest(
         ));
     }
 
-    let versions = crate::database::models::Version::get_many(
+    let versions = crate::database::models::DBVersion::get_many(
         &playtimes.iter().map(|x| (*x.0).into()).collect::<Vec<_>>(),
         &**pool,
         &redis,
     )
     .await?;
+
+    let headers = req.headers();
 
     for (id, playtime) in playtimes {
         if playtime.seconds > 300 {
@@ -211,10 +243,133 @@ pub async fn playtime_ingest(
                 version_id: version.inner.id.0 as u64,
                 loader: playtime.loader,
                 game_version: playtime.game_version,
-                parent: playtime.parent.map(|x| x.0).unwrap_or(0),
+                parent: playtime.parent.map_or(0, |x| x.0),
+                country: headers
+                    .get("cf-ipcountry")
+                    .and_then(|c| c.to_str().map(|s| s.to_string()).ok())
+                    .unwrap_or_default(),
             });
         }
     }
 
     Ok(HttpResponse::NoContent().finish())
+}
+
+#[derive(Debug, Deserialize)]
+struct MinecraftProfile {
+    id: Uuid,
+    name: String,
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
+pub struct MinecraftJavaServerPlayInput {
+    project_id: ProjectId,
+    username: String,
+    server_id: String,
+}
+
+pub const MINECRAFT_SERVER_PLAYS: &str = "minecraft_server_plays";
+
+#[utoipa::path(
+	context_path = "/analytics",
+	tag = "analytics",
+	request_body = MinecraftJavaServerPlayInput,
+	responses((status = NO_CONTENT))
+)]
+#[post("/minecraft-server-play")]
+pub async fn minecraft_server_play_ingest(
+    req: HttpRequest,
+    analytics_queue: web::Data<Arc<AnalyticsQueue>>,
+    session_queue: web::Data<AuthQueue>,
+    play_input: web::Json<MinecraftJavaServerPlayInput>,
+    pool: web::Data<PgPool>,
+    redis: web::Data<RedisPool>,
+    http: web::Data<HttpClient>,
+) -> Result<(), ApiError> {
+    let user = get_user_from_headers(
+        &req,
+        &**pool,
+        &redis,
+        &session_queue,
+        Scopes::empty(),
+    )
+    .await
+    .map(|(_, user)| user)
+    .ok();
+
+    let project_id = play_input.project_id;
+
+    let project = DBProject::get(&project_id.to_string(), &**pool, &redis)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+
+    if project.components.minecraft_server.is_none() {
+        return Err(ApiError::Request(eyre!(
+            "not a `minecraft_server` project"
+        )));
+    }
+
+    let has_joined = http
+        .get("https://sessionserver.mojang.com/session/minecraft/hasJoined")
+        .query(&[
+            ("username", play_input.username.as_str()),
+            ("serverId", play_input.server_id.as_str()),
+        ])
+        .send()
+        .await
+        .wrap_internal_err("failed to contact Mojang session server")?;
+
+    if has_joined.status() == reqwest::StatusCode::NO_CONTENT
+        || !has_joined.status().is_success()
+    {
+        return Err(ApiError::Request(eyre!(
+            "Minecraft session verification failed"
+        )));
+    }
+
+    let profile = has_joined
+        .json::<MinecraftProfile>()
+        .await
+        .wrap_internal_err("invalid Mojang session response")?;
+
+    if profile.name != play_input.username {
+        return Err(ApiError::Request(eyre!(
+            "returned Mojang profile name does not match username"
+        )));
+    }
+
+    let minecraft_uuid = profile.id;
+
+    let conn_info = req.connection_info().peer_addr().map(|x| x.to_string());
+    let headers = req
+        .headers()
+        .into_iter()
+        .map(|(key, val)| {
+            (
+                key.to_string().to_lowercase(),
+                val.to_str().unwrap_or_default().to_string(),
+            )
+        })
+        .collect::<HashMap<String, String>>();
+
+    let ip = crate::util::ip::convert_to_ip_v6(
+        if let Some(header) = headers.get("cf-connecting-ip") {
+            header
+        } else {
+            conn_info.as_deref().unwrap_or_default()
+        },
+    )
+    .unwrap_or_else(|_| Ipv4Addr::new(127, 0, 0, 1).to_ipv6_mapped());
+
+    let row = MinecraftServerPlay {
+        recorded: get_current_tenths_of_ms(),
+        user_id: user.map(|u| u.id.0).unwrap_or(0),
+        project_id: project_id.0,
+        minecraft_uuid,
+        ip,
+    };
+
+    analytics_queue.add_minecraft_server_play(row);
+
+    Ok(())
 }

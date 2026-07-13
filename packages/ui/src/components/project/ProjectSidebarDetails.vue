@@ -1,142 +1,145 @@
 <template>
-  <div class="flex flex-col gap-3">
-    <h2 class="text-lg m-0">{{ formatMessage(messages.title) }}</h2>
-    <div class="flex flex-col gap-3 font-semibold [&>div]:flex [&>div]:gap-2 [&>div]:items-center">
-      <div>
-        <BookTextIcon aria-hidden="true" />
-        <div>
-          Licensed
-          <a
-            v-if="project.license.url"
-            class="text-link hover:underline"
-            :href="project.license.url"
-            :target="linkTarget"
-            rel="noopener nofollow ugc"
-          >
-            {{ licenseIdDisplay }}
-            <ExternalIcon aria-hidden="true" class="external-icon ml-1 mt-[-1px] inline" />
-          </a>
-          <span
-            v-else-if="
-              project.license.id === 'LicenseRef-All-Rights-Reserved' ||
-              !project.license.id.includes('LicenseRef')
-            "
-          >
-            {{ licenseIdDisplay }}
-          </span>
-          <span v-else>{{ licenseIdDisplay }}</span>
-        </div>
-      </div>
-      <div
-        v-if="project.approved"
-        v-tooltip="dayjs(project.approved).format('MMMM D, YYYY [at] h:mm A')"
-      >
-        <CalendarIcon aria-hidden="true" />
-        <div>
-          {{ formatMessage(messages.published, { date: publishedDate }) }}
-        </div>
-      </div>
-      <div v-else v-tooltip="dayjs(project.published).format('MMMM D, YYYY [at] h:mm A')">
-        <CalendarIcon aria-hidden="true" />
-        <div>
-          {{ formatMessage(messages.created, { date: createdDate }) }}
-        </div>
-      </div>
-      <div
-        v-if="project.status === 'processing' && project.queued"
-        v-tooltip="dayjs(project.queued).format('MMMM D, YYYY [at] h:mm A')"
-      >
-        <ScaleIcon aria-hidden="true" />
-        <div>
-          {{ formatMessage(messages.submitted, { date: submittedDate }) }}
-        </div>
-      </div>
-      <div
-        v-if="hasVersions && project.updated"
-        v-tooltip="dayjs(project.updated).format('MMMM D, YYYY [at] h:mm A')"
-      >
-        <VersionIcon aria-hidden="true" />
-        <div>
-          {{ formatMessage(messages.updated, { date: updatedDate }) }}
-        </div>
-      </div>
-    </div>
-  </div>
+	<div class="flex flex-col gap-3">
+		<h2 class="text-lg m-0">{{ formatMessage(commonMessages.detailsLabel) }}</h2>
+		<div class="flex flex-col gap-3 font-semibold [&>div]:flex [&>div]:gap-2 [&>div]:items-center">
+			<div v-if="!hideLicense">
+				<BookTextIcon aria-hidden="true" />
+				<div>
+					<IntlFormatted :message-id="messages.licensed">
+						<template #~license>
+							<a
+								v-if="project.license.url"
+								class="text-link hover:underline"
+								:href="project.license.url"
+								:target="linkTarget"
+								rel="noopener nofollow ugc"
+							>
+								{{ licenseIdDisplay }}
+								<ExternalIcon aria-hidden="true" class="external-icon ml-1 mt-[-1px] inline" />
+							</a>
+							<span
+								v-else-if="
+									project.license.id === 'LicenseRef-All-Rights-Reserved' ||
+									!project.license.id.includes('LicenseRef')
+								"
+							>
+								{{ licenseIdDisplay }}
+							</span>
+							<span v-else>{{ licenseIdDisplay }}</span>
+						</template>
+					</IntlFormatted>
+				</div>
+			</div>
+			<div v-if="showFollowers">
+				<HeartIcon aria-hidden="true" />
+				<div>
+					{{ formatMessage(commonMessages.projectFollowers, { count: project.followers }) }}
+				</div>
+			</div>
+			<div v-if="project.approved" v-tooltip="formatDateTime(project.approved)">
+				<CalendarIcon aria-hidden="true" />
+				<div>
+					{{
+						capitalizeString(
+							formatMessage(commonMessages.projectPublished, { date: publishedDate }),
+						)
+					}}
+				</div>
+			</div>
+			<div v-else v-tooltip="formatDateTime(project.published)">
+				<CalendarIcon aria-hidden="true" />
+				<div>
+					{{
+						capitalizeString(formatMessage(commonMessages.projectCreated, { date: createdDate }))
+					}}
+				</div>
+			</div>
+			<div
+				v-if="project.status === 'processing' && project.queued"
+				v-tooltip="formatDateTime(project.queued)"
+			>
+				<ScaleIcon aria-hidden="true" />
+				<div>
+					{{
+						capitalizeString(
+							formatMessage(commonMessages.projectSubmitted, { date: submittedDate }),
+						)
+					}}
+				</div>
+			</div>
+			<div v-if="hasVersions && project.updated" v-tooltip="formatDateTime(project.updated)">
+				<VersionIcon aria-hidden="true" />
+				<div>
+					{{
+						capitalizeString(formatMessage(commonMessages.projectUpdated, { date: updatedDate }))
+					}}
+				</div>
+			</div>
+		</div>
+	</div>
 </template>
 <script setup lang="ts">
-import { BookTextIcon, CalendarIcon, ScaleIcon, VersionIcon, ExternalIcon } from '@modrinth/assets'
-import { useVIntl, defineMessages } from '@vintl/vintl'
+import type { Labrinth } from '@modrinth/api-client'
+import {
+	BookTextIcon,
+	CalendarIcon,
+	ExternalIcon,
+	HeartIcon,
+	ScaleIcon,
+	VersionIcon,
+} from '@modrinth/assets'
+import { capitalizeString } from '@modrinth/utils'
 import { computed } from 'vue'
-import dayjs from 'dayjs'
+
+import { useFormatDateTime, useRelativeTime } from '../../composables'
+import { defineMessages, useVIntl } from '../../composables/i18n'
+import { commonMessages } from '../../utils/common-messages'
+import { IntlFormatted } from '../base'
 
 const { formatMessage } = useVIntl()
+const formatRelativeTime = useRelativeTime()
+const formatDateTime = useFormatDateTime({
+	timeStyle: 'short',
+	dateStyle: 'long',
+})
 
 const props = defineProps<{
-  project: {
-    id: string
-    published: string
-    updated: string
-    approved: string
-    queued: string
-    status: string
-    license: {
-      id: string
-      url: string
-    }
-  }
-  linkTarget: string
-  hasVersions: boolean
+	project: Labrinth.Projects.v2.Project
+	linkTarget: string
+	hasVersions: boolean
+	hideLicense?: boolean
+	showFollowers?: boolean
 }>()
 
 const createdDate = computed(() =>
-  props.project.published ? dayjs(props.project.published).fromNow() : 'unknown',
+	props.project.published ? formatRelativeTime(props.project.published) : 'unknown',
 )
 const submittedDate = computed(() =>
-  props.project.queued ? dayjs(props.project.queued).fromNow() : 'unknown',
+	props.project.queued ? formatRelativeTime(props.project.queued) : 'unknown',
 )
 const publishedDate = computed(() =>
-  props.project.approved ? dayjs(props.project.approved).fromNow() : 'unknown',
+	props.project.approved ? formatRelativeTime(props.project.approved) : 'unknown',
 )
 const updatedDate = computed(() =>
-  props.project.updated ? dayjs(props.project.updated).fromNow() : 'unknown',
+	props.project.updated ? formatRelativeTime(props.project.updated) : 'unknown',
 )
 
 const licenseIdDisplay = computed(() => {
-  const id = props.project.license.id
+	const id = props.project.license.id
 
-  if (id === 'LicenseRef-All-Rights-Reserved') {
-    return 'ARR'
-  } else if (id.includes('LicenseRef')) {
-    return id.replaceAll('LicenseRef-', '').replaceAll('-', ' ')
-  } else {
-    return id
-  }
+	if (id === 'LicenseRef-All-Rights-Reserved') {
+		return 'ARR'
+	} else if (id.includes('LicenseRef')) {
+		return id.replaceAll('LicenseRef-', '').replaceAll('-', ' ')
+	} else {
+		return id
+	}
 })
 
 const messages = defineMessages({
-  title: {
-    id: 'project.about.details.title',
-    defaultMessage: 'Details',
-  },
-  licensed: {
-    id: 'project.about.details.licensed',
-    defaultMessage: 'Licensed {license}',
-  },
-  created: {
-    id: 'project.about.details.created',
-    defaultMessage: 'Created {date}',
-  },
-  submitted: {
-    id: 'project.about.details.submitted',
-    defaultMessage: 'Submitted {date}',
-  },
-  published: {
-    id: 'project.about.details.published',
-    defaultMessage: 'Published {date}',
-  },
-  updated: {
-    id: 'project.about.details.updated',
-    defaultMessage: 'Updated {date}',
-  },
+	licensed: {
+		id: 'project.about.details.licensed',
+		defaultMessage: 'Licensed {license}',
+	},
 })
 </script>

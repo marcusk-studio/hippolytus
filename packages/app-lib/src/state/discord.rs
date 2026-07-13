@@ -1,12 +1,11 @@
-use std::sync::{atomic::AtomicBool, Arc};
+use std::sync::{Arc, atomic::AtomicBool};
 
 use discord_rich_presence::{
-    activity::{Activity, Assets},
     DiscordIpc, DiscordIpcClient,
+    activity::{Activity, Assets},
 };
 use tokio::sync::RwLock;
 
-use crate::state::Profile;
 use crate::State;
 
 pub struct DiscordGuard {
@@ -18,13 +17,7 @@ impl DiscordGuard {
     /// Initialize discord IPC client, and attempt to connect to it
     /// If it fails, it will still return a DiscordGuard, but the client will be unconnected
     pub fn init() -> crate::Result<DiscordGuard> {
-        let dipc =
-            DiscordIpcClient::new("1337164719634780194").map_err(|e| {
-                crate::ErrorKind::OtherError(format!(
-                    "Could not create Discord client {}",
-                    e,
-                ))
-            })?;
+        let dipc = DiscordIpcClient::new("1337164719634780194");
 
         Ok(DiscordGuard {
             client: Arc::new(RwLock::new(dipc)),
@@ -88,27 +81,14 @@ impl DiscordGuard {
         let mut client: tokio::sync::RwLockWriteGuard<'_, DiscordIpcClient> =
             self.client.write().await;
         let res = client.set_activity(activity.clone());
-        let could_not_set_err = |e: Box<dyn serde::ser::StdError>| {
-            crate::ErrorKind::OtherError(format!(
-                "Could not update Discord activity {}",
-                e,
-            ))
-        };
 
         if reconnect_if_fail {
             if let Err(_e) = res {
-                client.reconnect().map_err(|e| {
-                    crate::ErrorKind::OtherError(format!(
-                        "Could not reconnect to Discord IPC {}",
-                        e,
-                    ))
-                })?;
-                return Ok(client
-                    .set_activity(activity)
-                    .map_err(could_not_set_err)?); // try again, but don't reconnect if it fails again
+                client.reconnect()?;
+                return Ok(client.set_activity(activity)?); // try again, but don't reconnect if it fails again
             }
         } else {
-            res.map_err(could_not_set_err)?;
+            res?;
         }
 
         Ok(())
@@ -129,27 +109,13 @@ impl DiscordGuard {
         let mut client = self.client.write().await;
         let res = client.clear_activity();
 
-        let could_not_clear_err = |e: Box<dyn serde::ser::StdError>| {
-            crate::ErrorKind::OtherError(format!(
-                "Could not clear Discord activity {}",
-                e,
-            ))
-        };
-
         if reconnect_if_fail {
             if res.is_err() {
-                client.reconnect().map_err(|e| {
-                    crate::ErrorKind::OtherError(format!(
-                        "Could not reconnect to Discord IPC {}",
-                        e,
-                    ))
-                })?;
-                return Ok(client
-                    .clear_activity()
-                    .map_err(could_not_clear_err)?); // try again, but don't reconnect if it fails again
+                client.reconnect()?;
+                return Ok(client.clear_activity()?); // try again, but don't reconnect if it fails again
             }
         } else {
-            res.map_err(could_not_clear_err)?;
+            res?;
         }
         Ok(())
     }
@@ -167,17 +133,13 @@ impl DiscordGuard {
             return self.clear_activity(true).await;
         }
 
-        let running_profiles = state.process_manager.get_all();
-        if let Some(existing_child) = running_profiles.first() {
-            let prof =
-                Profile::get(&existing_child.profile_path, &state.pool).await?;
-            if let Some(prof) = prof {
-                self.set_activity(
-                    &format!("Playing {}", prof.name),
-                    reconnect_if_fail,
-                )
-                .await?;
-            }
+        let running_instances = state.process_manager.get_all();
+        if let Some(existing_child) = running_instances.first() {
+            self.set_activity(
+                &format!("Playing {}", existing_child.instance_name),
+                reconnect_if_fail,
+            )
+            .await?;
         } else {
             self.set_activity("Idling...", reconnect_if_fail).await?;
         }

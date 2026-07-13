@@ -1,45 +1,72 @@
 use thiserror::Error;
 
+pub mod affiliate_code_item;
+pub mod analytics_event_item;
 pub mod categories;
 pub mod charge_item;
 pub mod collection_item;
+pub mod delphi_report_item;
 pub mod flow_item;
 pub mod friend_item;
 pub mod ids;
 pub mod image_item;
 pub mod legacy_loader_fields;
 pub mod loader_fields;
+pub mod moderation_external_item;
+pub mod moderation_lock_item;
+pub mod moderation_note_item;
 pub mod notification_item;
+pub mod notifications_deliveries_item;
+pub mod notifications_template_item;
+pub mod notifications_type_item;
 pub mod oauth_client_authorization_item;
 pub mod oauth_client_item;
 pub mod oauth_token_item;
 pub mod organization_item;
+pub mod passkey_item;
 pub mod pat_item;
 pub mod payout_item;
+pub mod payouts_values_notifications;
 pub mod product_item;
+pub mod products_tax_identifier_item;
 pub mod project_item;
 pub mod report_item;
 pub mod session_item;
+pub mod shared_instance_item;
 pub mod team_item;
 pub mod thread_item;
 pub mod user_item;
+pub mod user_limits;
 pub mod user_subscription_item;
+pub mod users_compliance;
+pub mod users_notifications_preferences_item;
+pub mod users_redeemals;
+pub mod users_subscriptions_affiliations;
+pub mod users_subscriptions_credits;
 pub mod version_item;
 
-pub use collection_item::Collection;
+pub use affiliate_code_item::DBAffiliateCode;
+pub use analytics_event_item::DBAnalyticsEvent;
+pub use collection_item::DBCollection;
 pub use ids::*;
-pub use image_item::Image;
-pub use oauth_client_item::OAuthClient;
-pub use organization_item::Organization;
-pub use project_item::Project;
-pub use team_item::Team;
-pub use team_item::TeamMember;
-pub use thread_item::{Thread, ThreadMessage};
-pub use user_item::User;
-pub use version_item::Version;
+pub use image_item::DBImage;
+pub use oauth_client_item::DBOAuthClient;
+pub use organization_item::DBOrganization;
+pub use passkey_item::DBPasskey;
+pub use project_item::DBProject;
+pub use team_item::DBTeam;
+pub use team_item::DBTeamMember;
+pub use thread_item::{DBThread, DBThreadMessage};
+pub use user_item::DBUser;
+pub use version_item::DBVersion;
+
+pub use moderation_lock_item::{DBModerationLock, ModerationLockWithUser};
+pub use moderation_note_item::DBModerationNote;
 
 #[derive(Error, Debug)]
 pub enum DatabaseError {
+    #[error(transparent)]
+    Internal(#[from] eyre::Report),
     #[error("Error while interacting with the database: {0}")]
     Database(#[from] sqlx::Error),
     #[error("Error while trying to generate random ID")]
@@ -52,6 +79,17 @@ pub enum DatabaseError {
     SerdeCacheError(#[from] serde_json::Error),
     #[error("Schema error: {0}")]
     SchemaError(String),
-    #[error("Timeout when waiting for cache subscriber")]
-    CacheTimeout,
+    #[error(
+        "Timeout waiting on Redis cache lock ({locks_released}/{locks_waiting} released, spent {time_spent_pool_wait_ms}ms/{time_spent_total_ms}ms waiting on connections from pool)"
+    )]
+    CacheTimeout {
+        locks_released: usize,
+        locks_waiting: usize,
+        time_spent_pool_wait_ms: u64,
+        time_spent_total_ms: u64,
+    },
+    #[error(
+        "Timeout waiting on local cache lock ({released}/{total} released)"
+    )]
+    LocalCacheTimeout { released: usize, total: usize },
 }

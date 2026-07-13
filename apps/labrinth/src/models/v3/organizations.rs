@@ -1,17 +1,10 @@
-use super::{
-    ids::{Base62Id, TeamId},
-    teams::TeamMember,
-};
+use super::moderation_notes::ModerationNote;
+use super::teams::TeamMember;
+use crate::models::ids::{OrganizationId, TeamId};
 use serde::{Deserialize, Serialize};
 
-/// The ID of a team
-#[derive(Copy, Clone, PartialEq, Eq, Serialize, Deserialize, Hash, Debug)]
-#[serde(from = "Base62Id")]
-#[serde(into = "Base62Id")]
-pub struct OrganizationId(pub u64);
-
 /// An organization of users who control a project
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
 pub struct Organization {
     /// The id of the organization
     pub id: OrganizationId,
@@ -31,11 +24,13 @@ pub struct Organization {
 
     /// A list of the members of the organization
     pub members: Vec<TeamMember>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub moderation_notes: Option<Option<ModerationNote>>,
 }
 
 impl Organization {
     pub fn from(
-        data: crate::database::models::organization_item::Organization,
+        data: crate::database::models::organization_item::DBOrganization,
         team_members: Vec<TeamMember>,
     ) -> Self {
         Self {
@@ -47,6 +42,7 @@ impl Organization {
             members: team_members,
             icon_url: data.icon_url,
             color: data.color,
+            moderation_notes: None,
         }
     }
 }

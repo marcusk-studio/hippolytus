@@ -1,28 +1,50 @@
 use super::ApiError;
+use crate::database::PgPool;
 use crate::models::projects::Project;
 use crate::models::v2::projects::LegacyProject;
 use crate::queue::session::AuthQueue;
 use crate::routes::internal;
 use crate::{database::redis::RedisPool, routes::v2_reroute};
-use actix_web::{get, web, HttpRequest, HttpResponse};
+use actix_web::{HttpRequest, HttpResponse, get, web};
 use serde::Deserialize;
-use sqlx::PgPool;
 
-pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::scope("moderation").service(get_projects));
+pub fn config(cfg: &mut actix_web::web::ServiceConfig) {
+    cfg.service(web::scope("/moderation").service(get_projects));
 }
 
 #[derive(Deserialize)]
 pub struct ResultCount {
     #[serde(default = "default_count")]
-    pub count: i16,
+    pub count: u16,
 }
 
-fn default_count() -> i16 {
+fn default_count() -> u16 {
     100
 }
 
-#[get("projects")]
+/// List projects in the moderation queue.  
+#[utoipa::path(
+	context_path = "/moderation",
+	tag = "v2 moderation",
+    get,
+    operation_id = "getModerationProjects",
+    params(
+        ("count" = Option<u16>, Query, description = "Maximum number of projects to return")
+    ),
+    responses(
+		(status = 200, description = "Expected response to a valid request", body = Vec<LegacyProject>),
+        (
+            status = 401,
+            description = "Incorrect token scopes or no authorization to access the requested item(s)"
+        ),
+        (
+            status = 404,
+            description = "The requested item(s) were not found or no authorization to access the requested item(s)"
+        )
+    ),
+    security(("bearer_auth" = ["PROJECT_READ"]))
+)]
+#[get("/projects")]
 pub async fn get_projects(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -30,14 +52,19 @@ pub async fn get_projects(
     count: web::Query<ResultCount>,
     session_queue: web::Data<AuthQueue>,
 ) -> Result<HttpResponse, ApiError> {
-    let response = internal::moderation::get_projects(
+    let response = internal::moderation::get_projects_internal(
         req,
         pool.clone(),
         redis.clone(),
-        web::Query(internal::moderation::ResultCount { count: count.count }),
+        web::Query(internal::moderation::ProjectsRequestOptions {
+            count: count.count,
+            offset: 0,
+            has_external_dependencies: None,
+        }),
         session_queue,
     )
     .await
+    .map(|resp| HttpResponse::Ok().json(resp))
     .or_else(v2_reroute::flatten_404_error)?;
 
     // Convert to V2 projects

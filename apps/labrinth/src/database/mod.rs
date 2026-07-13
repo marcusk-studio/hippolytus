@@ -1,8 +1,10 @@
 pub mod models;
 mod postgres_database;
 pub mod redis;
-pub use models::Image;
-pub use models::Project;
-pub use models::Version;
-pub use postgres_database::check_for_migrations;
-pub use postgres_database::connect;
+pub use models::DBImage;
+pub use models::DBProject;
+pub use models::DBVersion;
+pub use postgres_database::{
+    Acquire, Executor, MIGRATOR, PgPool, PgTransaction, ReadOnlyPgPool,
+    check_for_migrations, connect_all, register_and_set_metrics,
+};

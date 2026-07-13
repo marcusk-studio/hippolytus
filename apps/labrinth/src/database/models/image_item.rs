@@ -1,4 +1,5 @@
 use super::ids::*;
+use crate::database::PgTransaction;
 use crate::database::redis::RedisPool;
 use crate::{database::models::DatabaseError, models::images::ImageContext};
 use chrono::{DateTime, Utc};
@@ -8,27 +9,27 @@ use serde::{Deserialize, Serialize};
 const IMAGES_NAMESPACE: &str = "images";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Image {
-    pub id: ImageId,
+pub struct DBImage {
+    pub id: DBImageId,
     pub url: String,
     pub raw_url: String,
     pub size: u64,
     pub created: DateTime<Utc>,
-    pub owner_id: UserId,
+    pub owner_id: DBUserId,
 
     // context it is associated with
     pub context: String,
 
-    pub project_id: Option<ProjectId>,
-    pub version_id: Option<VersionId>,
-    pub thread_message_id: Option<ThreadMessageId>,
-    pub report_id: Option<ReportId>,
+    pub project_id: Option<DBProjectId>,
+    pub version_id: Option<DBVersionId>,
+    pub thread_message_id: Option<DBThreadMessageId>,
+    pub report_id: Option<DBReportId>,
 }
 
-impl Image {
+impl DBImage {
     pub async fn insert(
         &self,
-        transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        transaction: &mut PgTransaction<'_>,
     ) -> Result<(), DatabaseError> {
         sqlx::query!(
             "
@@ -39,30 +40,30 @@ impl Image {
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
             );
             ",
-            self.id as ImageId,
+            self.id as DBImageId,
             self.url,
             self.raw_url,
             self.size as i64,
             self.created,
-            self.owner_id as UserId,
+            self.owner_id as DBUserId,
             self.context,
             self.project_id.map(|x| x.0),
             self.version_id.map(|x| x.0),
             self.thread_message_id.map(|x| x.0),
             self.report_id.map(|x| x.0),
         )
-        .execute(&mut **transaction)
+        .execute(&mut *transaction)
         .await?;
 
         Ok(())
     }
 
     pub async fn remove(
-        id: ImageId,
-        transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        id: DBImageId,
+        transaction: &mut PgTransaction<'_>,
         redis: &RedisPool,
     ) -> Result<Option<()>, DatabaseError> {
-        let image = Self::get(id, &mut **transaction, redis).await?;
+        let image = Self::get(id, &mut *transaction, redis).await?;
 
         if let Some(image) = image {
             sqlx::query!(
@@ -70,12 +71,12 @@ impl Image {
                 DELETE FROM uploaded_images
                 WHERE id = $1
                 ",
-                id as ImageId,
+                id as DBImageId,
             )
-            .execute(&mut **transaction)
+            .execute(&mut *transaction)
             .await?;
 
-            Image::clear_cache(image.id, redis).await?;
+            DBImage::clear_cache(image.id, redis).await?;
 
             Ok(Some(()))
         } else {
@@ -85,8 +86,8 @@ impl Image {
 
     pub async fn get_many_contexted(
         context: ImageContext,
-        transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    ) -> Result<Vec<Image>, sqlx::Error> {
+        transaction: &mut PgTransaction<'_>,
+    ) -> Result<Vec<DBImage>, sqlx::Error> {
         // Set all of project_id, version_id, thread_message_id, report_id to None
         // Then set the one that is relevant to Some
 
@@ -98,22 +99,22 @@ impl Image {
             ImageContext::Project {
                 project_id: Some(id),
             } => {
-                project_id = Some(ProjectId::from(id));
+                project_id = Some(DBProjectId::from(id));
             }
             ImageContext::Version {
                 version_id: Some(id),
             } => {
-                version_id = Some(VersionId::from(id));
+                version_id = Some(DBVersionId::from(id));
             }
             ImageContext::ThreadMessage {
                 thread_message_id: Some(id),
             } => {
-                thread_message_id = Some(ThreadMessageId::from(id));
+                thread_message_id = Some(DBThreadMessageId::from(id));
             }
             ImageContext::Report {
                 report_id: Some(id),
             } => {
-                report_id = Some(ReportId::from(id));
+                report_id = Some(DBReportId::from(id));
             }
             _ => {}
         }
@@ -137,48 +138,48 @@ impl Image {
             report_id.map(|x| x.0),
 
         )
-        .fetch(&mut **transaction)
+        .fetch(&mut *transaction)
         .map_ok(|row| {
-            let id = ImageId(row.id);
+            let id = DBImageId(row.id);
 
-            Image {
+            DBImage {
                 id,
                 url: row.url,
                 raw_url: row.raw_url,
                 size: row.size as u64,
                 created: row.created,
-                owner_id: UserId(row.owner_id),
+                owner_id: DBUserId(row.owner_id),
                 context: row.context,
-                project_id: row.mod_id.map(ProjectId),
-                version_id: row.version_id.map(VersionId),
-                thread_message_id: row.thread_message_id.map(ThreadMessageId),
-                report_id: row.report_id.map(ReportId),
+                project_id: row.mod_id.map(DBProjectId),
+                version_id: row.version_id.map(DBVersionId),
+                thread_message_id: row.thread_message_id.map(DBThreadMessageId),
+                report_id: row.report_id.map(DBReportId),
             }
         })
-        .try_collect::<Vec<Image>>()
+        .try_collect::<Vec<DBImage>>()
         .await
     }
 
     pub async fn get<'a, 'b, E>(
-        id: ImageId,
+        id: DBImageId,
         executor: E,
         redis: &RedisPool,
-    ) -> Result<Option<Image>, DatabaseError>
+    ) -> Result<Option<DBImage>, DatabaseError>
     where
-        E: sqlx::Executor<'a, Database = sqlx::Postgres>,
+        E: crate::database::Executor<'a, Database = sqlx::Postgres>,
     {
-        Image::get_many(&[id], executor, redis)
+        DBImage::get_many(&[id], executor, redis)
             .await
             .map(|x| x.into_iter().next())
     }
 
     pub async fn get_many<'a, E>(
-        image_ids: &[ImageId],
+        image_ids: &[DBImageId],
         exec: E,
         redis: &RedisPool,
-    ) -> Result<Vec<Image>, DatabaseError>
+    ) -> Result<Vec<DBImage>, DatabaseError>
     where
-        E: sqlx::Executor<'a, Database = sqlx::Postgres>,
+        E: crate::database::Executor<'a, Database = sqlx::Postgres>,
     {
         use futures::TryStreamExt;
 
@@ -197,18 +198,18 @@ impl Image {
                 )
                     .fetch(exec)
                     .try_fold(DashMap::new(), |acc, i| {
-                        let img = Image {
-                            id: ImageId(i.id),
+                        let img = DBImage {
+                            id: DBImageId(i.id),
                             url: i.url,
                             raw_url: i.raw_url,
                             size: i.size as u64,
                             created: i.created,
-                            owner_id: UserId(i.owner_id),
+                            owner_id: DBUserId(i.owner_id),
                             context: i.context,
-                            project_id: i.mod_id.map(ProjectId),
-                            version_id: i.version_id.map(VersionId),
-                            thread_message_id: i.thread_message_id.map(ThreadMessageId),
-                            report_id: i.report_id.map(ReportId),
+                            project_id: i.mod_id.map(DBProjectId),
+                            version_id: i.version_id.map(DBVersionId),
+                            thread_message_id: i.thread_message_id.map(DBThreadMessageId),
+                            report_id: i.report_id.map(DBReportId),
                         };
 
                         acc.insert(i.id, img);
@@ -224,7 +225,7 @@ impl Image {
     }
 
     pub async fn clear_cache(
-        id: ImageId,
+        id: DBImageId,
         redis: &RedisPool,
     ) -> Result<(), DatabaseError> {
         let mut redis = redis.connect().await?;
