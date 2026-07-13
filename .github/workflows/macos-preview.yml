@@ -1,3 +1,4 @@
+# Preview build: dropdown fix + Discover/Hosting tab removal
 name: macOS Preview Build (unsigned)
 
 on:
