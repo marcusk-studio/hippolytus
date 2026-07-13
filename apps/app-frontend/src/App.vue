@@ -11,7 +11,6 @@ import {
 import {
 	BellIcon,
 	ChangeSkinIcon,
-	CompassIcon,
 	HomeIcon,
 	LeftArrowIcon,
 	LibraryIcon,
@@ -19,7 +18,6 @@ import {
 	PlusIcon,
 	RefreshCwIcon,
 	RightArrowIcon,
-	ServerStackIcon,
 	SettingsIcon,
 	WorldIcon,
 	XIcon,
@@ -1429,14 +1427,6 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 			<NavButton v-if="themeStore.featureFlags.worlds_tab" v-tooltip.right="'Worlds'" to="/worlds">
 				<WorldIcon />
 			</NavButton>
-			<NavButton
-				v-tooltip.right="'Discover content'"
-				to="/browse/modpack"
-				:is-primary="() => route.path.startsWith('/browse') && !route.query.i"
-				:is-subpage="(route) => route.path.startsWith('/project') && !route.query.i"
-			>
-				<CompassIcon />
-			</NavButton>
 			<NavButton v-tooltip.right="'Skin selector'" to="/skins">
 				<ChangeSkinIcon />
 			</NavButton>
@@ -1452,14 +1442,6 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 				"
 			>
 				<LibraryIcon />
-			</NavButton>
-			<NavButton
-				v-tooltip.right="'Modrinth Hosting'"
-				to="/hosting/manage"
-				:is-primary="(r) => r.path === '/hosting/manage' || r.path === '/hosting/manage/'"
-				:is-subpage="(r) => r.path.startsWith('/hosting/manage/') && r.path !== '/hosting/manage/'"
-			>
-				<ServerStackIcon />
 			</NavButton>
 			<div class="h-px w-6 mx-auto my-2 bg-surface-5"></div>
 			<suspense>

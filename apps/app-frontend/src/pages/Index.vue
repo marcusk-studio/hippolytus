@@ -85,10 +85,10 @@ const getFeaturedModpacks = async () => {
 	// Project type filter
 	filters.push(['project_type:modpack'])
 
-	// Project ID filter - using the exact same approach as the browse file
+	// Project ID filter - each project_id is its own entry in the inner array,
+	// which the Modrinth search API treats as OR (there is no `OR` keyword)
 	if (featuredProjects.value.length > 0) {
-		const projectIdFilter = featuredProjects.value.map((p) => `project_id:${p.id}`).join(' OR ')
-		filters.push([projectIdFilter])
+		filters.push(featuredProjects.value.map((p) => `project_id:${p.id}`))
 	} else {
 		filters.push(['project_id:none'])
 	}
