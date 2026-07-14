@@ -16,10 +16,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Generate App Token
+        uses: tibdex/github-app-token@v2
+        id: generate-token
+        with:
+          app_id: '${{ secrets.APP_ID }}'
+          private_key: '${{ secrets.APP_PRIVATE_KEY }}'
       - name: Post or update changelog comment
         uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
         with:
-          github-token: ${{ secrets.CROWDIN_GH_TOKEN }}
+          github-token: '${{ steps.generate-token.outputs.token }}'
           script: |
             const marker = '<!-- changelog -->';
             const mergedMarker = '<!-- changelog-merged -->';
