@@ -40,11 +40,10 @@ import {
 	providePopupNotificationManager,
 	useDebugLogger,
 	useFormatBytes,
-	useHostingIntercom,
 	useVIntl,
 } from '@modrinth/ui'
 import { renderString } from '@modrinth/utils'
-import { useQuery, useQueryClient } from '@tanstack/vue-query'
+import { useQuery } from '@tanstack/vue-query'
 import { getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
@@ -81,7 +80,7 @@ import { hide_ads_window, init_ads_window, show_ads_window } from '@/helpers/ads
 import { debugAnalytics, initAnalytics, trackEvent } from '@/helpers/analytics'
 import { check_reachable } from '@/helpers/auth.js'
 import { get_user, get_version } from '@/helpers/cache.js'
-import { command_listener, notification_listener, warning_listener } from '@/helpers/events.js'
+import { command_listener, warning_listener } from '@/helpers/events.js'
 import { install_create_modpack_instance, install_get_modpack_preview } from '@/helpers/install'
 import { list, run } from '@/helpers/instance'
 import { cancelLogin, get as getCreds, login, logout } from '@/helpers/mr_auth.ts'
@@ -131,7 +130,6 @@ const router = useRouter()
 const route = useRoute()
 const APP_LEFT_NAV_WIDTH = '4rem'
 const APP_SIDEBAR_WIDTH = 300
-const INTERCOM_BUBBLE_DEFAULT_PADDING = 20
 const PRIDE_FUNDRAISER_END_DATE = new Date('2026-07-01T00:00:00Z').getTime()
 const credentials = ref()
 const sidebarToggled = ref(true)
@@ -142,28 +140,9 @@ const forceSidebar = computed(
 	() => route.path.startsWith('/browse') || route.path.startsWith('/project'),
 )
 const sidebarVisible = computed(() => sidebarToggled.value || forceSidebar.value)
-const hostingRouteActive = computed(() => route.path.startsWith('/hosting'))
 const prideFundraiserEnabled = computed(
 	() => themeStore.getFeatureFlag('pride_fundraiser') && Date.now() < PRIDE_FUNDRAISER_END_DATE,
 )
-const hostingIntercomIdentityKey = computed(() => {
-	const rawServerId = route.params.id
-	const serverId = Array.isArray(rawServerId) ? rawServerId[0] : rawServerId
-	const userId = credentials.value?.user_id ?? credentials.value?.user?.id ?? 'anonymous'
-	return `${userId}:${serverId ?? 'hosting'}`
-})
-const hostingIntercom = useHostingIntercom({
-	enabled: computed(() => hostingRouteActive.value && !!credentials.value?.session),
-	appId: 'ykeritl9',
-	fetchToken: fetchIntercomToken,
-	identityKey: hostingIntercomIdentityKey,
-	horizontalPadding: computed(() =>
-		sidebarVisible.value
-			? APP_SIDEBAR_WIDTH + INTERCOM_BUBBLE_DEFAULT_PADDING
-			: INTERCOM_BUBBLE_DEFAULT_PADDING,
-	),
-})
-
 const notificationManager = new AppNotificationManager()
 provideNotificationManager(notificationManager)
 const { handleError, addNotification } = notificationManager
@@ -201,7 +180,6 @@ providePageContext({
 		left: ref(APP_LEFT_NAV_WIDTH),
 		right: computed(() => (sidebarVisible.value ? `${APP_SIDEBAR_WIDTH}px` : '0px')),
 	},
-	intercomBubble: hostingIntercom.intercomBubble,
 	featureFlags: {
 		serverRamAsBytesAlwaysOn: computed(() =>
 			themeStore.getFeatureFlag('server_ram_as_bytes_always_on'),
@@ -236,7 +214,6 @@ const updatesModal = ref(null)
 const backgrounds = import.meta.glob('@/assets/backgrounds/*')
 const backgroundKeys = Object.keys(backgrounds)
 const randomBackground = ref('')
-const displayedServerInviteNotifications = new Set()
 
 const offline = ref(!navigator.onLine)
 window.addEventListener('offline', () => {
@@ -518,8 +495,6 @@ function onSuspenseResolve() {
 	}
 }
 
-const queryClient = useQueryClient()
-
 watch(stateInitialized, (ready) => {
 	if (ready) {
 		if (initialLoadToken) {
@@ -530,39 +505,6 @@ watch(stateInitialized, (ready) => {
 			loading.end(routerToken)
 			routerToken = null
 		}
-
-		queryClient.prefetchQuery({
-			queryKey: ['servers'],
-			queryFn: async () => {
-				const response = await tauriApiClient.archon.servers_v0.list({ limit: 100 })
-				const hasMedalServers = response.servers.some((s) => s.is_medal)
-				if (hasMedalServers) {
-					const subscriptions = await tauriApiClient.labrinth.billing_internal.getSubscriptions()
-					for (const server of response.servers) {
-						if (server.is_medal) {
-							const sub = subscriptions.find((s) => s.metadata?.id === server.server_id)
-							if (sub) {
-								server.medal_expires = new Date(
-									new Date(sub.created).getTime() + 5 * 86400000,
-								).toISOString()
-							}
-						}
-					}
-				}
-				return response
-			},
-			staleTime: 30_000,
-		})
-		queryClient.prefetchQuery({
-			queryKey: ['billing', 'subscriptions'],
-			queryFn: () => tauriApiClient.labrinth.billing_internal.getSubscriptions(),
-			staleTime: 30_000,
-		})
-		queryClient.prefetchQuery({
-			queryKey: ['billing', 'payments'],
-			queryFn: () => tauriApiClient.labrinth.billing_internal.getPayments(),
-			staleTime: 30_000,
-		})
 	}
 })
 
@@ -685,32 +627,6 @@ const showAd = computed(
 	() => sidebarVisible.value && !hasPlus.value && credentials.value !== undefined,
 )
 
-async function fetchIntercomToken() {
-	const creds = await getCreds()
-	if (!creds?.session) {
-		throw new Error('Not authenticated')
-	}
-
-	const params = new URLSearchParams()
-	const rawServerId = route.params.id
-	const serverId = Array.isArray(rawServerId) ? rawServerId[0] : rawServerId
-	if (route.path.startsWith('/hosting/manage/') && typeof serverId === 'string') {
-		params.set('server_id', serverId)
-	}
-	const query = params.size > 0 ? `?${params.toString()}` : ''
-
-	const response = await tauriFetch(`${config.siteUrl}/api/intercom/messenger-jwt${query}`, {
-		method: 'GET',
-		headers: {
-			Authorization: `Bearer ${creds.session}`,
-		},
-	})
-	if (!response.ok) {
-		throw new Error(`Failed to fetch Intercom token: ${response.status}`)
-	}
-	return await response.json()
-}
-
 watch(showAd, () => {
 	if (!showAd.value) {
 		hide_ads_window(true)
@@ -738,85 +654,6 @@ const accounts = ref(null)
 provide('accountsCard', accounts)
 
 command_listener(handleCommand)
-notification_listener(handleLiveNotification)
-
-async function markLiveNotificationRead(notification) {
-	try {
-		await tauriApiClient.labrinth.notifications_v2.markAsRead(notification.id)
-	} catch (error) {
-		if (error instanceof ModrinthApiError && error.statusCode === 404) {
-			console.warn(`notification ${notification.id} could not be marked as read`, error)
-			return
-		}
-		throw error
-	}
-}
-
-async function respondToServerInvite(notification, action) {
-	const serverId = notification.body?.server_id
-	if (typeof serverId !== 'string') {
-		throw new Error('Missing server ID for invite notification.')
-	}
-
-	await tauriApiClient.request(`/servers/${serverId}/invites/${action}`, {
-		api: 'archon',
-		version: 1,
-		method: 'POST',
-	})
-	await markLiveNotificationRead(notification)
-
-	return serverId
-}
-
-async function acceptServerInviteNotification(notification) {
-	try {
-		const serverId = await respondToServerInvite(notification, 'accept')
-		await router.push(`/hosting/manage/${encodeURIComponent(serverId)}`)
-		queryClient.invalidateQueries({ queryKey: ['servers'] })
-	} catch (error) {
-		handleError(error)
-	}
-}
-
-async function declineServerInviteNotification(notification) {
-	try {
-		await respondToServerInvite(notification, 'decline')
-	} catch (error) {
-		handleError(error)
-	}
-}
-
-function openServerInviteInviterProfile(inviterName) {
-	if (!inviterName) return
-	openUrl(`${config.siteUrl}/user/${encodeURIComponent(inviterName)}`)
-}
-
-async function handleLiveNotification(notification) {
-	if (notification?.body?.type !== 'server_invite' || notification.read) return
-	if (displayedServerInviteNotifications.has(notification.id)) return
-
-	displayedServerInviteNotifications.add(notification.id)
-
-	const serverName =
-		typeof notification.body.server_name === 'string' ? notification.body.server_name : 'a server'
-	const inviterId = notification.body.invited_by
-	const invitedBy =
-		typeof inviterId === 'string' ? await get_user(inviterId, 'bypass').catch(() => null) : null
-
-	addPopupNotification({
-		title: serverName,
-		autoCloseMs: null,
-		toast: {
-			type: 'server-invite',
-			actorName: invitedBy?.username ?? null,
-			actorAvatarUrl: invitedBy?.avatar_url ?? null,
-			entityName: serverName,
-			onAccept: () => acceptServerInviteNotification(notification),
-			onDecline: () => declineServerInviteNotification(notification),
-			onOpenActor: () => openServerInviteInviterProfile(invitedBy?.username ?? null),
-		},
-	})
-}
 
 async function handleCommand(e) {
 	if (!e) return
