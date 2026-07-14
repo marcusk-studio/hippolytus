@@ -1,0 +1,26 @@
+name: Deploy Launcher CDN Worker
+'on':
+  workflow_dispatch: null
+  push:
+    branches:
+      - main
+    paths:
+      - workers/launcher-cdn/**
+      - .github/workflows/deploy-launcher-cdn-worker.yml
+concurrency:
+  group: '${{ github.workflow }}'
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: '${{ secrets.CLOUDFLARE_API_TOKEN }}'
+          accountId: '${{ secrets.CLOUDFLARE_ACCOUNT_ID }}'
+          workingDirectory: workers/launcher-cdn
+          command: deploy
