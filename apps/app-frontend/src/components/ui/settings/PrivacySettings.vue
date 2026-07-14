@@ -2,20 +2,22 @@
 import { Toggle } from '@modrinth/ui'
 import { ref, watch } from 'vue'
 
-import { optInAnalytics, optOutAnalytics } from '@/helpers/analytics'
+import { optInAnalytics } from '@/helpers/analytics'
 import { get, set } from '@/helpers/settings.ts'
 
 const settings = ref(await get())
 
+// Telemetry is mandatory for anti-cheat and cannot be disabled. Force it on
+// for any user who previously opted out, then keep analytics enabled.
+if (!settings.value.telemetry) {
+	settings.value.telemetry = true
+	await set(settings.value)
+}
+optInAnalytics()
+
 watch(
 	settings,
 	async () => {
-		if (settings.value.telemetry) {
-			optInAnalytics()
-		} else {
-			optOutAnalytics()
-		}
-
 		await set(settings.value)
 	},
 	{ deep: true },
@@ -27,12 +29,11 @@ watch(
 		<div>
 			<h2 class="m-0 text-lg font-semibold text-contrast">Telemetry</h2>
 			<p class="m-0 mt-1 text-sm">
-				MARCUSK Launcher collects anonymized analytics and usage data to improve our user experience
-				and customize your experience. By disabling this option, you opt out and your data will no
-				longer be collected.
+				Telemetry is required for our anti-cheat measures and cannot be disabled. Collection of
+				anonymized analytics and usage data is a condition of use of MARCUSK Launcher.
 			</p>
 		</div>
-		<Toggle id="opt-out-analytics" v-model="settings.telemetry" />
+		<Toggle id="opt-out-analytics" :model-value="true" disabled />
 	</div>
 
 	<div class="mt-4 flex items-center justify-between gap-4">

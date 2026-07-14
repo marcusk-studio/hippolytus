@@ -4,7 +4,6 @@
 			:class="['p-6 pr-2 pb-4', { 'shrink-0': isFixedRender }]"
 			@contextmenu.prevent.stop="(event) => handleRightClick(event)"
 		>
-			<ExportModal ref="exportModal" :instance="instance" />
 			<InstanceSettingsModal
 				:key="instance.id"
 				ref="settingsModal"
@@ -194,10 +193,6 @@
 										},
 									},
 									{
-										id: 'export-mrpack',
-										action: () => exportModal?.show(),
-									},
-									{
 										id: 'create-shortcut',
 										action: () => createShortcut(),
 									},
@@ -207,7 +202,6 @@
 								<template #share-instance> <UserPlusIcon /> Share instance </template>
 								<template #host-a-server> <ServerIcon /> Create a server </template>
 								<template #open-folder> <FolderOpenIcon /> Open folder </template>
-								<template #export-mrpack> <PackageIcon /> Export modpack </template>
 								<template #create-shortcut> <ExternalIcon /> Create shortcut </template>
 							</OverflowMenu>
 						</ButtonStyled>
@@ -250,7 +244,7 @@
 			<template #copy_path> <ClipboardCopyIcon /> Copy path </template>
 			<template #open_folder> <FolderOpenIcon /> Open folder </template>
 			<template #copy_link> <ClipboardCopyIcon /> Copy link </template>
-			<template #open_link> <GlobeIcon /> Open in Modrinth <ExternalIcon /> </template>
+			<template #open_link> <GlobeIcon /> Open in browser <ExternalIcon /> </template>
 			<template #copy_names><EditIcon />Copy names</template>
 			<template #copy_slugs><HashIcon />Copy slugs</template>
 			<template #copy_links><GlobeIcon />Copy links</template>
@@ -280,7 +274,6 @@ import {
 	GlobeIcon,
 	HashIcon,
 	MoreVerticalIcon,
-	PackageIcon,
 	PlayIcon,
 	ServerIcon,
 	SettingsIcon,
@@ -312,7 +305,6 @@ import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import ContextMenu from '@/components/ui/ContextMenu.vue'
-import ExportModal from '@/components/ui/ExportModal.vue'
 import InstanceSettingsModal from '@/components/ui/modal/InstanceSettingsModal.vue'
 import UpdateToPlayModal from '@/components/ui/modal/UpdateToPlayModal.vue'
 import {
@@ -363,7 +355,6 @@ const playing = ref(false)
 const loading = ref(false)
 const subpagePending = ref(false)
 const stopping = ref(false)
-const exportModal = ref<InstanceType<typeof ExportModal>>()
 const updateToPlayModal = ref<InstanceType<typeof UpdateToPlayModal>>()
 
 useLoadingBarToken(subpagePending)
