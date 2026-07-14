@@ -400,7 +400,7 @@ const handleModpackSelection = (projectId) => {
 				>
 					<div v-if="selectedModpack" class="flex-shrink-0 !w-[300px]">
 						<template v-if="installed[selectedModpack.project_id]">
-							<div class="glassmorphism-play">
+							<div class="glassmorphism-play glassmorphism-play--play">
 								<ButtonStyled
 									size="2xlarge"
 									color="transparent"
@@ -558,6 +558,14 @@ img:hover {
 		inset 0 0 20px rgba(27, 217, 106, 0.2);
 }
 
+/* Installed state keeps the distinct original orange for "Play". */
+.glassmorphism-play--play {
+	background: linear-gradient(135deg, #f05b32 0%, #e69154 100%);
+	box-shadow:
+		0 0 40px rgba(234, 88, 12, 0.4),
+		inset 0 0 20px rgba(234, 88, 12, 0.2);
+}
+
 .glassmorphism-play button,
 .glassmorphism-play :deep(button) {
 	background: transparent !important;
@@ -577,6 +585,13 @@ img:hover {
 	box-shadow:
 		0 0 60px rgba(27, 217, 106, 0.6),
 		inset 0 0 30px rgba(27, 217, 106, 0.3);
+}
+
+.glassmorphism-play--play:hover {
+	background: linear-gradient(135deg, #f05b32 0%, #e69154 100%);
+	box-shadow:
+		0 0 60px rgba(234, 88, 12, 0.6),
+		inset 0 0 30px rgba(234, 88, 12, 0.3);
 }
 
 .glassmorphism-play :deep(button):hover {
