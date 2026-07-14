@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.2.4](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.2.3...apps-v2.2.4) (2026-07-14)
+
+
+### 🐛 Bugfixes
+
+* **app:** drop stray jsign Windows signCommand from release config ([#51](https://github.com/marcusk-studio/hippolytus/issues/51)) ([96731b0](https://github.com/marcusk-studio/hippolytus/commit/96731b00c97d5686c1bb460e01b2504e546a62f8))
+* configure app env in release build and clean up ported frontend ([068f337](https://github.com/marcusk-studio/hippolytus/commit/068f3374da50cbd5aedf0b06af5cad3c1e55da83))
+* file scans only consider published files as on-platform ([#6638](https://github.com/marcusk-studio/hippolytus/issues/6638)) ([c831e38](https://github.com/marcusk-studio/hippolytus/commit/c831e38e328328867be622f1f86ec54366d6e42f))
+* **labrinth:** add invited_by field ([#6625](https://github.com/marcusk-studio/hippolytus/issues/6625)) ([fc7be04](https://github.com/marcusk-studio/hippolytus/commit/fc7be043c7b055983f2109af44b09c2b2cb76927))
+* populate featured modpack dropdown; remove Discover/Hosting tabs ([c2c6907](https://github.com/marcusk-studio/hippolytus/commit/c2c69078b251bcf8727e24a4d4381cd16803c4c1))
+* properly select correct databack versions ([#6634](https://github.com/marcusk-studio/hippolytus/issues/6634)) ([6d66aee](https://github.com/marcusk-studio/hippolytus/commit/6d66aee4ec4d4c88f9918f01b7575d0ffe682712))
+* strip runtime filters to be authoratative ([#6635](https://github.com/marcusk-studio/hippolytus/issues/6635)) ([1cce1eb](https://github.com/marcusk-studio/hippolytus/commit/1cce1eb248564b0c4a0418bd8f89004e17a5658f))
+* use tanstack for server pinging ([#6631](https://github.com/marcusk-studio/hippolytus/issues/6631)) ([40b8fb3](https://github.com/marcusk-studio/hippolytus/commit/40b8fb3a4a7cb31401d6429b1e4d989ce3007a2b))
+* warm middleware on server-side ([#6636](https://github.com/marcusk-studio/hippolytus/issues/6636)) ([732bdfc](https://github.com/marcusk-studio/hippolytus/commit/732bdfc79bd4bb20fdcd0f3e145000673c485b4d))
+
+
+### 👽 Miscellaneous
+
+* adopt upstream modrinth/code tree as sync baseline ([f3143e1](https://github.com/marcusk-studio/hippolytus/commit/f3143e1ee554fcfad3863e85d9ec7077a3fe0bc0))
+* re-apply MARCUSK identity to app shell on upstream baseline ([4add95d](https://github.com/marcusk-studio/hippolytus/commit/4add95dbfe152c490e4c7e62931d7c5eab35a062))
+* re-apply MARCUSK launcher frontend on upstream baseline ([d98cc2f](https://github.com/marcusk-studio/hippolytus/commit/d98cc2f4467de879016d898ebfc5f09faef5dfd1))
+* re-apply MARCUSK repo infrastructure on upstream baseline ([7f08625](https://github.com/marcusk-studio/hippolytus/commit/7f08625626dd9f6312bb5e0b4634ca1e1961664d))
+* restore MARCUSK branding assets (icons, backgrounds, logos) ([896f20d](https://github.com/marcusk-studio/hippolytus/commit/896f20d2aebc8fffc3335259c40284f9304be368))
+
 ## [2.2.3](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.2.2...apps-v2.2.3) (2026-07-06)
 
 
