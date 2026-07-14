@@ -38,11 +38,16 @@ function textResponse(body: string, status: number): Response {
  * pipeline uploads `update-manifest.json` to the bucket root and the platform
  * bundles under `releases/<version>/…` (see release-build.yml). The manifest
  * URL-encodes spaces in filenames (`MARCUSK%20Launcher.app.tar.gz`), so each
- * segment is decoded to recover the exact key. Paths escaping the bucket are
- * rejected.
+ * segment is decoded to recover the exact key. Malformed percent-sequences and
+ * paths escaping the bucket are rejected (so they 404 rather than throw).
  */
 function objectKey(pathname: string): string | null {
-	const segments = pathname.split("/").filter(Boolean).map(decodeURIComponent);
+	let segments: string[];
+	try {
+		segments = pathname.split("/").filter(Boolean).map(decodeURIComponent);
+	} catch {
+		return null;
+	}
 	if (segments.length === 0) {
 		return null;
 	}
