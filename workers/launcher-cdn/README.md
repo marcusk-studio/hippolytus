@@ -59,6 +59,12 @@ and expects repository secrets:
     `wrangler.toml`)
 - `CLOUDFLARE_ACCOUNT_ID` (already configured for the R2 upload steps)
 
+Prefilled token page (account `fa3f91b1ed2a3fcde39345772d131913` — switch the
+account in the dropdown if the `launcherbinaries` bucket / `marcuskstudio.live`
+zone live elsewhere):
+
+- https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_routes%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=fa3f91b1ed2a3fcde39345772d131913&zoneId=all&name=launcher-cdn-worker-deploy
+
 The `launcherbinaries` bucket must live in the same Cloudflare account as the
 token, and the `marcuskstudio.live` zone must be active on that account for the
 route to bind.
