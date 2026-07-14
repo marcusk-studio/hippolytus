@@ -134,9 +134,12 @@ jobs:
           APPLE_CERTIFICATE: '${{ secrets.CSC_LINK }}'
           APPLE_CERTIFICATE_PASSWORD: '${{ secrets.CSC_KEY_PASSWORD }}'
           APPLE_SIGNING_IDENTITY: '${{ secrets.APPLE_SIGNING_IDENTITY }}'
-          APPLE_ID: '${{ secrets.APPLE_ID }}'
+          # Notarization intentionally disabled: APPLE_ID and APPLE_PASSWORD are
+          # omitted so Tauri Developer ID-signs the app but skips notarization.
+          # The app stays validly signed (required for in-place auto-updates to
+          # launch), but the fresh-install .dmg will trip Gatekeeper. Restore the
+          # APPLE_ID / APPLE_PASSWORD (app-specific) secrets to re-enable it.
           APPLE_TEAM_ID: '${{ secrets.APPLE_TEAM_ID }}'
-          APPLE_PASSWORD: '${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}'
           TAURI_SIGNING_PRIVATE_KEY: '${{ secrets.TAURI_PRIVATE_KEY }}'
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: '${{ secrets.TAURI_KEY_PASSWORD }}'
       - name: build app
