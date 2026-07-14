@@ -48,6 +48,14 @@ jobs:
     runs-on: '${{ matrix.platform }}'
     steps:
       - uses: actions/checkout@v4
+      # The theseus crate (packages/app-lib) builds a bundled Java component via
+      # Gradle 9.1 in its build.rs, which needs JDK 17+ to run; the runners
+      # default to JDK 11, so pin 17 (the Java toolchain target) for every leg.
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
       - name: Rust setup (mac)
         if: 'startsWith(matrix.platform, ''macos'')'
         uses: dtolnay/rust-toolchain@stable
