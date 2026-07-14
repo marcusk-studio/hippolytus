@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.6](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.2.5...apps-v2.2.6) (2026-07-14)
+
+
+### 🐛 Bugfixes
+
+* **app:** rebrand remaining user-facing Modrinth App strings ([#57](https://github.com/marcusk-studio/hippolytus/issues/57)) ([348c59a](https://github.com/marcusk-studio/hippolytus/commit/348c59a78eb782ff2385e16abb0c48d4292ec90c))
+
 ## [2.2.5](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.2.4...apps-v2.2.5) (2026-07-14)
 
 
