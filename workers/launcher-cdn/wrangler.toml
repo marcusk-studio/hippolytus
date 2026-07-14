@@ -1,0 +1,22 @@
+compatibility_date = "2026-04-22"
+main = "src/index.ts"
+name = "launcher-cdn-router"
+workers_dev = false
+
+[[r2_buckets]]
+binding = "LAUNCHER_BUCKET"
+bucket_name = "launcherbinaries"
+
+# The updater endpoint baked into every shipped launcher
+# (apps/app/tauri-release.conf.json) and the release pipeline's
+# DOWNLOAD_URL_BASE (.github/workflows/release-build.yml) both point at this
+# host, so the route pattern must stay exactly cdn.marcuskstudio.live.
+[[routes]]
+pattern = "cdn.marcuskstudio.live/*"
+zone_name = "marcuskstudio.live"
+
+[vars]
+# update-manifest.json is rewritten on every release, so it must short-cache;
+# release artifacts under releases/<version>/ are immutable and long-cache.
+MANIFEST_CACHE_CONTROL = "public, max-age=30, must-revalidate"
+BLOB_CACHE_CONTROL = "public, max-age=31536000, immutable"
