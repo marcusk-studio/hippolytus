@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.5](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.2.4...apps-v2.2.5) (2026-07-14)
+
+
+### 🐛 Bugfixes
+
+* **app:** correct macOS window title to MARCUSK Launcher ([#54](https://github.com/marcusk-studio/hippolytus/issues/54)) ([af5c5c7](https://github.com/marcusk-studio/hippolytus/commit/af5c5c7884546e30b8d2fff6535843dae4c48478))
+
 ## [2.2.4](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.2.3...apps-v2.2.4) (2026-07-14)
 
 
