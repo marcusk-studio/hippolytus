@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { PlusIcon } from '@modrinth/assets'
-import { ButtonStyled, injectNotificationManager } from '@modrinth/ui'
-import { inject, onUnmounted, ref, shallowRef } from 'vue'
+import { injectNotificationManager } from '@modrinth/ui'
+import { onUnmounted, shallowRef } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { NewInstanceImage } from '@/assets/icons'
@@ -10,21 +9,12 @@ import { list } from '@/helpers/instance'
 import { useBreadcrumbs } from '@/store/breadcrumbs.js'
 
 const { handleError } = injectNotificationManager()
-const showCreationModal = inject('showCreationModal')
 const route = useRoute()
 const breadcrumbs = useBreadcrumbs()
 
 breadcrumbs.setRootContext({ name: 'Library', link: route.path })
 
 const instances = shallowRef(await list().catch(handleError))
-
-const offline = ref(!navigator.onLine)
-window.addEventListener('offline', () => {
-	offline.value = true
-})
-window.addEventListener('online', () => {
-	offline.value = false
-})
 
 const unlistenInstance = await instance_listener(async () => {
 	instances.value = await list().catch(handleError)
@@ -45,13 +35,7 @@ onUnmounted(() => {
 					<NewInstanceImage />
 				</div>
 				<h3>No instances found</h3>
-				<p class="no-instance-description">Create your first Minecraft instance to get started</p>
-				<ButtonStyled color="brand">
-					<button :disabled="offline" @click="showCreationModal?.()">
-						<PlusIcon />
-						Create new instance
-					</button>
-				</ButtonStyled>
+				<p class="no-instance-description">Install a modpack from the Home page to get started</p>
 			</div>
 		</div>
 	</div>

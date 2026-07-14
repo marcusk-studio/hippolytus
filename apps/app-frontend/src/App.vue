@@ -15,7 +15,6 @@ import {
 	LeftArrowIcon,
 	LibraryIcon,
 	NotepadTextIcon,
-	PlusIcon,
 	RefreshCwIcon,
 	RightArrowIcon,
 	SettingsIcon,
@@ -1447,13 +1446,6 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 			<suspense>
 				<QuickInstanceSwitcher />
 			</suspense>
-			<NavButton
-				v-tooltip.right="'Create new instance'"
-				:to="() => installationModal?.show()"
-				:disabled="offline"
-			>
-				<PlusIcon />
-			</NavButton>
 			<div class="flex flex-grow"></div>
 			<NavButton v-tooltip.right="'News'" :to="() => updatesModal?.show()">
 				<BellIcon />

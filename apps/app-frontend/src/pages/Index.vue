@@ -550,12 +550,12 @@ img:hover {
 .glassmorphism-play {
 	position: relative;
 	border-radius: 12px;
-	background: linear-gradient(135deg, #f05b32 0%, #e69154 100%);
+	background: linear-gradient(135deg, #1bd96a 0%, #17b357 100%);
 	backdrop-filter: blur(16px);
 	-webkit-backdrop-filter: blur(16px);
 	box-shadow:
-		0 0 40px rgba(234, 88, 12, 0.4),
-		inset 0 0 20px rgba(234, 88, 12, 0.2);
+		0 0 40px rgba(27, 217, 106, 0.4),
+		inset 0 0 20px rgba(27, 217, 106, 0.2);
 }
 
 .glassmorphism-play button,
@@ -573,10 +573,10 @@ img:hover {
 }
 
 .glassmorphism-play:hover {
-	background: linear-gradient(135deg, #f05b32 0%, #e69154 100%);
+	background: linear-gradient(135deg, #1bd96a 0%, #17b357 100%);
 	box-shadow:
-		0 0 60px rgba(234, 88, 12, 0.6),
-		inset 0 0 30px rgba(234, 88, 12, 0.3);
+		0 0 60px rgba(27, 217, 106, 0.6),
+		inset 0 0 30px rgba(27, 217, 106, 0.3);
 }
 
 .glassmorphism-play :deep(button):hover {

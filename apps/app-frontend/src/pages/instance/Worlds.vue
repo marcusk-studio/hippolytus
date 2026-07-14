@@ -41,17 +41,6 @@
 							{{ formatMessage(messages.addServer) }}
 						</button>
 					</ButtonStyled>
-					<ButtonStyled color="brand">
-						<button
-							class="!h-10 flex items-center gap-2"
-							@click="
-								router.push({ path: '/browse/server', query: { i: instance.id, from: 'worlds' } })
-							"
-						>
-							<CompassIcon class="size-5" />
-							<span>{{ formatMessage(messages.browseServers) }}</span>
-						</button>
-					</ButtonStyled>
 				</div>
 			</div>
 			<div class="flex flex-wrap items-center justify-between gap-2">
@@ -128,23 +117,12 @@
 						{{ formatMessage(messages.addServer) }}
 					</button>
 				</ButtonStyled>
-				<ButtonStyled color="brand">
-					<button
-						class="!h-10 flex items-center gap-2"
-						@click="
-							router.push({ path: '/browse/server', query: { i: instance.id, from: 'worlds' } })
-						"
-					>
-						<CompassIcon class="size-5" />
-						<span>{{ formatMessage(messages.browseServers) }}</span>
-					</button>
-				</ButtonStyled>
 			</template>
 		</EmptyState>
 	</ReadyTransition>
 </template>
 <script setup lang="ts">
-import { CompassIcon, FilterIcon, PlusIcon, RefreshCwIcon, SearchIcon } from '@modrinth/assets'
+import { FilterIcon, PlusIcon, RefreshCwIcon, SearchIcon } from '@modrinth/assets'
 import {
 	ButtonStyled,
 	commonMessages,
@@ -161,7 +139,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { platform } from '@tauri-apps/plugin-os'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 
 import type ContextMenu from '@/components/ui/ContextMenu.vue'
 import AddServerModal from '@/components/ui/world/modal/AddServerModal.vue'
@@ -213,10 +191,6 @@ const messages = defineMessages({
 		id: 'app.instance.worlds.add-server',
 		defaultMessage: 'Add server',
 	},
-	browseServers: {
-		id: 'app.instance.worlds.browse-servers',
-		defaultMessage: 'Browse servers',
-	},
 	noWorldsHeading: {
 		id: 'app.instance.worlds.no-worlds-heading',
 		defaultMessage: 'No servers or worlds added',
@@ -247,7 +221,6 @@ const { formatMessage } = useVIntl()
 const { handleError } = injectNotificationManager()
 const { playServerProject } = injectServerInstall()
 const route = useRoute()
-const router = useRouter()
 
 const addServerModal = ref<InstanceType<typeof AddServerModal>>()
 const editServerModal = ref<InstanceType<typeof EditServerModal>>()
