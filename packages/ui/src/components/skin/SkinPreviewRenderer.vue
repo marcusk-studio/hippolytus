@@ -6,6 +6,7 @@
 		@click="onCanvasClick"
 	>
 		<div
+			v-if="showControlsHint"
 			class="absolute left-0 right-0 z-10 flex items-center justify-center pointer-events-none"
 			:style="previewControlsPositionStyle"
 		>
@@ -147,6 +148,7 @@ const props = withDefaults(
 		fov?: number
 		initialRotation?: number
 		animationConfig?: SkinPreviewAnimationConfig
+		showControlsHint?: boolean
 	}>(),
 	{
 		variant: 'CLASSIC',
@@ -157,6 +159,7 @@ const props = withDefaults(
 		lockFit: true,
 		framing: 'page',
 		fitZoom: 1,
+		showControlsHint: true,
 		animationConfig: () => ({
 			baseAnimation: 'idle',
 			randomAnimations: ['idle_sub_1', 'idle_sub_2', 'idle_sub_3'],

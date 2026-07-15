@@ -71,6 +71,7 @@ import UpdateToPlayModal from '@/components/ui/modal/UpdateToPlayModal.vue'
 import NavButton from '@/components/ui/NavButton.vue'
 import PrideFundraiserBanner from '@/components/ui/PrideFundraiserBanner.vue'
 import QuickInstanceSwitcher from '@/components/ui/QuickInstanceSwitcher.vue'
+import SidebarSkinPreview from '@/components/ui/skin/SidebarSkinPreview.vue'
 import SplashScreen from '@/components/ui/SplashScreen.vue'
 import UpdatesModal from '@/components/ui/UpdatesModal.vue'
 import WindowControls from '@/components/ui/WindowControls.vue'
@@ -140,6 +141,8 @@ const forceSidebar = computed(
 	() => route.path.startsWith('/browse') || route.path.startsWith('/project'),
 )
 const sidebarVisible = computed(() => sidebarToggled.value || forceSidebar.value)
+/** The home page paints a full-bleed background, so the sidebar overlays it instead of taking a column. */
+const sidebarFloating = computed(() => sidebarVisible.value && route.path === '/')
 const prideFundraiserEnabled = computed(
 	() => themeStore.getFeatureFlag('pride_fundraiser') && Date.now() < PRIDE_FUNDRAISER_END_DATE,
 )
@@ -1359,6 +1362,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 		class="app-contents"
 		:class="{
 			'sidebar-enabled': sidebarVisible,
+			'sidebar-floating': sidebarFloating,
 			'disable-advanced-rendering': !themeStore.advancedRendering,
 		}"
 	>
@@ -1390,7 +1394,9 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 				:style="{
 					top: 'calc(var(--top-bar-height))',
 					left: 'calc(var(--left-bar-width))',
-					width: 'calc(100% - var(--left-bar-width) - var(--right-bar-width))',
+					width: sidebarFloating
+						? 'calc(100% - var(--left-bar-width))'
+						: 'calc(100% - var(--left-bar-width) - var(--right-bar-width))',
 				}"
 			>
 				<LoadingBar position="absolute" />
@@ -1415,14 +1421,14 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 				id="background-teleport-target"
 				class="absolute h-full -z-10 rounded-tl-[--radius-xl] overflow-hidden"
 				:style="{
-					width: 'calc(100% - var(--right-bar-width))',
+					width: sidebarFloating ? '100%' : 'calc(100% - var(--right-bar-width))',
 				}"
 			></div>
 			<Admonition
 				v-if="criticalErrorMessage"
 				type="critical"
 				:header="criticalErrorMessage.header"
-				class="m-6 mb-0"
+				class="mt-6 mb-0 ml-6 mr-[calc(1.5rem+var(--floating-sidebar-inset))]"
 			>
 				<div
 					class="markdown-body text-primary"
@@ -1433,7 +1439,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 				v-if="authUnreachable"
 				type="warning"
 				:header="formatMessage(messages.authUnreachableHeader)"
-				class="m-6 mb-0"
+				class="mt-6 mb-0 ml-6 mr-[calc(1.5rem+var(--floating-sidebar-inset))]"
 			>
 				{{ formatMessage(messages.authUnreachableBody) }}
 			</Admonition>
@@ -1466,7 +1472,9 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 			>
 				<div id="sidebar-teleport-target" class="sidebar-teleport-content"></div>
 				<div class="sidebar-default-content" :class="{ 'sidebar-enabled': sidebarVisible }">
-					<div class="p-4 border-0 border-b-[1px] border-[--brand-gradient-border] border-solid">
+					<div
+						class="sidebar-account-panel p-4 border-0 border-b-[1px] border-[--brand-gradient-border] border-solid"
+					>
 						<h3 class="text-base text-contrast font-semibold m-0">Playing as</h3>
 						<suspense>
 							<AccountsCard ref="accounts" />
@@ -1476,6 +1484,11 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 						v-if="prideFundraiserEnabled"
 						class="p-4 border-0 border-b-[1px] border-[--brand-gradient-border] border-solid"
 					/>
+					<div v-if="sidebarFloating" class="sidebar-skin-preview">
+						<suspense>
+							<SidebarSkinPreview />
+						</suspense>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -1541,6 +1554,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 	--top-bar-height: 3rem;
 	--left-bar-width: 4rem;
 	--right-bar-width: 300px;
+	--floating-sidebar-inset: 0px;
 }
 
 .app-grid-layout {
@@ -1589,6 +1603,37 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 	&.sidebar-enabled {
 		grid-template-columns: 1fr 300px;
 	}
+
+	&.sidebar-floating {
+		grid-template-columns: 1fr 0px;
+		--floating-sidebar-inset: var(--right-bar-width);
+	}
+}
+
+.sidebar-floating .app-sidebar {
+	position: absolute;
+	top: 0;
+	right: 0;
+	z-index: 5;
+	height: auto;
+	background: transparent;
+	border-left-color: transparent;
+}
+
+.sidebar-floating .app-sidebar::before {
+	box-shadow: none;
+}
+
+/* The gradient stops with the account panel so the skin below it sits over the artwork. */
+.sidebar-floating .sidebar-account-panel {
+	background: var(--brand-gradient-bg);
+	border-left: 1px solid var(--brand-gradient-border);
+	border-bottom-left-radius: var(--radius-xl);
+}
+
+.sidebar-skin-preview {
+	height: 22rem;
+	pointer-events: auto;
 }
 
 .loading-indicator-container {
