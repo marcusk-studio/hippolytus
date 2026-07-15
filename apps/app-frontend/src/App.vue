@@ -356,10 +356,17 @@ async function setupApp() {
 	// it here at startup. Doing it only in the privacy settings tab would leave
 	// anyone who previously opted out with telemetry off until they happened to
 	// open that tab.
+	// Persisting is best-effort: if the write fails we still opt in below, so a
+	// failed settings write can't take analytics down with it (and the flag gets
+	// corrected on the next launch).
 	if (!telemetry) {
-		const settings = await getSettings()
-		settings.telemetry = true
-		await setSettings(settings)
+		try {
+			const settings = await getSettings()
+			settings.telemetry = true
+			await setSettings(settings)
+		} catch (error) {
+			console.error('Failed to persist mandatory telemetry setting', error)
+		}
 	}
 
 	// optInAnalytics() rather than initAnalytics(): PostHog persists its own
