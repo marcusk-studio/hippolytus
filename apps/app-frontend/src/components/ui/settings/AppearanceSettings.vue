@@ -12,7 +12,6 @@ const { formatMessage } = useVIntl()
 
 const worldsInHomeFlag: FeatureFlag = 'worlds_in_home'
 const skipNonEssentialWarningsFlag: FeatureFlag = 'skip_non_essential_warnings'
-const skipUnknownPackWarningFlag: FeatureFlag = 'skip_unknown_pack_warning'
 const showPlayTimeFlag: FeatureFlag = 'show_instance_play_time'
 
 const messages = defineMessages({
@@ -76,23 +75,6 @@ const messages = defineMessages({
 	jumpBackIntoWorldsDescription: {
 		id: 'app.appearance-settings.jump-back-into-worlds.description',
 		defaultMessage: 'Includes recent worlds in the "Jump back in" section on the Home page.',
-	},
-	toggleSidebarTitle: {
-		id: 'app.appearance-settings.toggle-sidebar.title',
-		defaultMessage: 'Toggle sidebar',
-	},
-	toggleSidebarDescription: {
-		id: 'app.appearance-settings.toggle-sidebar.description',
-		defaultMessage: 'Enables the ability to toggle the sidebar.',
-	},
-	unknownPackWarningTitle: {
-		id: 'app.appearance-settings.unknown-pack-warning.title',
-		defaultMessage: 'Warn me before installing unknown modpacks',
-	},
-	unknownPackWarningDescription: {
-		id: 'app.appearance-settings.unknown-pack-warning.description',
-		defaultMessage:
-			"If you attempt to install a Modrinth Pack file (.mrpack) that isn't hosted on Modrinth, we'll make sure you understand the risks before installing it.",
 	},
 	skipNonEssentialWarningsTitle: {
 		id: 'app.appearance-settings.skip-non-essential-warnings.title',
@@ -253,26 +235,6 @@ watch(
 	<div class="mt-6 flex items-center justify-between gap-4">
 		<div>
 			<h2 class="m-0 text-lg font-semibold text-contrast">
-				{{ formatMessage(messages.unknownPackWarningTitle) }}
-			</h2>
-			<p class="m-0 mt-1">{{ formatMessage(messages.unknownPackWarningDescription) }}</p>
-		</div>
-		<Toggle
-			:model-value="!themeStore.getFeatureFlag(skipUnknownPackWarningFlag)"
-			@update:model-value="
-				(e) => {
-					const warnBeforeUnknownPackInstall = !!e
-					const skipUnknownPackWarning = !warnBeforeUnknownPackInstall
-					themeStore.featureFlags[skipUnknownPackWarningFlag] = skipUnknownPackWarning
-					settings.feature_flags[skipUnknownPackWarningFlag] = skipUnknownPackWarning
-				}
-			"
-		/>
-	</div>
-
-	<div class="mt-6 flex items-center justify-between gap-4">
-		<div>
-			<h2 class="m-0 text-lg font-semibold text-contrast">
 				{{ formatMessage(messages.skipNonEssentialWarningsTitle) }}
 			</h2>
 			<p class="m-0 mt-1">{{ formatMessage(messages.skipNonEssentialWarningsDescription) }}</p>
@@ -284,25 +246,6 @@ watch(
 					const newValue = !themeStore.getFeatureFlag(skipNonEssentialWarningsFlag)
 					themeStore.featureFlags[skipNonEssentialWarningsFlag] = newValue
 					settings.feature_flags[skipNonEssentialWarningsFlag] = newValue
-				}
-			"
-		/>
-	</div>
-
-	<div class="mt-6 flex items-center justify-between">
-		<div>
-			<h2 class="m-0 text-lg font-semibold text-contrast">
-				{{ formatMessage(messages.toggleSidebarTitle) }}
-			</h2>
-			<p class="m-0 mt-1">{{ formatMessage(messages.toggleSidebarDescription) }}</p>
-		</div>
-		<Toggle
-			id="toggle-sidebar"
-			:model-value="settings.toggle_sidebar"
-			@update:model-value="
-				(e) => {
-					settings.toggle_sidebar = !!e
-					themeStore.toggleSidebar = settings.toggle_sidebar
 				}
 			"
 		/>

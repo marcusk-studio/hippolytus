@@ -5,17 +5,10 @@ import {
 	FolderOpenIcon,
 	PlayIcon,
 	PlusIcon,
-	SortAscIcon,
 	StopCircleIcon,
 	TrashIcon,
 } from '@modrinth/assets'
-import {
-	Accordion,
-	DropdownSelect,
-	formatLoader,
-	injectNotificationManager,
-	useVIntl,
-} from '@modrinth/ui'
+import { Accordion, formatLoader, injectNotificationManager, useVIntl } from '@modrinth/ui'
 import { useStorage } from '@vueuse/core'
 import dayjs from 'dayjs'
 import { computed, ref } from 'vue'
@@ -268,27 +261,6 @@ const filteredResults = computed(() => {
 </script>
 <template>
 	<div class="grid-display-container">
-		<div class="controls-section">
-			<div class="controls-row">
-				<div class="filter-section">
-					<div class="filter-group">
-						<SortAscIcon class="filter-icon" />
-						<DropdownSelect
-							v-slot="{ selected }"
-							v-model="state.sortBy"
-							name="Sort Dropdown"
-							class="filter-dropdown"
-							:options="['Name', 'Last played', 'Date created', 'Date modified', 'Game version']"
-							placeholder="Sort by..."
-						>
-							<span class="filter-label">Sort: </span>
-							<span class="filter-value">{{ selected }}</span>
-						</DropdownSelect>
-					</div>
-				</div>
-			</div>
-		</div>
-
 		<div class="instances-container">
 			<Accordion
 				v-for="instanceSection in Array.from(filteredResults, ([key, value]) => ({
@@ -337,71 +309,6 @@ const filteredResults = computed(() => {
 	flex-direction: column;
 	gap: 1rem;
 	height: 100%;
-}
-
-.controls-section {
-	display: flex;
-	flex-direction: column;
-	gap: 0.75rem;
-	padding: 0.75rem;
-	background: #0a0101;
-	border-radius: 1rem;
-	box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-	flex-shrink: 0;
-}
-
-.controls-row {
-	display: flex;
-	gap: 1rem;
-	align-items: center;
-	flex-wrap: wrap;
-}
-
-.filter-section {
-	display: flex;
-	gap: 0.5rem;
-	flex-wrap: wrap;
-	flex-shrink: 0;
-	height: 100%;
-
-	.filter-group {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.5rem 0.75rem;
-		background: rgba(255, 255, 255, 0.1);
-		border-radius: 0.5rem;
-		transition: all 0.2s ease;
-		max-width: 250px;
-		height: 100%;
-
-		&:hover {
-			background: rgba(255, 255, 255, 0.15);
-		}
-
-		.filter-icon {
-			width: 1rem;
-			height: 1rem;
-			color: var(--color-secondary);
-		}
-
-		.filter-dropdown {
-			min-width: 5rem;
-			max-width: 150px;
-		}
-
-		.filter-label {
-			font-weight: 600;
-			color: var(--color-contrast);
-			font-size: 0.875rem;
-		}
-
-		.filter-value {
-			font-weight: 500;
-			color: var(--color-brand);
-			font-size: 0.875rem;
-		}
-	}
 }
 
 .instances-container {
@@ -463,25 +370,6 @@ const filteredResults = computed(() => {
 
 // Responsive adjustments
 @media (max-width: 768px) {
-	.controls-section {
-		padding: 0.5rem;
-	}
-
-	.controls-row {
-		flex-direction: column;
-		align-items: stretch;
-		gap: 0.75rem;
-	}
-
-	.filter-section {
-		justify-content: center;
-
-		.filter-group {
-			width: 100%;
-			max-width: 250px;
-		}
-	}
-
 	.instances-grid {
 		grid-template-columns: 1fr;
 		gap: 1rem;
@@ -495,14 +383,6 @@ const filteredResults = computed(() => {
 @media (max-width: 480px) {
 	.grid-display-container {
 		gap: 0.75rem;
-	}
-
-	.controls-section {
-		gap: 0.5rem;
-	}
-
-	.filter-group {
-		padding: 0.25rem 0.375rem !important;
 	}
 }
 </style>
