@@ -238,3 +238,52 @@ textarea {
 		opacity: 0.6;
 	}
 }
+
+// Shared tactile button treatment: a gradient face with a solid bottom lip
+// that presses down on click. Wrap a button in .tactile-button, and add
+// .tactile-button--orange for the installed/sign-in colour.
+.tactile-button {
+	--tactile-top: #23c66c;
+	--tactile-bot: #15a355;
+	--tactile-sh: 33, 163, 85;
+	--tactile-deep: #0f7a41;
+	position: relative;
+	border-radius: 14px;
+	background: linear-gradient(180deg, var(--tactile-top), var(--tactile-bot));
+	box-shadow:
+		0 5px 0 var(--tactile-deep),
+		0 14px 22px -8px rgba(var(--tactile-sh), 0.5),
+		inset 0 1px 0 rgba(255, 255, 255, 0.35);
+	transition:
+		transform 0.14s ease,
+		box-shadow 0.18s ease,
+		filter 0.18s ease;
+}
+
+.tactile-button--orange {
+	--tactile-top: #f2703a;
+	--tactile-bot: #e05f2b;
+	--tactile-sh: 224, 95, 43;
+	--tactile-deep: #b8481d;
+}
+
+.tactile-button button {
+	background: transparent !important;
+	color: #fff !important;
+}
+
+.tactile-button svg {
+	stroke: #fff !important;
+}
+
+.tactile-button:hover {
+	filter: brightness(1.05);
+}
+
+.tactile-button:active {
+	transform: translateY(4px);
+	box-shadow:
+		0 1px 0 var(--tactile-deep),
+		0 6px 12px -6px rgba(var(--tactile-sh), 0.5),
+		inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
