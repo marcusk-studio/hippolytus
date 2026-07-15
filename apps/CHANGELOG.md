@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.7](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.2.6...apps-v2.2.7) (2026-07-15)
+
+
+### 🐛 Bugfixes
+
+* **app:** restore add_news_fields migration timestamp to unbrick updates ([#59](https://github.com/marcusk-studio/hippolytus/issues/59)) ([58b614c](https://github.com/marcusk-studio/hippolytus/commit/58b614c6b882c705df329febc2d94e12e6f33c1c))
+
 ## [2.2.6](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.2.5...apps-v2.2.6) (2026-07-14)
 
 
