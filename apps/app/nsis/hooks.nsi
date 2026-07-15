@@ -63,6 +63,13 @@ Var /GLOBAL OldInstallDir
             ; users with the old install gone and the new one never installed.
             ReadRegStr $R2 SHCTX "${UNINSTKEY}" "UninstallString"
             ${If} $R2 != ""
+                ; Never abort with a success error level. The old uninstaller can
+                ; report 0 while leaving its registration behind, and the updater
+                ; runs us silently, so exiting 0 here would look like an applied
+                ; update. (Empty/non-numeric $3 compares as 0 too.)
+                ${If} $3 = 0
+                    StrCpy $3 1
+                ${EndIf}
                 SetErrorLevel $3
                 ${IfNot} ${Silent}
                     MessageBox MB_ICONEXCLAMATION|MB_OK "Failed to uninstall old global installation"
