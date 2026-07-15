@@ -1,0 +1,73 @@
+name: NSIS hook test
+'on':
+  push:
+    branches:
+      - claude/nsis-hook-test
+jobs:
+  migrate:
+    name: 'perMachine 2.2.2 -> currentUser 2.4.0'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: State helper
+        shell: pwsh
+        run: |
+          @'
+          function Show-State($label) {
+            Write-Host "===== $label ====="
+            Write-Host ("  ProgramFiles install : " + (Test-Path 'C:\Program Files\MARCUSK Launcher'))
+            Write-Host ("  LocalAppData install : " + (Test-Path "$env:LOCALAPPDATA\MARCUSK Launcher"))
+            Write-Host ("  AllUsers StartMenu   : " + (Test-Path 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\MARCUSK Launcher.lnk'))
+            foreach ($root in @('HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall','HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall')) {
+              Get-ChildItem $root -ErrorAction SilentlyContinue | ForEach-Object {
+                $dn = (Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue).DisplayName
+                if ($dn -like '*MARCUSK*') {
+                  $us = (Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue).UninstallString
+                  Write-Host "  RegKey($root): $dn"
+                  Write-Host "     UninstallString: $us"
+                }
+              }
+            }
+          }
+          '@ | Out-File -FilePath state.ps1 -Encoding utf8
+
+      - name: Install OLD 2.2.2 (perMachine)
+        shell: pwsh
+        run: |
+          . .\state.ps1
+          curl.exe -sSL -o old.exe "https://cdn.marcuskstudio.live/releases/2.2.2/windows-latest/release/bundle/nsis/MARCUSK%20Launcher_2.2.2_x64-setup.exe"
+          Write-Host "downloaded old.exe: $((Get-Item old.exe).Length) bytes"
+          $p = Start-Process -FilePath .\old.exe -ArgumentList '/S' -PassThru
+          if (-not $p.WaitForExit(300000)) { Write-Host "!! OLD INSTALLER TIMED OUT (blocking dialog?)"; $p.Kill() }
+          Write-Host "old installer exit code: $($p.ExitCode)"
+          Start-Sleep -Seconds 5
+          Show-State "AFTER installing 2.2.2 (expect perMachine present)"
+
+      - name: Run NEW 2.4.0 installer (the perMachine -> currentUser migration)
+        shell: pwsh
+        run: |
+          . .\state.ps1
+          curl.exe -sSL -o new.exe "https://cdn.marcuskstudio.live/releases/2.4.0/windows-latest/release/bundle/nsis/MARCUSK%20Launcher_2.4.0_x64-setup.exe"
+          Write-Host "downloaded new.exe: $((Get-Item new.exe).Length) bytes"
+          $p = Start-Process -FilePath .\new.exe -ArgumentList '/S' -PassThru
+          $done = $p.WaitForExit(300000)
+          if (-not $done) {
+            Write-Host "!! NEW INSTALLER TIMED OUT after 5min - almost certainly blocked on a MessageBox during a /S silent install"
+            $p.Kill()
+          } else {
+            Write-Host "new installer exit code: $($p.ExitCode)"
+          }
+          Start-Sleep -Seconds 5
+          Show-State "AFTER running 2.4.0 installer"
+
+      - name: Verdict
+        shell: pwsh
+        run: |
+          . .\state.ps1
+          Show-State "FINAL"
+          $new = Test-Path "$env:LOCALAPPDATA\MARCUSK Launcher"
+          $old = Test-Path 'C:\Program Files\MARCUSK Launcher'
+          Write-Host ""
+          if ($new) { Write-Host "PASS: new per-user install present" }
+          elseif (-not $old) { Write-Host "BUG REPRODUCED: old uninstalled AND new NOT installed (Baylem's state)" }
+          else { Write-Host "INCONCLUSIVE: old still present, new absent" }
