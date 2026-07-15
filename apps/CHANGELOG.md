@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.0](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.2.7...apps-v2.3.0) (2026-07-15)
+
+
+### ✨ Features
+
+* **app:** tailor launcher UI for managed packs, remove hosting, redesign Play button ([#61](https://github.com/marcusk-studio/hippolytus/issues/61)) ([adac965](https://github.com/marcusk-studio/hippolytus/commit/adac965d69f33e0b6ddca67f5af8445583d4feb2))
+
 ## [2.2.7](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.2.6...apps-v2.2.7) (2026-07-15)
 
 
