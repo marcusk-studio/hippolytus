@@ -1,13 +1,13 @@
 name: Release
 'on':
   workflow_dispatch: null
+  # No paths filter: release-please only cuts a release for releasable commits,
+  # so running it on every push costs one short job and removes the trap where a
+  # fix outside apps/ packages/ .github/ (rust-toolchain.toml, .gitattributes)
+  # silently never triggered a release.
   push:
     branches:
       - main
-    paths:
-      - apps/**
-      - packages/**
-      - .github/**
 concurrency:
   group: '${{ github.workflow }}'
   cancel-in-progress: false

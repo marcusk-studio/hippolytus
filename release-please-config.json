@@ -5,6 +5,7 @@
         "component": "apps",
         "release-type": "simple",
         "changelog-path": "apps/CHANGELOG.md",
+        "last-release-sha": "8c5e8427b782e3b736f87faae9802a4c3e6833d9",
         "prerelease": false,
         "include-v-in-tag": true,
         "pull-request-header": "Hella Better than Helios 🚀",
