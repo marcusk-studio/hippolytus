@@ -351,7 +351,7 @@
     "message": "Vanilla"
   },
   "app.instance.worlds.no-worlds-description": {
-    "message": "Add a server or browse to get started"
+    "message": "Add a server to get started"
   },
   "app.instance.worlds.no-worlds-heading": {
     "message": "No servers or worlds added"

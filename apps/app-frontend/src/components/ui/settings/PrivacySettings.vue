@@ -30,7 +30,7 @@ watch(
 			<h2 class="m-0 text-lg font-semibold text-contrast">Telemetry</h2>
 			<p class="m-0 mt-1 text-sm">
 				Telemetry is required for our anti-cheat measures and cannot be disabled. Collection of
-				anonymized analytics and usage data is a condition of use of MARCUSK Launcher.
+				analytics and usage data is a condition of use of MARCUSK Launcher.
 			</p>
 		</div>
 		<Toggle id="opt-out-analytics" :model-value="true" disabled />
