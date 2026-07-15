@@ -4,7 +4,7 @@ name = "theseus_gui"
 version = "1.0.0-local"
 edition.workspace = true
 description = "The MARCUSK Launcher is a desktop application for managing your Minecraft mods"
-repository = "https://github.com/modrinth/code/apps/app/"
+repository = "https://github.com/marcusk-studio/hippolytus"
 license = "GPL-3.0-only"
 
 [dependencies]
