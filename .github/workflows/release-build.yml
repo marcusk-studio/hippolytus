@@ -193,7 +193,6 @@ jobs:
       - build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
       - name: Get version from release-please
         id: get_version
         env:
