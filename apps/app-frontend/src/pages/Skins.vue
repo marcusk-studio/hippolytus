@@ -2,7 +2,6 @@
 import {
 	CheckIcon,
 	EditIcon,
-	ExcitedRinthbot,
 	EyeIcon,
 	LogInIcon,
 	RotateCounterClockwiseIcon,
@@ -162,10 +161,6 @@ const messages = defineMessages({
 	editSkinButton: {
 		id: 'app.skins.preview.edit-button',
 		defaultMessage: 'Edit skin',
-	},
-	excitedRinthbotAlt: {
-		id: 'app.skins.sign-in.rinthbot-alt',
-		defaultMessage: 'Excited Modrinth Bot',
 	},
 	signInTitle: {
 		id: 'app.skins.sign-in.title',
@@ -1111,36 +1106,20 @@ await loadSkins()
 		<div
 			class="relative mx-auto flex w-full max-w-xl flex-col gap-5 rounded-lg bg-bg-raised p-7 shadow-lg"
 		>
-			<img
-				:src="ExcitedRinthbot"
-				:alt="formatMessage(messages.excitedRinthbotAlt)"
-				class="absolute -top-28 right-8 md:right-20 h-28 w-auto"
-			/>
-			<div
-				class="absolute top-0 left-0 w-full h-[1px] opacity-40 bg-gradient-to-r from-transparent via-green-500 to-transparent"
-				style="
-					background: linear-gradient(
-						to right,
-						transparent 2rem,
-						var(--color-green) calc(100% - 13rem),
-						var(--color-green) calc(100% - 5rem),
-						transparent calc(100% - 2rem)
-					);
-				"
-			></div>
-
 			<div class="flex flex-col gap-5">
 				<h1 class="text-3xl font-extrabold m-0">{{ formatMessage(messages.signInTitle) }}</h1>
 				<p class="text-lg m-0">
 					{{ formatMessage(messages.signInDescription) }}
 				</p>
-				<ButtonStyled v-show="accountsCard" color="brand" :disabled="accountsCard.loginDisabled">
-					<button :disabled="accountsCard.loginDisabled" @click="login">
-						<LogInIcon v-if="!accountsCard.loginDisabled" />
-						<SpinnerIcon v-else class="animate-spin" />
-						{{ formatMessage(messages.signInButton) }}
-					</button>
-				</ButtonStyled>
+				<div v-show="accountsCard" class="tactile-button tactile-button--orange">
+					<ButtonStyled type="transparent" :disabled="accountsCard.loginDisabled">
+						<button :disabled="accountsCard.loginDisabled" @click="login">
+							<LogInIcon v-if="!accountsCard.loginDisabled" />
+							<SpinnerIcon v-else class="animate-spin" />
+							{{ formatMessage(messages.signInButton) }}
+						</button>
+					</ButtonStyled>
+				</div>
 			</div>
 		</div>
 	</div>
