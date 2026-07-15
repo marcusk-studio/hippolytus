@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.1](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.3.0...apps-v2.3.1) (2026-07-15)
+
+
+### 👽 Miscellaneous
+
+* release 2.3.1 ([531b25f](https://github.com/marcusk-studio/hippolytus/commit/531b25f07be9d654dfecc88aabcffde32c3d6fad))
+
 ## [2.3.0](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.2.7...apps-v2.3.0) (2026-07-15)
 
 
