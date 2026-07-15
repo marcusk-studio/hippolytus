@@ -30,7 +30,7 @@
 					"
 				/>
 				<div class="flex flex-col items-start w-full min-w-0 justify-center">
-					<span class="text-xs font-light text-gray-600 leading-none">{{
+					<span class="text-xs font-medium text-gray-700 leading-none">{{
 						formatMessage(messages.playingAs)
 					}}</span>
 					<span class="truncate w-full text-left text-lg font-bold leading-none text-black">{{
@@ -50,14 +50,14 @@
 							v-if="selectedAccount && selectedAccount.profile.id === account.profile.id"
 							class="w-5 h-5 text-brand shrink-0"
 						/>
-						<RadioButtonIcon v-else class="w-5 h-5 text-secondary shrink-0" />
+						<RadioButtonIcon v-else class="w-5 h-5 text-gray-400 shrink-0" />
 						<Avatar :src="getAccountAvatarUrl(account)" size="24px" />
 						<p
 							class="m-0 truncate min-w-0"
 							:class="
 								selectedAccount && selectedAccount.profile.id === account.profile.id
-									? 'text-contrast font-semibold'
-									: 'text-primary'
+									? 'text-gray-900 font-semibold'
+									: 'text-gray-800'
 							"
 						>
 							{{ account.profile.name }}

@@ -400,30 +400,30 @@ const handleModpackSelection = (projectId) => {
 				>
 					<div v-if="selectedModpack" class="flex-shrink-0 !w-[300px]">
 						<template v-if="installed[selectedModpack.project_id]">
-							<div class="glassmorphism-play">
+							<div class="glassmorphism-play glassmorphism-play--play">
 								<ButtonStyled
 									size="2xlarge"
 									color="transparent"
-									class="!h-[300px] !w-[300px] !min-w-[300px]"
+									class="!h-[64px] !w-[300px] !min-w-[300px]"
 								>
 									<button
 										:disabled="playing[selectedModpack.project_id]"
-										class="flex flex-col items-center justify-center gap-3 !h-full !w-full text-3xl font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed"
+										class="flex flex-row items-center justify-center gap-3 !h-full !w-full text-xl font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed"
 										@click="
 											selectedModpackHasUpdate
 												? updateModpack(selectedModpack.project_id)
 												: play(selectedModpack.project_id)
 										"
 									>
-										<div class="flex items-center justify-center w-16 h-16">
+										<div class="flex items-center justify-center w-8 h-8">
 											<template v-if="updating[selectedModpack.project_id]">
 												<span class="loader"></span>
 											</template>
 											<template v-else-if="selectedModpackHasUpdate">
-												<DownloadIcon class="w-16 h-16" />
+												<DownloadIcon class="w-8 h-8" />
 											</template>
 											<template v-else>
-												<PlayIcon class="w-16 h-16" />
+												<PlayIcon class="w-8 h-8" />
 											</template>
 										</div>
 										<div class="text-center min-h-[1.5rem] flex items-center justify-center">
@@ -442,7 +442,7 @@ const handleModpackSelection = (projectId) => {
 								<ButtonStyled
 									size="2xlarge"
 									color="transparent"
-									class="!h-[300px] !w-[300px] !min-w-[300px]"
+									class="!h-[64px] !w-[300px] !min-w-[300px]"
 								>
 									<button
 										v-tooltip="
@@ -451,13 +451,13 @@ const handleModpackSelection = (projectId) => {
 												: null
 										"
 										:disabled="installing[selectedModpack.project_id]"
-										class="flex flex-col items-center justify-center gap-3 !h-full !w-full text-3xl font-bold text-white"
+										class="flex flex-row items-center justify-center gap-3 !h-full !w-full text-xl font-bold text-white"
 										@click="install(selectedModpack.project_id)"
 									>
-										<div class="flex items-center justify-center w-16 h-16">
+										<div class="flex items-center justify-center w-8 h-8">
 											<DownloadIcon
 												v-if="!installing[selectedModpack.project_id]"
-												class="w-16 h-16"
+												class="w-8 h-8"
 											/>
 											<span v-else class="loader"></span>
 										</div>
@@ -548,14 +548,29 @@ img:hover {
 }
 
 .glassmorphism-play {
+	--top: #23c66c;
+	--bot: #15a355;
+	--sh: 33, 163, 85;
+	--deep: #0f7a41;
 	position: relative;
-	border-radius: 12px;
-	background: linear-gradient(135deg, #f05b32 0%, #e69154 100%);
-	backdrop-filter: blur(16px);
-	-webkit-backdrop-filter: blur(16px);
+	border-radius: 14px;
+	background: linear-gradient(180deg, var(--top), var(--bot));
 	box-shadow:
-		0 0 40px rgba(234, 88, 12, 0.4),
-		inset 0 0 20px rgba(234, 88, 12, 0.2);
+		0 5px 0 var(--deep),
+		0 14px 22px -8px rgba(var(--sh), 0.5),
+		inset 0 1px 0 rgba(255, 255, 255, 0.35);
+	transition:
+		transform 0.14s ease,
+		box-shadow 0.18s ease,
+		filter 0.18s ease;
+}
+
+/* Installed state keeps the distinct orange for "Play". */
+.glassmorphism-play--play {
+	--top: #f2703a;
+	--bot: #e05f2b;
+	--sh: 224, 95, 43;
+	--deep: #b8481d;
 }
 
 .glassmorphism-play button,
@@ -568,25 +583,22 @@ img:hover {
 	stroke: white !important;
 }
 
-.glassmorphism-play:hover svg {
-	stroke: rgba(255, 255, 255, 0.7) !important;
-}
-
 .glassmorphism-play:hover {
-	background: linear-gradient(135deg, #f05b32 0%, #e69154 100%);
-	box-shadow:
-		0 0 60px rgba(234, 88, 12, 0.6),
-		inset 0 0 30px rgba(234, 88, 12, 0.3);
+	filter: brightness(1.05);
 }
 
-.glassmorphism-play :deep(button):hover {
-	color: rgba(255, 255, 255, 0.7) !important;
+.glassmorphism-play:active {
+	transform: translateY(4px);
+	box-shadow:
+		0 1px 0 var(--deep),
+		0 6px 12px -6px rgba(var(--sh), 0.5),
+		inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .loader {
 	position: relative;
-	width: 42px;
-	height: 42px;
+	width: 28px;
+	height: 28px;
 	background: linear-gradient(to right, #fff 20%, #0000 21%);
 	background-repeat: repeat-x;
 	background-size: 24px 6px;

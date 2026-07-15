@@ -5,7 +5,6 @@ import {
 	FolderOpenIcon,
 	PlayIcon,
 	PlusIcon,
-	SearchIcon,
 	SortAscIcon,
 	StopCircleIcon,
 	TrashIcon,
@@ -15,7 +14,6 @@ import {
 	DropdownSelect,
 	formatLoader,
 	injectNotificationManager,
-	StyledInput,
 	useVIntl,
 } from '@modrinth/ui'
 import { useStorage } from '@vueuse/core'
@@ -142,7 +140,6 @@ const state = useStorage(
 	{ mergeDefaults: true },
 )
 
-const search = ref('')
 const collapsedSectionKeys = computed(() => new Set(state.value.collapsedGroups ?? []))
 
 const getSectionKey = (sectionName) => `${state.value.group}:${sectionName}`
@@ -167,9 +164,7 @@ const setSectionCollapsed = (sectionName, collapsed) => {
 const filteredResults = computed(() => {
 	const { group = 'Group', sortBy = 'Name' } = state.value
 
-	const instances = props.instances.filter((instance) => {
-		return instance.name.toLowerCase().includes(search.value.toLowerCase())
-	})
+	const instances = [...props.instances]
 
 	if (sortBy === 'Name') {
 		instances.sort((a, b) => {
@@ -275,17 +270,6 @@ const filteredResults = computed(() => {
 	<div class="grid-display-container">
 		<div class="controls-section">
 			<div class="controls-row">
-				<div class="search-section">
-					<StyledInput
-						v-model="search"
-						:icon="SearchIcon"
-						type="text"
-						placeholder="Search instances..."
-						clearable
-						wrapper-class="flex-1"
-					/>
-				</div>
-
 				<div class="filter-section">
 					<div class="filter-group">
 						<SortAscIcon class="filter-icon" />
@@ -371,12 +355,6 @@ const filteredResults = computed(() => {
 	gap: 1rem;
 	align-items: center;
 	flex-wrap: wrap;
-}
-
-.search-section {
-	flex: 1;
-	min-width: 200px;
-	display: flex;
 }
 
 .filter-section {
@@ -493,10 +471,6 @@ const filteredResults = computed(() => {
 		flex-direction: column;
 		align-items: stretch;
 		gap: 0.75rem;
-	}
-
-	.search-section {
-		min-width: unset;
 	}
 
 	.filter-section {

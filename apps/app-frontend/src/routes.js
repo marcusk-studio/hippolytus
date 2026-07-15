@@ -1,7 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 import * as Pages from '@/pages'
-import * as Hosting from '@/pages/hosting/manage'
 import * as Instance from '@/pages/instance'
 import * as Library from '@/pages/library'
 import * as Project from '@/pages/project'
@@ -27,61 +26,6 @@ export default new createRouter({
 			meta: {
 				breadcrumb: [{ name: 'Worlds' }],
 			},
-		},
-		{
-			path: '/hosting/manage/',
-			name: 'Servers',
-			component: Pages.Servers,
-			meta: {
-				breadcrumb: [{ name: 'Servers' }],
-			},
-		},
-		{
-			path: '/hosting/manage/:id',
-			name: 'ServerManage',
-			component: Hosting.Index,
-			children: [
-				{
-					path: '',
-					name: 'ServerManageOverview',
-					component: Hosting.Overview,
-					meta: {
-						breadcrumb: [{ name: '?Server' }],
-					},
-				},
-				{
-					path: 'content',
-					name: 'ServerManageContent',
-					component: Hosting.Content,
-					meta: {
-						breadcrumb: [{ name: '?Server' }],
-					},
-				},
-				{
-					path: 'files',
-					name: 'ServerManageFiles',
-					component: Hosting.Files,
-					meta: {
-						breadcrumb: [{ name: '?Server' }],
-					},
-				},
-				{
-					path: 'backups',
-					name: 'ServerManageBackups',
-					component: Hosting.Backups,
-					meta: {
-						breadcrumb: [{ name: '?Server' }],
-					},
-				},
-				{
-					path: 'access',
-					name: 'ServerManageAccess',
-					component: Hosting.Access,
-					meta: {
-						breadcrumb: [{ name: '?Server' }],
-					},
-				},
-			],
 		},
 		{
 			path: '/browse/:projectType',
