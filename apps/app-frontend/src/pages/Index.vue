@@ -403,7 +403,7 @@ const handleModpackSelection = (projectId) => {
 							<div class="tactile-button tactile-button--orange">
 								<ButtonStyled
 									size="2xlarge"
-									color="transparent"
+									type="transparent"
 									class="!h-[64px] !w-[300px] !min-w-[300px]"
 								>
 									<button
@@ -441,7 +441,7 @@ const handleModpackSelection = (projectId) => {
 							<div class="tactile-button">
 								<ButtonStyled
 									size="2xlarge"
-									color="transparent"
+									type="transparent"
 									class="!h-[64px] !w-[300px] !min-w-[300px]"
 								>
 									<button

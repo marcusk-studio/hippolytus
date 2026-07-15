@@ -5,7 +5,7 @@
 	>
 		<span>{{ formatMessage(messages.notSignedIn) }}</span>
 		<div class="tactile-button tactile-button--orange">
-			<ButtonStyled color="transparent">
+			<ButtonStyled type="transparent">
 				<button color="primary" :disabled="loginDisabled" @click="login()">
 					<LogInIcon v-if="!loginDisabled" />
 					<SpinnerIcon v-else class="animate-spin" />
