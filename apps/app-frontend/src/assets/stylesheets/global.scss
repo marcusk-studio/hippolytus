@@ -267,9 +267,17 @@ textarea {
 	--tactile-deep: #b8481d;
 }
 
+// Only the wrapper should paint. ButtonStyled gives the inner button its own
+// background, ring and radius, which otherwise show through the gradient as a
+// second pill; it's also content-width, so its edge reads as a stray vertical
+// line. Flatten it and let it fill the wrapper.
 .tactile-button button {
 	background: transparent !important;
 	color: #fff !important;
+	box-shadow: none !important;
+	border-color: transparent !important;
+	width: 100%;
+	min-width: 0;
 }
 
 .tactile-button svg {
