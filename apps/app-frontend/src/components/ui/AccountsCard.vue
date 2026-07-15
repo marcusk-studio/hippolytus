@@ -4,13 +4,15 @@
 		class="flex flex-col gap-3 bg-button-bg border border-solid border-surface-5 rounded-xl p-3 mt-2"
 	>
 		<span>{{ formatMessage(messages.notSignedIn) }}</span>
-		<ButtonStyled color="brand">
-			<button color="primary" :disabled="loginDisabled" @click="login()">
-				<LogInIcon v-if="!loginDisabled" />
-				<SpinnerIcon v-else class="animate-spin" />
-				{{ formatMessage(messages.signInToMinecraft) }}
-			</button>
-		</ButtonStyled>
+		<div class="tactile-button tactile-button--orange">
+			<ButtonStyled color="transparent">
+				<button color="primary" :disabled="loginDisabled" @click="login()">
+					<LogInIcon v-if="!loginDisabled" />
+					<SpinnerIcon v-else class="animate-spin" />
+					{{ formatMessage(messages.signInToMinecraft) }}
+				</button>
+			</ButtonStyled>
+		</div>
 	</div>
 	<Accordion
 		v-else

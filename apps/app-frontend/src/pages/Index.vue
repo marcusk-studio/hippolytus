@@ -400,7 +400,7 @@ const handleModpackSelection = (projectId) => {
 				>
 					<div v-if="selectedModpack" class="flex-shrink-0 !w-[300px]">
 						<template v-if="installed[selectedModpack.project_id]">
-							<div class="glassmorphism-play glassmorphism-play--play">
+							<div class="tactile-button tactile-button--orange">
 								<ButtonStyled
 									size="2xlarge"
 									color="transparent"
@@ -438,7 +438,7 @@ const handleModpackSelection = (projectId) => {
 							</div>
 						</template>
 						<template v-else>
-							<div class="glassmorphism-play">
+							<div class="tactile-button">
 								<ButtonStyled
 									size="2xlarge"
 									color="transparent"
@@ -545,54 +545,6 @@ img:hover {
 		transform: scale(1);
 		box-shadow: 0 0 0 0 rgba(var(--color-brand), 0);
 	}
-}
-
-.glassmorphism-play {
-	--top: #23c66c;
-	--bot: #15a355;
-	--sh: 33, 163, 85;
-	--deep: #0f7a41;
-	position: relative;
-	border-radius: 14px;
-	background: linear-gradient(180deg, var(--top), var(--bot));
-	box-shadow:
-		0 5px 0 var(--deep),
-		0 14px 22px -8px rgba(var(--sh), 0.5),
-		inset 0 1px 0 rgba(255, 255, 255, 0.35);
-	transition:
-		transform 0.14s ease,
-		box-shadow 0.18s ease,
-		filter 0.18s ease;
-}
-
-/* Installed state keeps the distinct orange for "Play". */
-.glassmorphism-play--play {
-	--top: #f2703a;
-	--bot: #e05f2b;
-	--sh: 224, 95, 43;
-	--deep: #b8481d;
-}
-
-.glassmorphism-play button,
-.glassmorphism-play :deep(button) {
-	background: transparent !important;
-	color: white !important;
-}
-
-.glassmorphism-play svg {
-	stroke: white !important;
-}
-
-.glassmorphism-play:hover {
-	filter: brightness(1.05);
-}
-
-.glassmorphism-play:active {
-	transform: translateY(4px);
-	box-shadow:
-		0 1px 0 var(--deep),
-		0 6px 12px -6px rgba(var(--sh), 0.5),
-		inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .loader {
