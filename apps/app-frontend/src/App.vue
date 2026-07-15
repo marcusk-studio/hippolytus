@@ -77,7 +77,7 @@ import WindowControls from '@/components/ui/WindowControls.vue'
 import { useCheckDisableMouseover } from '@/composables/macCssFix.js'
 import { config } from '@/config'
 import { hide_ads_window, init_ads_window, show_ads_window } from '@/helpers/ads.js'
-import { debugAnalytics, initAnalytics, trackEvent } from '@/helpers/analytics'
+import { debugAnalytics, optInAnalytics, trackEvent } from '@/helpers/analytics'
 import { check_reachable } from '@/helpers/auth.js'
 import { get_user, get_version } from '@/helpers/cache.js'
 import { command_listener, warning_listener } from '@/helpers/events.js'
@@ -362,7 +362,10 @@ async function setupApp() {
 		await setSettings(settings)
 	}
 
-	initAnalytics()
+	// optInAnalytics() rather than initAnalytics(): PostHog persists its own
+	// opt-out in localStorage, independently of our setting, so a previous
+	// opt-out would otherwise survive and silently drop every event.
+	optInAnalytics()
 	if (dev) debugAnalytics()
 	trackEvent('Launched', { version, dev, onboarded })
 
