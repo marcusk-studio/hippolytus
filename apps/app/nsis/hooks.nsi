@@ -33,25 +33,42 @@ Var /GLOBAL OldInstallDir
 !macro NSIS_HOOK_PREINSTALL
     SetShellVarContext all
     ${If} ${FileExists} "$SMPROGRAMS\${PRODUCTNAME}.lnk"
-        UserInfo::GetAccountType
-        Pop $0
-        ${If} $0 != "Admin"
-            MessageBox MB_ICONINFORMATION|MB_OK "An old installation of the MARCUSK Launcher was detected that requires administrator permission to update from. You will be prompted with an admin prompt shortly."
-        ${EndIf}
-
         ReadRegStr $4 SHCTX "${MANUPRODUCTKEY}" ""
         ReadRegStr $R1 SHCTX "${UNINSTKEY}" "UninstallString"
 
-        ReadRegStr $OldInstallDir SHCTX "${UNINSTKEY}" "InstallLocation"
-        StrCpy $OldInstallDir $OldInstallDir "" 1
-        StrCpy $OldInstallDir $OldInstallDir -1 ""
+        ; A leftover all-users shortcut with no registered uninstaller is not an
+        ; old installation. Running an empty command here would fail and abort,
+        ; leaving the installer permanently unable to succeed.
+        ${If} $R1 == ""
+            Delete "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+        ${Else}
+            UserInfo::GetAccountType
+            Pop $0
+            ; Never block a silent install: the updater runs us with /S, so a
+            ; MessageBox here hangs the auto-update instead of informing anyone.
+            ${IfNot} ${Silent}
+            ${AndIf} $0 != "Admin"
+                MessageBox MB_ICONINFORMATION|MB_OK "An old installation of the MARCUSK Launcher was detected that requires administrator permission to update from. You will be prompted with an admin prompt shortly."
+            ${EndIf}
 
-        DetailPrint "Executing $R1"
-        !insertmacro ShellExecWait "runas" '$R1' '/P _?=$4' "" ${SW_SHOW} $3
-        ${If} $3 <> 0
-            SetErrorLevel $3
-            MessageBox MB_ICONEXCLAMATION|MB_OK "Failed to uninstall old global installation"
-            Abort
+            ReadRegStr $OldInstallDir SHCTX "${UNINSTKEY}" "InstallLocation"
+            StrCpy $OldInstallDir $OldInstallDir "" 1
+            StrCpy $OldInstallDir $OldInstallDir -1 ""
+
+            DetailPrint "Executing $R1"
+            !insertmacro ShellExecWait "runas" '$R1' '/P _?=$4' "" ${SW_SHOW} $3
+
+            ; Trust the resulting state, not the exit code. The old uninstaller
+            ; can remove itself and still report non-zero; aborting on that left
+            ; users with the old install gone and the new one never installed.
+            ReadRegStr $R2 SHCTX "${UNINSTKEY}" "UninstallString"
+            ${If} $R2 != ""
+                SetErrorLevel $3
+                ${IfNot} ${Silent}
+                    MessageBox MB_ICONEXCLAMATION|MB_OK "Failed to uninstall old global installation"
+                ${EndIf}
+                Abort
+            ${EndIf}
         ${EndIf}
     ${EndIf}
     SetShellVarContext current
