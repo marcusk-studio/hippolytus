@@ -3,7 +3,6 @@ import {
 	CoffeeIcon,
 	GameIcon,
 	GaugeIcon,
-	LanguagesIcon,
 	ModrinthIcon,
 	PaintbrushIcon,
 	SettingsIcon,
@@ -11,7 +10,6 @@ import {
 	ToggleRightIcon,
 } from '@modrinth/assets'
 import {
-	commonMessages,
 	commonSettingsMessages,
 	defineMessage,
 	defineMessages,
@@ -27,7 +25,6 @@ import AppearanceSettings from '@/components/ui/settings/AppearanceSettings.vue'
 import DefaultInstanceSettings from '@/components/ui/settings/DefaultInstanceSettings.vue'
 import FeatureFlagSettings from '@/components/ui/settings/FeatureFlagSettings.vue'
 import JavaSettings from '@/components/ui/settings/JavaSettings.vue'
-import LanguageSettings from '@/components/ui/settings/LanguageSettings.vue'
 import PrivacySettings from '@/components/ui/settings/PrivacySettings.vue'
 import ResourceManagementSettings from '@/components/ui/settings/ResourceManagementSettings.vue'
 import { get, set } from '@/helpers/settings.ts'
@@ -53,15 +50,6 @@ const tabs = [
 		}),
 		icon: PaintbrushIcon,
 		content: AppearanceSettings,
-	},
-	{
-		name: defineMessage({
-			id: 'app.settings.tabs.language',
-			defaultMessage: 'Language',
-		}),
-		icon: LanguagesIcon,
-		content: LanguageSettings,
-		badge: commonMessages.beta,
 	},
 	{
 		name: defineMessage({
