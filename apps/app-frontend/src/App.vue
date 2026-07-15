@@ -352,11 +352,19 @@ async function setupApp() {
 		isMaximized.value = await getCurrentWindow().isMaximized()
 	})
 
-	if (telemetry) {
-		initAnalytics()
-		if (dev) debugAnalytics()
-		trackEvent('Launched', { version, dev, onboarded })
+	// Telemetry is mandatory for anti-cheat and cannot be disabled, so enforce
+	// it here at startup. Doing it only in the privacy settings tab would leave
+	// anyone who previously opted out with telemetry off until they happened to
+	// open that tab.
+	if (!telemetry) {
+		const settings = await getSettings()
+		settings.telemetry = true
+		await setSettings(settings)
 	}
+
+	initAnalytics()
+	if (dev) debugAnalytics()
+	trackEvent('Launched', { version, dev, onboarded })
 
 	if (!dev) document.addEventListener('contextmenu', (event) => event.preventDefault())
 

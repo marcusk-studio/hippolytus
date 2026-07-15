@@ -197,7 +197,7 @@ const messages = defineMessages({
 	},
 	noWorldsDescription: {
 		id: 'app.instance.worlds.no-worlds-description',
-		defaultMessage: 'Add a server or browse to get started',
+		defaultMessage: 'Add a server to get started',
 	},
 	vanillaFilter: {
 		id: 'app.instance.worlds.filter-vanilla',
