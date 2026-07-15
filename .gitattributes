@@ -33,3 +33,7 @@
 /packages/app-lib/migrations/20240813205023_drop-active-unique.sql !eol
 /packages/app-lib/migrations/20240930001852_disable-personalized-ads.sql !eol
 /packages/app-lib/migrations/20241222013857_feature-flags.sql !eol
+# Same reasoning, for this fork's own migration: it shipped in 2.2.x Windows
+# builds made before the attribute above existed, so those installs recorded a
+# CRLF checksum. Upstream's list can't know about it.
+/packages/app-lib/migrations/20250125000000_add_news_fields.sql !eol
