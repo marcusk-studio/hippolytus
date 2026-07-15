@@ -203,15 +203,23 @@ jobs:
             target/release/bundle/nsis/*.nsis.zip
             target/release/bundle/nsis/*.nsis.zip.sig
   upload-s3:
-    needs: build
+    needs:
+      - release-please
+      - build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Get version from manifest
+      - name: Get version from release-please
         id: get_version
+        env:
+          RELEASED_VERSION: >-
+            ${{ fromJSON(needs.release-please.outputs.manifest).version }}
         run: |
-          version=$(jq -r '.apps' .release-please-manifest.json)
-          echo "version=$version" >> $GITHUB_OUTPUT
+          if [ -z "$RELEASED_VERSION" ] || [ "$RELEASED_VERSION" = "null" ]; then
+            echo "::error::release-please did not report a released version"
+            exit 1
+          fi
+          echo "version=$RELEASED_VERSION" >> "$GITHUB_OUTPUT"
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -301,17 +309,25 @@ jobs:
           destination-dir: ./
           keep-file-fresh: true
   create-sentry-release:
-    needs: build
+    needs:
+      - release-please
+      - build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Get version from manifest
+      - name: Get version from release-please
         id: get_version
+        env:
+          RELEASED_VERSION: >-
+            ${{ fromJSON(needs.release-please.outputs.manifest).version }}
         run: |
-          version=$(jq -r '.apps' .release-please-manifest.json)
-          echo "version=$version" >> $GITHUB_OUTPUT
+          if [ -z "$RELEASED_VERSION" ] || [ "$RELEASED_VERSION" = "null" ]; then
+            echo "::error::release-please did not report a released version"
+            exit 1
+          fi
+          echo "version=$RELEASED_VERSION" >> "$GITHUB_OUTPUT"
       - name: Create Sentry release
         uses: getsentry/action-release@v3
         env:
