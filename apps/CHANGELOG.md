@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.4.0](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.3.1...apps-v2.4.0) (2026-07-15)
+
+
+### ✨ Features
+
+* **app:** remove the language selector from settings ([#68](https://github.com/marcusk-studio/hippolytus/issues/68)) ([074395f](https://github.com/marcusk-studio/hippolytus/commit/074395fdfc02669e41fd8ff2e92ba7235ca25d49))
+
+
+### 🐛 Bugfixes
+
+* **app:** enforce mandatory telemetry at startup, not only in settings ([#69](https://github.com/marcusk-studio/hippolytus/issues/69)) ([ede9179](https://github.com/marcusk-studio/hippolytus/commit/ede9179f72a65cea7735b86c6058366f8f300ed3))
+* **app:** exempt add_news_fields migration from eol normalization ([#71](https://github.com/marcusk-studio/hippolytus/issues/71)) ([836bc6c](https://github.com/marcusk-studio/hippolytus/commit/836bc6cbd3db4627428a4dddddabb4faf37ea48a))
+* **app:** match sign-in button to the tactile pill, rebrand en-US locale strings ([#67](https://github.com/marcusk-studio/hippolytus/issues/67)) ([3f39a4e](https://github.com/marcusk-studio/hippolytus/commit/3f39a4e44640badaadcc93086e479b312228ed9a))
+
 ## [2.3.1](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.3.0...apps-v2.3.1) (2026-07-15)
 
 
