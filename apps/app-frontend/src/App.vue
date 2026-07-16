@@ -15,6 +15,7 @@ import {
 	LeftArrowIcon,
 	LibraryIcon,
 	NotepadTextIcon,
+	OrganizationIcon,
 	RefreshCwIcon,
 	RightArrowIcon,
 	SettingsIcon,
@@ -1279,6 +1280,9 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 			</NavButton>
 			<NavButton v-tooltip.right="'Skin selector'" to="/skins">
 				<ChangeSkinIcon />
+			</NavButton>
+			<NavButton v-tooltip.right="'Your projects'" to="/your-projects">
+				<OrganizationIcon />
 			</NavButton>
 			<NavButton
 				v-tooltip.right="'Library'"

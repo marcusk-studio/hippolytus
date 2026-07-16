@@ -1,4 +1,6 @@
 use crate::state::ModrinthCredentials;
+use crate::util::fetch::fetch_json;
+use reqwest::Method;
 
 #[tracing::instrument]
 pub fn authenticate_begin_flow() -> &'static str {
@@ -38,6 +40,41 @@ pub async fn logout() -> crate::Result<()> {
     }
 
     Ok(())
+}
+
+/// Fetches every project the signed-in user has access to (their personal
+/// projects plus every project owned by an organization they belong to),
+/// including non-public statuses such as unlisted and private.
+///
+/// Returns `None` when no user is signed in. The result is fetched fresh on
+/// each call rather than cached, so it always reflects the currently active
+/// credentials instead of a response captured under a different auth state.
+#[tracing::instrument]
+pub async fn get_user_projects() -> crate::Result<Option<serde_json::Value>> {
+    let state = crate::State::get().await?;
+
+    let Some(creds) = ModrinthCredentials::get_active(&state.pool).await? else {
+        return Ok(None);
+    };
+
+    let url = format!(
+        "{}user/{}/all-projects",
+        env!("MODRINTH_API_URL_V3"),
+        creds.user_id
+    );
+
+    let projects = fetch_json(
+        Method::GET,
+        &url,
+        None,
+        None,
+        Some("/v3/user/all-projects"),
+        &state.api_semaphore,
+        &state.pool,
+    )
+    .await?;
+
+    Ok(Some(projects))
 }
 
 #[tracing::instrument]

@@ -45,6 +45,14 @@ export default new createRouter({
 			},
 		},
 		{
+			path: '/your-projects',
+			name: 'Your projects',
+			component: Pages.YourProjects,
+			meta: {
+				breadcrumb: [{ name: 'Your projects' }],
+			},
+		},
+		{
 			path: '/library',
 			name: 'Library',
 			component: Library.Index,
