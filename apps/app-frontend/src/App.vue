@@ -69,8 +69,8 @@ import InstallToPlayModal from '@/components/ui/modal/InstallToPlayModal.vue'
 import ModpackAlreadyInstalledModal from '@/components/ui/modal/ModpackAlreadyInstalledModal.vue'
 import UpdateToPlayModal from '@/components/ui/modal/UpdateToPlayModal.vue'
 import NavButton from '@/components/ui/NavButton.vue'
-import PrideFundraiserBanner from '@/components/ui/PrideFundraiserBanner.vue'
 import QuickInstanceSwitcher from '@/components/ui/QuickInstanceSwitcher.vue'
+import SidebarSkinPreview from '@/components/ui/skin/SidebarSkinPreview.vue'
 import SplashScreen from '@/components/ui/SplashScreen.vue'
 import UpdatesModal from '@/components/ui/UpdatesModal.vue'
 import WindowControls from '@/components/ui/WindowControls.vue'
@@ -130,7 +130,6 @@ const router = useRouter()
 const route = useRoute()
 const APP_LEFT_NAV_WIDTH = '4rem'
 const APP_SIDEBAR_WIDTH = 300
-const PRIDE_FUNDRAISER_END_DATE = new Date('2026-07-01T00:00:00Z').getTime()
 const credentials = ref()
 const sidebarToggled = ref(true)
 const unsubscribeSidebarToggle = themeStore.$subscribe(() => {
@@ -140,9 +139,11 @@ const forceSidebar = computed(
 	() => route.path.startsWith('/browse') || route.path.startsWith('/project'),
 )
 const sidebarVisible = computed(() => sidebarToggled.value || forceSidebar.value)
-const prideFundraiserEnabled = computed(
-	() => themeStore.getFeatureFlag('pride_fundraiser') && Date.now() < PRIDE_FUNDRAISER_END_DATE,
-)
+/** The home page paints a full-bleed background, so the sidebar overlays it instead of taking a column. */
+const sidebarFloating = computed(() => sidebarVisible.value && route.path === '/')
+/** The floating sidebar overlays content rather than taking a column, so anything
+ * that reserves space for the sidebar column should treat it as absent while floating. */
+const sidebarColumnVisible = computed(() => sidebarVisible.value && !sidebarFloating.value)
 const notificationManager = new AppNotificationManager()
 provideNotificationManager(notificationManager)
 const { handleError, addNotification } = notificationManager
@@ -178,12 +179,7 @@ providePageContext({
 	showAds: ref(false),
 	floatingActionBarOffsets: {
 		left: ref(APP_LEFT_NAV_WIDTH),
-		right: computed(() => (sidebarVisible.value ? `${APP_SIDEBAR_WIDTH}px` : '0px')),
-	},
-	featureFlags: {
-		serverRamAsBytesAlwaysOn: computed(() =>
-			themeStore.getFeatureFlag('server_ram_as_bytes_always_on'),
-		),
+		right: computed(() => (sidebarColumnVisible.value ? `${APP_SIDEBAR_WIDTH}px` : '0px')),
 	},
 	openExternalUrl: (url) => openUrl(url),
 })
@@ -306,7 +302,6 @@ async function setupApp() {
 	const {
 		native_decorations,
 		theme,
-		locale,
 		telemetry,
 		collapsed_navigation,
 		hide_nametag_skins_page,
@@ -319,10 +314,9 @@ async function setupApp() {
 		pending_update_toast_for_version,
 	} = await getSettings()
 
-	// Initialize locale from saved settings
-	if (locale) {
-		i18n.global.locale.value = locale
-	}
+	// The launcher ships English only; ignore any saved non-en-US locale so
+	// shared @modrinth/ui messages don't render in a removed language.
+	i18n.global.locale.value = 'en-US'
 
 	if (default_page === 'Library') {
 		await router.push('/library')
@@ -670,6 +664,8 @@ onMounted(() => {
 
 const accounts = ref(null)
 provide('accountsCard', accounts)
+
+const sidebarSkinPreview = ref(null)
 
 command_listener(handleCommand)
 
@@ -1359,6 +1355,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 		class="app-contents"
 		:class="{
 			'sidebar-enabled': sidebarVisible,
+			'sidebar-floating': sidebarFloating,
 			'disable-advanced-rendering': !themeStore.advancedRendering,
 		}"
 	>
@@ -1366,7 +1363,8 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 			<transition name="popup-survey">
 				<div
 					v-if="availableSurvey"
-					class="w-[400px] z-20 fixed -bottom-12 pb-16 right-[--right-bar-width] mr-4 rounded-t-2xl card-shadow bg-bg-raised border-surface-5 border-[1px] border-solid border-b-0 p-4"
+					class="w-[400px] z-20 fixed -bottom-12 pb-16 mr-4 rounded-t-2xl card-shadow bg-bg-raised border-surface-5 border-[1px] border-solid border-b-0 p-4"
+					:style="{ right: sidebarColumnVisible ? 'var(--right-bar-width)' : '0px' }"
 				>
 					<h2 class="text-lg font-extrabold mt-0 mb-2">Hey there!</h2>
 					<p class="m-0 leading-tight">
@@ -1390,7 +1388,9 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 				:style="{
 					top: 'calc(var(--top-bar-height))',
 					left: 'calc(var(--left-bar-width))',
-					width: 'calc(100% - var(--left-bar-width) - var(--right-bar-width))',
+					width: sidebarFloating
+						? 'calc(100% - var(--left-bar-width))'
+						: 'calc(100% - var(--left-bar-width) - var(--right-bar-width))',
 				}"
 			>
 				<LoadingBar position="absolute" />
@@ -1415,14 +1415,14 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 				id="background-teleport-target"
 				class="absolute h-full -z-10 rounded-tl-[--radius-xl] overflow-hidden"
 				:style="{
-					width: 'calc(100% - var(--right-bar-width))',
+					width: sidebarFloating ? '100%' : 'calc(100% - var(--right-bar-width))',
 				}"
 			></div>
 			<Admonition
 				v-if="criticalErrorMessage"
 				type="critical"
 				:header="criticalErrorMessage.header"
-				class="m-6 mb-0"
+				class="mt-6 mb-0 ml-6 mr-[calc(1.5rem+var(--floating-sidebar-inset))]"
 			>
 				<div
 					class="markdown-body text-primary"
@@ -1433,7 +1433,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 				v-if="authUnreachable"
 				type="warning"
 				:header="formatMessage(messages.authUnreachableHeader)"
-				class="m-6 mb-0"
+				class="mt-6 mb-0 ml-6 mr-[calc(1.5rem+var(--floating-sidebar-inset))]"
 			>
 				{{ formatMessage(messages.authUnreachableBody) }}
 			</Admonition>
@@ -1466,16 +1466,18 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 			>
 				<div id="sidebar-teleport-target" class="sidebar-teleport-content"></div>
 				<div class="sidebar-default-content" :class="{ 'sidebar-enabled': sidebarVisible }">
-					<div class="p-4 border-0 border-b-[1px] border-[--brand-gradient-border] border-solid">
-						<h3 class="text-base text-contrast font-semibold m-0">Playing as</h3>
+					<div
+						class="sidebar-account-panel p-4 border-0 border-b-[1px] border-[--brand-gradient-border] border-solid"
+					>
 						<suspense>
-							<AccountsCard ref="accounts" />
+							<AccountsCard ref="accounts" @change="() => sidebarSkinPreview?.refresh()" />
 						</suspense>
 					</div>
-					<PrideFundraiserBanner
-						v-if="prideFundraiserEnabled"
-						class="p-4 border-0 border-b-[1px] border-[--brand-gradient-border] border-solid"
-					/>
+					<div v-if="sidebarFloating" class="sidebar-skin-preview">
+						<suspense>
+							<SidebarSkinPreview ref="sidebarSkinPreview" />
+						</suspense>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -1484,8 +1486,8 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 		<UpdatesModal ref="updatesModal" />
 	</Suspense>
 	<I18nDebugPanel />
-	<NotificationPanel :has-sidebar="sidebarVisible" />
-	<PopupNotificationPanel :has-sidebar="sidebarVisible" />
+	<NotificationPanel :has-sidebar="sidebarColumnVisible" />
+	<PopupNotificationPanel :has-sidebar="sidebarColumnVisible" />
 	<ErrorModal ref="errorModal" />
 	<MinecraftAuthErrorModal ref="minecraftAuthErrorModal" />
 	<ContentInstallModal
@@ -1541,6 +1543,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 	--top-bar-height: 3rem;
 	--left-bar-width: 4rem;
 	--right-bar-width: 300px;
+	--floating-sidebar-inset: 0px;
 }
 
 .app-grid-layout {
@@ -1589,6 +1592,36 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 	&.sidebar-enabled {
 		grid-template-columns: 1fr 300px;
 	}
+
+	&.sidebar-floating {
+		grid-template-columns: 1fr 0px;
+		--floating-sidebar-inset: var(--right-bar-width);
+	}
+}
+
+.sidebar-floating .app-sidebar {
+	position: absolute;
+	top: 0;
+	right: 0;
+	z-index: 5;
+	height: auto;
+	background: transparent;
+	border-left-color: transparent;
+}
+
+.sidebar-floating .app-sidebar::before {
+	box-shadow: none;
+}
+
+/* The gradient stops with the account panel so the skin below it sits over the artwork. */
+.sidebar-floating .sidebar-account-panel {
+	background: var(--brand-gradient-bg);
+	border-left: 1px solid var(--brand-gradient-border);
+	border-bottom-left-radius: var(--radius-xl);
+}
+
+.sidebar-skin-preview {
+	pointer-events: auto;
 }
 
 .loading-indicator-container {

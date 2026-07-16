@@ -77,12 +77,6 @@
   "app.appearance-settings.advanced-rendering.title": {
     "message": "Advanced rendering"
   },
-  "app.appearance-settings.color-theme.description": {
-    "message": "Select your preferred color theme for MARCUSK Launcher."
-  },
-  "app.appearance-settings.color-theme.title": {
-    "message": "Color theme"
-  },
   "app.appearance-settings.default-landing-page.description": {
     "message": "Change the page to which the launcher opens on."
   },
@@ -133,18 +127,6 @@
   },
   "app.appearance-settings.skip-non-essential-warnings.title": {
     "message": "Skip non-essential warnings"
-  },
-  "app.appearance-settings.toggle-sidebar.description": {
-    "message": "Enables the ability to toggle the sidebar."
-  },
-  "app.appearance-settings.toggle-sidebar.title": {
-    "message": "Toggle sidebar"
-  },
-  "app.appearance-settings.unknown-pack-warning.description": {
-    "message": "If you attempt to install a Modrinth Pack file (.mrpack) that isn't hosted on Modrinth, we'll make sure you understand the risks before installing it."
-  },
-  "app.appearance-settings.unknown-pack-warning.title": {
-    "message": "Warn me before installing unknown modpacks"
   },
   "app.auth-servers.unreachable.body": {
     "message": "Minecraft authentication servers may be down right now. Check your internet connection and try again later."
@@ -323,9 +305,6 @@
   "app.instance.worlds.add-server": {
     "message": "Add server"
   },
-  "app.instance.worlds.browse-servers": {
-    "message": "Browse servers"
-  },
   "app.instance.worlds.delete-world-modal.delete-button": {
     "message": "Delete world"
   },
@@ -430,9 +409,6 @@
   },
   "app.settings.tabs.java-installations": {
     "message": "Java installations"
-  },
-  "app.settings.tabs.language": {
-    "message": "Language"
   },
   "app.settings.tabs.privacy": {
     "message": "Privacy"
@@ -580,9 +556,6 @@
   },
   "app.skins.sign-in.description": {
     "message": "Please sign into your Minecraft account to use the skin management features of MARCUSK Launcher."
-  },
-  "app.skins.sign-in.rinthbot-alt": {
-    "message": "Excited Modrinth Bot"
   },
   "app.skins.sign-in.title": {
     "message": "Please sign in"
@@ -1001,6 +974,9 @@
   "minecraft-account.not-signed-in": {
     "message": "Not signed in"
   },
+  "minecraft-account.playing-as": {
+    "message": "Playing as"
+  },
   "minecraft-account.remove-account": {
     "message": "Remove account"
   },
@@ -1036,9 +1012,6 @@
   },
   "unknown-pack-warning-modal.body": {
     "message": "A file is only reviewed if it’s uploaded to Modrinth, regardless of its file format (including .mrpack)."
-  },
-  "unknown-pack-warning-modal.dont-show-again": {
-    "message": "Don't show this warning again"
   },
   "unknown-pack-warning-modal.header": {
     "message": "Confirm installation"

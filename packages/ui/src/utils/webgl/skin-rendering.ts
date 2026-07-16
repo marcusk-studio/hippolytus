@@ -63,8 +63,13 @@ export async function loadTexture(
 			(texture) => {
 				texture.colorSpace = config.textureColorSpace ?? THREE.SRGBColorSpace
 				texture.flipY = config.textureFlipY ?? false
+				// Nearest magnification keeps the pixel art crisp up close, but nearest
+				// minification makes texel-sized colour edges crawl/shimmer when the model
+				// is small and moving. Mipmaps + anisotropy pre-filter that away.
 				texture.magFilter = config.textureMagFilter ?? THREE.NearestFilter
-				texture.minFilter = config.textureMinFilter ?? THREE.NearestFilter
+				texture.minFilter = config.textureMinFilter ?? THREE.NearestMipmapLinearFilter
+				texture.generateMipmaps = true
+				texture.anisotropy = 16
 
 				textureCache.set(cacheKey, texture)
 				resolve(texture)

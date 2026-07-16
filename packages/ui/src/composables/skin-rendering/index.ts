@@ -1,4 +1,5 @@
 export * from './types'
+export * from './use-foreground-render-mode'
 export * from './use-skin-preview-animation'
 export * from './use-skin-preview-controls'
 export * from './use-skin-preview-fit'

@@ -38,20 +38,13 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 
 import { get as getSettings } from '@/helpers/settings.ts'
 import { getOS } from '@/helpers/utils.js'
-import { useTheming } from '@/store/state'
-
-const themeStore = useTheming()
 
 const nativeDecorations = ref(true)
 const isMaximized = ref(false)
 const os = ref('')
 
-const alwaysShowAppControls = computed(() => themeStore.getFeatureFlag('always_show_app_controls'))
-
 const showControls = computed(
-	() =>
-		alwaysShowAppControls.value ||
-		(!nativeDecorations.value && (os.value === 'Windows' || os.value === 'Linux')),
+	() => !nativeDecorations.value && (os.value === 'Windows' || os.value === 'Linux'),
 )
 
 onMounted(async () => {

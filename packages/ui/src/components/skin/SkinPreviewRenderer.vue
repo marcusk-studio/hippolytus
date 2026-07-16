@@ -6,6 +6,7 @@
 		@click="onCanvasClick"
 	>
 		<div
+			v-if="showControlsHint"
 			class="absolute left-0 right-0 z-10 flex items-center justify-center pointer-events-none"
 			:style="previewControlsPositionStyle"
 		>
@@ -44,6 +45,7 @@
 		<TresCanvas
 			alpha
 			:antialias="true"
+			:render-mode="renderMode"
 			:dpr="rendererDpr"
 			:renderer-options="{
 				outputColorSpace: THREE.SRGBColorSpace,
@@ -120,6 +122,7 @@ import type {
 	SkinPreviewTuple,
 } from '#ui/composables/skin-rendering'
 import {
+	useForegroundRenderMode,
 	useSkinPreviewAnimation,
 	useSkinPreviewControls,
 	useSkinPreviewFit,
@@ -147,6 +150,7 @@ const props = withDefaults(
 		fov?: number
 		initialRotation?: number
 		animationConfig?: SkinPreviewAnimationConfig
+		showControlsHint?: boolean
 	}>(),
 	{
 		variant: 'CLASSIC',
@@ -157,6 +161,7 @@ const props = withDefaults(
 		lockFit: true,
 		framing: 'page',
 		fitZoom: 1,
+		showControlsHint: true,
 		animationConfig: () => ({
 			baseAnimation: 'idle',
 			randomAnimations: ['idle_sub_1', 'idle_sub_2', 'idle_sub_3'],
@@ -165,6 +170,8 @@ const props = withDefaults(
 		}),
 	},
 )
+
+const renderMode = useForegroundRenderMode()
 
 const skinPreviewContainer = useTemplateRef<HTMLElement>('skinPreviewContainer')
 const subtitleElement = useTemplateRef<HTMLElement>('subtitleElement')
@@ -302,7 +309,10 @@ const {
 	isModelLoaded,
 })
 
-const rendererDpr: [number, number] = [1, 1.5]
+// Supersample above native devicePixelRatio (a fixed number renders at this
+// ratio; a [min,max] range would clamp to the display and cap below native) so
+// the pixel-art texture edges don't ladder/crawl as the model moves.
+const rendererDpr = Math.min((window.devicePixelRatio || 1) + 1, 3)
 const radialSpotlightShader = createRadialSpotlightShader()
 const isReady = computed(() => isModelLoaded.value && isTextureLoaded.value && hasResolvedFit.value)
 const { isPreviewVisible, showLoading } = useSkinPreviewLoading(isReady)

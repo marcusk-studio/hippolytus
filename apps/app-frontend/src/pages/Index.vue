@@ -5,6 +5,7 @@ import dayjs from 'dayjs'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
+import RecentWorldsList from '@/components/ui/world/RecentWorldsList.vue'
 import { trackEvent } from '@/helpers/analytics'
 import { get_project, get_search_results, get_version_many } from '@/helpers/cache.js'
 import { instance_listener, process_listener } from '@/helpers/events'
@@ -308,7 +309,23 @@ const handleModpackSelection = (projectId) => {
 	<div class="p-6 flex flex-col h-full">
 		<!-- Modpack selector section -->
 		<div class="flex flex-col flex-grow">
-			<div class="mt-auto flex justify-between items-center">
+			<div class="pr-[--floating-sidebar-inset]">
+				<h1
+					v-if="recentInstances.length > 0"
+					class="m-0 inline-block rounded-full bg-black/40 px-4 py-1 text-2xl font-extrabold text-white backdrop-blur-md"
+				>
+					Welcome back!
+				</h1>
+				<h1
+					v-else
+					class="m-0 inline-block rounded-full bg-black/40 px-4 py-1 text-2xl font-extrabold text-white backdrop-blur-md"
+				>
+					Welcome to MARCUSK Launcher!
+				</h1>
+				<RecentWorldsList :recent-instances="recentInstances" />
+			</div>
+
+			<div class="mt-auto flex justify-between items-center pr-[--floating-sidebar-inset]">
 				<div class="flex items-center gap-4">
 					<div ref="dropdownRef" class="relative">
 						<button
