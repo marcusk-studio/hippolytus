@@ -53,7 +53,10 @@ pub async fn logout() -> crate::Result<()> {
 pub async fn get_user_projects() -> crate::Result<Option<serde_json::Value>> {
     let state = crate::State::get().await?;
 
-    let Some(creds) = ModrinthCredentials::get_active(&state.pool).await? else {
+    let Some(creds) =
+        ModrinthCredentials::get_and_refresh(&state.pool, &state.api_semaphore)
+            .await?
+    else {
         return Ok(None);
     };
 

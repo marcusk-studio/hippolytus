@@ -1,23 +1,26 @@
 <script setup lang="ts">
 import { OrganizationIcon, SpinnerIcon, UserIcon } from '@modrinth/assets'
-import { Avatar, ButtonStyled, injectNotificationManager } from '@modrinth/ui'
-import { computed, onMounted, ref } from 'vue'
+import { Avatar, ButtonStyled, injectAuth, injectNotificationManager } from '@modrinth/ui'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import {
 	getUserProjects,
-	login,
 	type UserAllProjects,
 	type UserOrganization,
 	type UserProject,
 } from '@/helpers/mr_auth.ts'
 
 const { handleError } = injectNotificationManager()
+const auth = injectAuth()
 const router = useRouter()
 
-const loading = ref(true)
-const signedIn = ref(true)
+const loading = ref(false)
+const loadFailed = ref(false)
 const data = ref<UserAllProjects | null>(null)
+
+const authReady = computed(() => auth.isReady.value)
+const signedIn = computed(() => !!auth.session_token.value)
 
 type ProjectGroup = {
 	key: string
@@ -120,28 +123,41 @@ function openProject(project: UserProject) {
 }
 
 async function load() {
+	if (!signedIn.value) {
+		data.value = null
+		return
+	}
 	loading.value = true
+	loadFailed.value = false
 	try {
-		const result = await getUserProjects()
-		signedIn.value = result !== null
-		data.value = result
+		data.value = await getUserProjects()
 	} catch (err) {
+		data.value = null
+		loadFailed.value = true
 		handleError(err)
 	} finally {
 		loading.value = false
 	}
 }
 
-async function signIn() {
-	try {
-		await login()
-		await load()
-	} catch (err) {
-		handleError(err)
-	}
+function signIn() {
+	void auth.requestSignIn('/your-projects')
 }
 
-onMounted(load)
+watch(
+	() => auth.session_token.value,
+	(token) => {
+		if (token) {
+			load()
+		} else {
+			// Signed out (or not yet signed in): drop any fetched project
+			// metadata so private/unlisted projects don't linger on screen.
+			data.value = null
+			loadFailed.value = false
+		}
+	},
+	{ immediate: true },
+)
 </script>
 
 <template>
@@ -154,7 +170,7 @@ onMounted(load)
 			</p>
 		</div>
 
-		<div v-if="loading" class="flex items-center gap-2 text-secondary">
+		<div v-if="!authReady || loading" class="flex items-center gap-2 text-secondary">
 			<SpinnerIcon class="animate-spin" />
 			<span>Loading your projects…</span>
 		</div>
@@ -166,6 +182,16 @@ onMounted(load)
 			<p class="m-0 text-secondary">Sign in with your Modrinth account to see your projects.</p>
 			<ButtonStyled color="brand">
 				<button @click="signIn">Sign in</button>
+			</ButtonStyled>
+		</div>
+
+		<div
+			v-else-if="loadFailed"
+			class="flex flex-col items-center gap-3 rounded-xl bg-bg-raised p-8 text-center"
+		>
+			<p class="m-0 text-secondary">Couldn't load your projects.</p>
+			<ButtonStyled color="brand">
+				<button @click="load">Try again</button>
 			</ButtonStyled>
 		</div>
 
