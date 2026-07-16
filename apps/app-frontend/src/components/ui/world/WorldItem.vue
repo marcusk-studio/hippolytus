@@ -125,13 +125,29 @@ const playingOtherWorld = computed(() => props.playingInstance && !props.playing
 const hasPlayersTooltip = computed(
 	() => !!props.serverStatus?.players?.sample && props.serverStatus.players?.sample?.length > 0,
 )
+const multiVersionRange = /\d+(?:\.\d+)+\s*-\s*\d+(?:\.\d+)+/
+
+/**
+ * Whether the server's reported protocol number can be trusted as a
+ * compatibility signal. Multi-version proxies (Velocity, BungeeCord, Waterfall,
+ * or any ViaVersion-backed server) advertise a supported *range* in their
+ * version name, e.g. "Velocity 1.7.2-26.2", and report a single protocol number
+ * that is merely whichever version they echoed back rather than a hard
+ * compatibility boundary. When we see such a range the protocol integer is not
+ * a reliable signal, so we must not derive incompatibility from it.
+ */
+const serverProtocolIsReliable = computed(() => {
+	const name = props.serverStatus?.version?.name
+	return !name || !multiVersionRange.test(name)
+})
+
 const serverIncompatible = computed(
 	() =>
 		!!props.serverStatus &&
 		!!props.serverStatus.version?.protocol &&
 		!!props.currentProtocol &&
-		(props.serverStatus.version.protocol !== props.currentProtocol.version ||
-			props.serverStatus.version.legacy !== props.currentProtocol.legacy),
+		serverProtocolIsReliable.value &&
+		props.serverStatus.version.protocol !== props.currentProtocol.version,
 )
 
 const locked = computed(() => props.world.type === 'singleplayer' && props.world.locked)
