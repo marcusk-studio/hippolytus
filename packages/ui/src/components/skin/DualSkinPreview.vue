@@ -21,7 +21,7 @@
 		<TresCanvas
 			alpha
 			:antialias="true"
-			:dpr="[1, 1.5]"
+			:dpr="canvasDpr"
 			:renderer-options="{
 				outputColorSpace: THREE.SRGBColorSpace,
 				toneMapping: THREE.NoToneMapping,
@@ -117,6 +117,12 @@ const props = withDefaults(
 )
 
 const container = ref<HTMLElement | null>(null)
+
+// Supersample above native so the pixel-art texture edges don't ladder/crawl
+// under motion. Passing a fixed number (not a [min,max] range, which would clamp
+// to devicePixelRatio) makes Three render at this ratio. The canvas is small, so
+// the extra fill cost is cheap.
+const canvasDpr = Math.min((window.devicePixelRatio || 1) + 1, 3)
 
 type Placement = { x: number; y: number; z: number; ry: number }
 interface Scene {
