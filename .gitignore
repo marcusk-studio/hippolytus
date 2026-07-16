@@ -56,6 +56,9 @@ Thumbs.db
 # frontend generated files
 apps/frontend/src/generated
 
+# blog compile output (@modrinth/blog copies assets + feed here)
+apps/frontend/src/public/news/
+
 .turbo
 target
 generated
