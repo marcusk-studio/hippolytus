@@ -299,7 +299,6 @@ async function setupApp() {
 	const {
 		native_decorations,
 		theme,
-		locale,
 		telemetry,
 		collapsed_navigation,
 		hide_nametag_skins_page,
@@ -312,10 +311,9 @@ async function setupApp() {
 		pending_update_toast_for_version,
 	} = await getSettings()
 
-	// Initialize locale from saved settings
-	if (locale) {
-		i18n.global.locale.value = locale
-	}
+	// The launcher ships English only; ignore any saved non-en-US locale so
+	// shared @modrinth/ui messages don't render in a removed language.
+	i18n.global.locale.value = 'en-US'
 
 	if (default_page === 'Library') {
 		await router.push('/library')
@@ -1619,7 +1617,6 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 }
 
 .sidebar-skin-preview {
-	height: 22rem;
 	pointer-events: auto;
 }
 

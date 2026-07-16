@@ -40,10 +40,12 @@ await refresh()
 </script>
 
 <template>
-	<DualSkinPreview
-		v-if="skinTexture"
-		:left-texture-src="skinTexture"
-		:right-texture-src="PARTNER_SKIN"
-		:debug="debug"
-	/>
+	<!-- Height lives here so the sidebar slot collapses when there's no skin. -->
+	<div v-if="skinTexture" class="h-[22rem]">
+		<DualSkinPreview
+			:left-texture-src="skinTexture"
+			:right-texture-src="PARTNER_SKIN"
+			:debug="debug"
+		/>
+	</div>
 </template>
