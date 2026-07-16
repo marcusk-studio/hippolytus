@@ -173,6 +173,7 @@ const hud = reactive({ x: 8, y: 8 })
 
 const demo = ref(false)
 const flourishTimer: { left?: number; right?: number } = {}
+const returnTimer: { left?: number; right?: number } = {}
 let eventTimer: number | undefined
 let interacting = false
 
@@ -278,7 +279,7 @@ function scheduleFlourish(side: 'left' | 'right') {
 			const sub = IDLE_SUBS[Math.floor(Math.random() * IDLE_SUBS.length)]
 			const clip = rigs[side]?.clips[sub]
 			playOn(side, sub, 0, true)
-			window.setTimeout(
+			returnTimer[side] = window.setTimeout(
 				() => {
 					if (!demo.value || interacting) return
 					playOn(side, 'idle')
@@ -307,6 +308,8 @@ function runEvent() {
 	interacting = true
 	window.clearTimeout(flourishTimer.left)
 	window.clearTimeout(flourishTimer.right)
+	window.clearTimeout(returnTimer.left)
+	window.clearTimeout(returnTimer.right)
 	const scene = weightedPick(INTERACTIONS)
 	setScene(scene)
 	playScene(scene)
@@ -326,6 +329,8 @@ function scheduleEvent() {
 function clearDirectorTimers() {
 	window.clearTimeout(flourishTimer.left)
 	window.clearTimeout(flourishTimer.right)
+	window.clearTimeout(returnTimer.left)
+	window.clearTimeout(returnTimer.right)
 	window.clearTimeout(eventTimer)
 }
 
@@ -490,6 +495,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+	// Stop the director first so any timer already mid-flight can't reschedule.
+	demo.value = false
 	clearDirectorTimers()
 	window.removeEventListener('keydown', onKey)
 	window.removeEventListener('pointermove', onHudMove)
