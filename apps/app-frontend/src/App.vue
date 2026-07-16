@@ -141,6 +141,9 @@ const forceSidebar = computed(
 const sidebarVisible = computed(() => sidebarToggled.value || forceSidebar.value)
 /** The home page paints a full-bleed background, so the sidebar overlays it instead of taking a column. */
 const sidebarFloating = computed(() => sidebarVisible.value && route.path === '/')
+/** The floating sidebar overlays content rather than taking a column, so anything
+ * that reserves space for the sidebar column should treat it as absent while floating. */
+const sidebarColumnVisible = computed(() => sidebarVisible.value && !sidebarFloating.value)
 const notificationManager = new AppNotificationManager()
 provideNotificationManager(notificationManager)
 const { handleError, addNotification } = notificationManager
@@ -176,7 +179,7 @@ providePageContext({
 	showAds: ref(false),
 	floatingActionBarOffsets: {
 		left: ref(APP_LEFT_NAV_WIDTH),
-		right: computed(() => (sidebarVisible.value ? `${APP_SIDEBAR_WIDTH}px` : '0px')),
+		right: computed(() => (sidebarColumnVisible.value ? `${APP_SIDEBAR_WIDTH}px` : '0px')),
 	},
 	openExternalUrl: (url) => openUrl(url),
 })
@@ -1360,7 +1363,8 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 			<transition name="popup-survey">
 				<div
 					v-if="availableSurvey"
-					class="w-[400px] z-20 fixed -bottom-12 pb-16 right-[--right-bar-width] mr-4 rounded-t-2xl card-shadow bg-bg-raised border-surface-5 border-[1px] border-solid border-b-0 p-4"
+					class="w-[400px] z-20 fixed -bottom-12 pb-16 mr-4 rounded-t-2xl card-shadow bg-bg-raised border-surface-5 border-[1px] border-solid border-b-0 p-4"
+					:style="{ right: sidebarColumnVisible ? 'var(--right-bar-width)' : '0px' }"
 				>
 					<h2 class="text-lg font-extrabold mt-0 mb-2">Hey there!</h2>
 					<p class="m-0 leading-tight">
@@ -1482,8 +1486,8 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 		<UpdatesModal ref="updatesModal" />
 	</Suspense>
 	<I18nDebugPanel />
-	<NotificationPanel :has-sidebar="sidebarVisible" />
-	<PopupNotificationPanel :has-sidebar="sidebarVisible" />
+	<NotificationPanel :has-sidebar="sidebarColumnVisible" />
+	<PopupNotificationPanel :has-sidebar="sidebarColumnVisible" />
 	<ErrorModal ref="errorModal" />
 	<MinecraftAuthErrorModal ref="minecraftAuthErrorModal" />
 	<ContentInstallModal
