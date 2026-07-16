@@ -45,6 +45,7 @@
 		<TresCanvas
 			alpha
 			:antialias="true"
+			:render-mode="renderMode"
 			:dpr="rendererDpr"
 			:renderer-options="{
 				outputColorSpace: THREE.SRGBColorSpace,
@@ -121,6 +122,7 @@ import type {
 	SkinPreviewTuple,
 } from '#ui/composables/skin-rendering'
 import {
+	useForegroundRenderMode,
 	useSkinPreviewAnimation,
 	useSkinPreviewControls,
 	useSkinPreviewFit,
@@ -168,6 +170,8 @@ const props = withDefaults(
 		}),
 	},
 )
+
+const renderMode = useForegroundRenderMode()
 
 const skinPreviewContainer = useTemplateRef<HTMLElement>('skinPreviewContainer')
 const subtitleElement = useTemplateRef<HTMLElement>('subtitleElement')

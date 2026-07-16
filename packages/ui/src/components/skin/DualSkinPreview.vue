@@ -21,6 +21,7 @@
 		<TresCanvas
 			alpha
 			:antialias="true"
+			:render-mode="renderMode"
 			:dpr="canvasDpr"
 			:renderer-options="{
 				outputColorSpace: THREE.SRGBColorSpace,
@@ -103,9 +104,11 @@ import { TresCanvas, useRenderLoop } from '@tresjs/core'
 import * as THREE from 'three'
 import { computed, onMounted, onUnmounted, reactive, ref, toRef, watch } from 'vue'
 
-import { useSkinPreviewScene } from '#ui/composables/skin-rendering'
+import { useForegroundRenderMode, useSkinPreviewScene } from '#ui/composables/skin-rendering'
 
 import { emoteToClip } from './emote-clip'
+
+const renderMode = useForegroundRenderMode()
 
 const props = withDefaults(
 	defineProps<{
