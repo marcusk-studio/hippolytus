@@ -13,23 +13,32 @@ const themeStore = useTheming()
 const skinTexture = ref('')
 const debug = computed(() => themeStore.getFeatureFlag('dual_skin_debug'))
 
+// Guards against overlapping refreshes (e.g. rapid account switches) resolving
+// out of order: only the latest call is allowed to write skinTexture.
+let refreshToken = 0
+
 async function refresh() {
+	const token = ++refreshToken
+	const commit = (value: string) => {
+		if (token === refreshToken) skinTexture.value = value
+	}
+
 	const skins = await get_available_skins().catch(handleError)
 	const equipped = (skins ?? []).find((skin) => skin.is_equipped) ?? null
 
 	if (!equipped?.texture) {
-		skinTexture.value = ''
+		commit('')
 		return
 	}
 
 	try {
-		skinTexture.value = await get_normalized_skin_texture(equipped)
+		commit(await get_normalized_skin_texture(equipped))
 	} catch (error) {
 		if (equipped.texture.startsWith('data:image/')) {
-			skinTexture.value = equipped.texture
+			commit(equipped.texture)
 		} else {
 			handleError(error as Error)
-			skinTexture.value = ''
+			commit('')
 		}
 	}
 }
