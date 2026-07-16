@@ -258,7 +258,9 @@ onUnmounted(() => {
 
 <template>
 	<div v-if="loading" class="flex flex-col gap-2">
-		<span class="flex mt-1 mb-3 leading-none items-center gap-1 text-primary text-lg font-bold">
+		<span
+			class="inline-flex w-fit mt-1 mb-3 leading-none items-center gap-1 rounded-full bg-black/40 px-3 py-1 text-lg font-bold text-white backdrop-blur-md"
+		>
 			Jump back in
 		</span>
 		<div class="text-center py-4">
@@ -271,7 +273,7 @@ onUnmounted(() => {
 		</HeadingLink>
 		<span
 			v-else
-			class="flex mt-1 mb-3 leading-none items-center gap-1 text-primary text-lg font-bold"
+			class="inline-flex w-fit mt-1 mb-3 leading-none items-center gap-1 rounded-full bg-black/40 px-3 py-1 text-lg font-bold text-white backdrop-blur-md"
 		>
 			Jump back in
 		</span>

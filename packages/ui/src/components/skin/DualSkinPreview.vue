@@ -11,12 +11,13 @@
 	<!-- eslint-disable vue/no-undef-components -->
 	<div
 		ref="container"
-		class="relative w-full h-full select-none"
+		class="relative w-full h-full cursor-pointer select-none"
 		@pointerdown="onDown"
 		@pointermove="onMove"
 		@pointerup="onUp"
 		@pointerleave="onUp"
 		@wheel="onWheel"
+		@click="onCanvasClick"
 	>
 		<TresCanvas
 			alpha
@@ -183,6 +184,7 @@ const hud = reactive({ x: 8, y: 8 })
 const demo = ref(false)
 const flourishTimer: { left?: number; right?: number } = {}
 const returnTimer: { left?: number; right?: number } = {}
+const interactTimer: { left?: number; right?: number } = {}
 let eventTimer: number | undefined
 let interacting = false
 
@@ -192,7 +194,9 @@ const emoteClips: Record<string, THREE.AnimationClip> = {}
 for (const [path, json] of Object.entries(emoteFiles)) {
 	const name = path.split('/').pop()!.replace('.json', '')
 	const data = (json as { default?: unknown }).default ?? json
-	const clip = emoteToClip(data, name)
+	// penguin's flipper arms rely on translation we don't apply; its constant arm
+	// yaw alone reads as a needless spin, so drop it.
+	const clip = emoteToClip(data, name, { dropArmYaw: name === 'penguin' })
 	if (clip) emoteClips[name] = clip
 }
 const clipNames = [...MODEL_CLIPS, ...Object.keys(emoteClips).sort()]
@@ -340,7 +344,26 @@ function clearDirectorTimers() {
 	window.clearTimeout(flourishTimer.right)
 	window.clearTimeout(returnTimer.left)
 	window.clearTimeout(returnTimer.right)
+	window.clearTimeout(interactTimer.left)
+	window.clearTimeout(interactTimer.right)
 	window.clearTimeout(eventTimer)
+}
+
+// Click a character to make it play the one-shot interact animation, like the
+// skins tab, then return to idle.
+function onCanvasClick(e: MouseEvent) {
+	const rect = container.value?.getBoundingClientRect()
+	if (!rect) return
+	const side = e.clientX - rect.left < rect.width / 2 ? 'left' : 'right'
+	const clip = rigs[side]?.clips.interact
+	if (!clip) return
+	playOn(side, 'interact', 0, true)
+	window.clearTimeout(interactTimer[side])
+	interactTimer[side] = window.setTimeout(() => {
+		if (interacting) return
+		playOn(side, 'idle')
+		if (demo.value) scheduleFlourish(side)
+	}, clip.duration * 1000)
 }
 
 function startDirector() {

@@ -310,12 +310,22 @@ const handleModpackSelection = (projectId) => {
 		<!-- Modpack selector section -->
 		<div class="flex flex-col flex-grow">
 			<div class="pr-[--floating-sidebar-inset]">
-				<h1 v-if="recentInstances.length > 0" class="m-0 text-2xl font-extrabold">Welcome back!</h1>
-				<h1 v-else class="m-0 text-2xl font-extrabold">Welcome to MARCUSK Launcher!</h1>
+				<h1
+					v-if="recentInstances.length > 0"
+					class="m-0 inline-block rounded-full bg-black/40 px-4 py-1 text-2xl font-extrabold text-white backdrop-blur-md"
+				>
+					Welcome back!
+				</h1>
+				<h1
+					v-else
+					class="m-0 inline-block rounded-full bg-black/40 px-4 py-1 text-2xl font-extrabold text-white backdrop-blur-md"
+				>
+					Welcome to MARCUSK Launcher!
+				</h1>
 				<RecentWorldsList :recent-instances="recentInstances" />
 			</div>
 
-			<div class="mt-auto flex justify-between items-center">
+			<div class="mt-auto flex justify-between items-center pr-[--floating-sidebar-inset]">
 				<div class="flex items-center gap-4">
 					<div ref="dropdownRef" class="relative">
 						<button

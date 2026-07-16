@@ -72,7 +72,22 @@ function sampler(keyframes: Keyframe[]): (tick: number) => number {
 	}
 }
 
-export function emoteToClip(json: unknown, clipName: string): THREE.AnimationClip | null {
+export interface EmoteClipOptions {
+	/**
+	 * Drop arm yaw. Some emotes twist the arms via yaw as part of a translation-
+	 * based pose (e.g. penguin's flippers); with translation dropped that yaw
+	 * reads as a needless spin, so it can be suppressed per emote.
+	 */
+	dropArmYaw?: boolean
+}
+
+const ARM_PARTS = new Set(['rightArm', 'leftArm'])
+
+export function emoteToClip(
+	json: unknown,
+	clipName: string,
+	options: EmoteClipOptions = {},
+): THREE.AnimationClip | null {
 	const root = json as Record<string, unknown>
 	const emote = (root.emote as Record<string, unknown>) ?? root
 	const moves = (emote.moves as Record<string, unknown>[]) ?? []
@@ -109,7 +124,7 @@ export function emoteToClip(json: unknown, clipName: string): THREE.AnimationCli
 		const node = NODE[part]
 		if (!node) continue
 		const pitch = sampler(axes.pitch ?? [])
-		const yaw = sampler(axes.yaw ?? [])
+		const yaw = options.dropArmYaw && ARM_PARTS.has(part) ? () => 0 : sampler(axes.yaw ?? [])
 		const roll = sampler(axes.roll ?? [])
 		const quatValues: number[] = []
 		const secs: number[] = []
