@@ -664,6 +664,8 @@ onMounted(() => {
 const accounts = ref(null)
 provide('accountsCard', accounts)
 
+const sidebarSkinPreview = ref(null)
+
 command_listener(handleCommand)
 
 async function handleCommand(e) {
@@ -1466,12 +1468,12 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 						class="sidebar-account-panel p-4 border-0 border-b-[1px] border-[--brand-gradient-border] border-solid"
 					>
 						<suspense>
-							<AccountsCard ref="accounts" />
+							<AccountsCard ref="accounts" @change="() => sidebarSkinPreview?.refresh()" />
 						</suspense>
 					</div>
 					<div v-if="sidebarFloating" class="sidebar-skin-preview">
 						<suspense>
-							<SidebarSkinPreview />
+							<SidebarSkinPreview ref="sidebarSkinPreview" />
 						</suspense>
 					</div>
 				</div>
