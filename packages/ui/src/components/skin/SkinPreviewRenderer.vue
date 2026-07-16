@@ -305,7 +305,10 @@ const {
 	isModelLoaded,
 })
 
-const rendererDpr: [number, number] = [1, 1.5]
+// Supersample above native devicePixelRatio (a fixed number renders at this
+// ratio; a [min,max] range would clamp to the display and cap below native) so
+// the pixel-art texture edges don't ladder/crawl as the model moves.
+const rendererDpr = Math.min((window.devicePixelRatio || 1) + 1, 3)
 const radialSpotlightShader = createRadialSpotlightShader()
 const isReady = computed(() => isModelLoaded.value && isTextureLoaded.value && hasResolvedFit.value)
 const { isPreviewVisible, showLoading } = useSkinPreviewLoading(isReady)
