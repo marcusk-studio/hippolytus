@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.5.0](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.4.0...apps-v2.5.0) (2026-07-16)
+
+
+### ✨ Features
+
+* **app:** fill the home screen with an animated two-character scene, plus flag & locale cleanup ([#77](https://github.com/marcusk-studio/hippolytus/issues/77)) ([dd9d89c](https://github.com/marcusk-studio/hippolytus/commit/dd9d89c4ca74bbb4fe323b4543e9e496f8c8e5e9))
+* **app:** sidebar/skins/library cleanup and drop two dead settings ([#75](https://github.com/marcusk-studio/hippolytus/issues/75)) ([b4dfcdf](https://github.com/marcusk-studio/hippolytus/commit/b4dfcdfd16b2a9420ce33a5009f6f5306c91266c))
+
+
+### 🐛 Bugfixes
+
+* **app:** don't strand Windows installs during the perMachine migration ([#74](https://github.com/marcusk-studio/hippolytus/issues/74)) ([fa1c222](https://github.com/marcusk-studio/hippolytus/commit/fa1c222e9dd1209dd223f654a3a337f939469ea4))
+* **app:** stop false incompatible badge on multi-version proxy servers ([#79](https://github.com/marcusk-studio/hippolytus/issues/79)) ([c0978fb](https://github.com/marcusk-studio/hippolytus/commit/c0978fb480824cecf47970418dd68906eb45daac))
+* **app:** stop the inner button painting a second pill ([#73](https://github.com/marcusk-studio/hippolytus/issues/73)) ([ae61cc3](https://github.com/marcusk-studio/hippolytus/commit/ae61cc3c570fa5e29133b7f06dfed36e01e679ff))
+* **blog:** don't crash the compile on a fresh worktree ([#80](https://github.com/marcusk-studio/hippolytus/issues/80)) ([dbce471](https://github.com/marcusk-studio/hippolytus/commit/dbce47164027553a3a3165af4dead585852dceae))
+* **ui:** repoint green active-state pills/tabs at the brand token ([#78](https://github.com/marcusk-studio/hippolytus/issues/78)) ([e155c9d](https://github.com/marcusk-studio/hippolytus/commit/e155c9d14141343c8519fcfca774a9c06360f059))
+
 ## [2.4.0](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.3.1...apps-v2.4.0) (2026-07-15)
 
 
