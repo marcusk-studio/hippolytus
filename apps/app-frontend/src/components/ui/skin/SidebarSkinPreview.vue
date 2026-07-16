@@ -1,41 +1,32 @@
 <script setup lang="ts">
-import { injectNotificationManager, SkinPreviewRenderer } from '@modrinth/ui'
+import { DualSkinPreview, injectNotificationManager } from '@modrinth/ui'
 import { computed, ref } from 'vue'
 
-import type { Cape, Skin } from '@/helpers/skins'
-import {
-	get_available_capes,
-	get_available_skins,
-	get_normalized_skin_texture,
-} from '@/helpers/skins'
+import { get_available_skins, get_normalized_skin_texture } from '@/helpers/skins'
+import { useTheming } from '@/store/state'
+
+const PARTNER_SKIN = 'https://mc-heads.net/skin/xMARCUSKx'
 
 const { handleError } = injectNotificationManager()
+const themeStore = useTheming()
 
-const equippedSkin = ref<Skin | null>(null)
-const capes = ref<Cape[]>([])
 const skinTexture = ref('')
-
-const equippedCape = computed(() =>
-	equippedSkin.value?.cape_id
-		? capes.value.find((c) => c.id === equippedSkin.value?.cape_id)
-		: undefined,
-)
+const debug = computed(() => themeStore.getFeatureFlag('dual_skin_debug'))
 
 async function refresh() {
 	const skins = await get_available_skins().catch(handleError)
-	equippedSkin.value = (skins ?? []).find((skin) => skin.is_equipped) ?? null
-	capes.value = (await get_available_capes().catch(handleError)) ?? []
+	const equipped = (skins ?? []).find((skin) => skin.is_equipped) ?? null
 
-	if (!equippedSkin.value?.texture) {
+	if (!equipped?.texture) {
 		skinTexture.value = ''
 		return
 	}
 
 	try {
-		skinTexture.value = await get_normalized_skin_texture(equippedSkin.value)
+		skinTexture.value = await get_normalized_skin_texture(equipped)
 	} catch (error) {
-		if (equippedSkin.value.texture.startsWith('data:image/')) {
-			skinTexture.value = equippedSkin.value.texture
+		if (equipped.texture.startsWith('data:image/')) {
+			skinTexture.value = equipped.texture
 		} else {
 			handleError(error as Error)
 			skinTexture.value = ''
@@ -49,12 +40,10 @@ await refresh()
 </script>
 
 <template>
-	<SkinPreviewRenderer
+	<DualSkinPreview
 		v-if="skinTexture"
-		:texture-src="skinTexture"
-		:cape-src="equippedCape?.texture"
-		:variant="equippedSkin?.variant"
-		:initial-rotation="-Math.PI / 8"
-		:show-controls-hint="false"
+		:left-texture-src="skinTexture"
+		:right-texture-src="PARTNER_SKIN"
+		:debug="debug"
 	/>
 </template>

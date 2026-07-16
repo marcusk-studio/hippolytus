@@ -16,6 +16,7 @@ export const DEFAULT_FEATURE_FLAGS = {
 	pride_fundraiser: true,
 	i18n_debug: false,
 	show_instance_play_time: true,
+	dual_skin_debug: false,
 }
 
 export const THEME_OPTIONS = ['dark', 'light', 'oled', 'system'] as const
