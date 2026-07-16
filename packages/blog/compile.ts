@@ -267,22 +267,26 @@ async function generateJsonFile(articles): Promise<void> {
 }
 
 async function deleteDirContents(dir: string) {
+	let entries
 	try {
-		const entries = await fs.readdir(dir, { withFileTypes: true })
-		await Promise.all(
-			entries.map(async (entry) => {
-				const fullPath = path.posix.join(dir, entry.name)
-				if (entry.isDirectory()) {
-					await fs.rm(fullPath, { recursive: true, force: true })
-				} else {
-					await fs.unlink(fullPath)
-				}
-			}),
-		)
+		entries = await fs.readdir(dir, { withFileTypes: true })
 	} catch (error) {
+		// A missing target has no contents to clear — normal on a fresh checkout,
+		// where this generated directory doesn't exist until the first build.
+		if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
 		console.error(`❌  Error deleting contents of ${dir}:`, error)
 		throw error
 	}
+	await Promise.all(
+		entries.map(async (entry) => {
+			const fullPath = path.posix.join(dir, entry.name)
+			if (entry.isDirectory()) {
+				await fs.rm(fullPath, { recursive: true, force: true })
+			} else {
+				await fs.unlink(fullPath)
+			}
+		}),
+	)
 }
 
 async function copyPublicAssets() {
