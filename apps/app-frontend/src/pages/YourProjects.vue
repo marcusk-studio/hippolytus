@@ -17,10 +17,13 @@ const router = useRouter()
 
 const loading = ref(false)
 const loadFailed = ref(false)
+const serverUnauthenticated = ref(false)
 const data = ref<UserAllProjects | null>(null)
 
+let loadId = 0
+
 const authReady = computed(() => auth.isReady.value)
-const signedIn = computed(() => !!auth.session_token.value)
+const signedIn = computed(() => !!auth.session_token.value && !serverUnauthenticated.value)
 
 type ProjectGroup = {
 	key: string
@@ -123,20 +126,36 @@ function openProject(project: UserProject) {
 }
 
 async function load() {
-	if (!signedIn.value) {
+	if (!auth.session_token.value) {
 		data.value = null
 		return
 	}
+	const id = ++loadId
 	loading.value = true
 	loadFailed.value = false
+	serverUnauthenticated.value = false
 	try {
-		data.value = await getUserProjects()
+		const result = await getUserProjects()
+		// Discard if the auth state changed (sign-out / account switch) while
+		// this request was in flight, so a stale response can't repopulate
+		// private project metadata on a screen that no longer owns it.
+		if (id !== loadId) return
+		if (result === null) {
+			// Backend has no active credentials — the session expired
+			// server-side and was cleared. Treat as signed out even though the
+			// frontend credentials ref hasn't caught up yet.
+			serverUnauthenticated.value = true
+			data.value = null
+			return
+		}
+		data.value = result
 	} catch (err) {
+		if (id !== loadId) return
 		data.value = null
 		loadFailed.value = true
 		handleError(err)
 	} finally {
-		loading.value = false
+		if (id === loadId) loading.value = false
 	}
 }
 
@@ -150,10 +169,14 @@ watch(
 		if (token) {
 			load()
 		} else {
-			// Signed out (or not yet signed in): drop any fetched project
-			// metadata so private/unlisted projects don't linger on screen.
-			data.value = null
+			// Signed out (or not yet signed in): invalidate any in-flight load
+			// and drop fetched project metadata so private/unlisted projects
+			// don't linger on screen.
+			loadId++
+			loading.value = false
 			loadFailed.value = false
+			serverUnauthenticated.value = false
+			data.value = null
 		}
 	},
 	{ immediate: true },
