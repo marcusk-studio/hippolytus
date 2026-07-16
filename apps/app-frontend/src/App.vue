@@ -69,7 +69,6 @@ import InstallToPlayModal from '@/components/ui/modal/InstallToPlayModal.vue'
 import ModpackAlreadyInstalledModal from '@/components/ui/modal/ModpackAlreadyInstalledModal.vue'
 import UpdateToPlayModal from '@/components/ui/modal/UpdateToPlayModal.vue'
 import NavButton from '@/components/ui/NavButton.vue'
-import PrideFundraiserBanner from '@/components/ui/PrideFundraiserBanner.vue'
 import QuickInstanceSwitcher from '@/components/ui/QuickInstanceSwitcher.vue'
 import SidebarSkinPreview from '@/components/ui/skin/SidebarSkinPreview.vue'
 import SplashScreen from '@/components/ui/SplashScreen.vue'
@@ -131,7 +130,6 @@ const router = useRouter()
 const route = useRoute()
 const APP_LEFT_NAV_WIDTH = '4rem'
 const APP_SIDEBAR_WIDTH = 300
-const PRIDE_FUNDRAISER_END_DATE = new Date('2026-07-01T00:00:00Z').getTime()
 const credentials = ref()
 const sidebarToggled = ref(true)
 const unsubscribeSidebarToggle = themeStore.$subscribe(() => {
@@ -143,9 +141,6 @@ const forceSidebar = computed(
 const sidebarVisible = computed(() => sidebarToggled.value || forceSidebar.value)
 /** The home page paints a full-bleed background, so the sidebar overlays it instead of taking a column. */
 const sidebarFloating = computed(() => sidebarVisible.value && route.path === '/')
-const prideFundraiserEnabled = computed(
-	() => themeStore.getFeatureFlag('pride_fundraiser') && Date.now() < PRIDE_FUNDRAISER_END_DATE,
-)
 const notificationManager = new AppNotificationManager()
 provideNotificationManager(notificationManager)
 const { handleError, addNotification } = notificationManager
@@ -182,11 +177,6 @@ providePageContext({
 	floatingActionBarOffsets: {
 		left: ref(APP_LEFT_NAV_WIDTH),
 		right: computed(() => (sidebarVisible.value ? `${APP_SIDEBAR_WIDTH}px` : '0px')),
-	},
-	featureFlags: {
-		serverRamAsBytesAlwaysOn: computed(() =>
-			themeStore.getFeatureFlag('server_ram_as_bytes_always_on'),
-		),
 	},
 	openExternalUrl: (url) => openUrl(url),
 })
@@ -1480,10 +1470,6 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 							<AccountsCard ref="accounts" />
 						</suspense>
 					</div>
-					<PrideFundraiserBanner
-						v-if="prideFundraiserEnabled"
-						class="p-4 border-0 border-b-[1px] border-[--brand-gradient-border] border-solid"
-					/>
 					<div v-if="sidebarFloating" class="sidebar-skin-preview">
 						<suspense>
 							<SidebarSkinPreview />

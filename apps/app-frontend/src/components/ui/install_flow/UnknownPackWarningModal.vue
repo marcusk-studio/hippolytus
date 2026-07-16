@@ -17,7 +17,6 @@
 					{{ formatMessage(messages.malwareStatement) }}
 				</p>
 			</div>
-			<Checkbox v-model="dontShowAgain" :label="formatMessage(messages.dontShowAgain)" />
 			<div class="flex gap-2 justify-end">
 				<ButtonStyled type="outlined">
 					<button @click="cancel">
@@ -42,7 +41,6 @@ import { CircleArrowRightIcon, SpinnerIcon, XIcon } from '@modrinth/assets'
 import {
 	Admonition,
 	ButtonStyled,
-	Checkbox,
 	commonMessages,
 	defineMessages,
 	NewModal,
@@ -50,15 +48,8 @@ import {
 } from '@modrinth/ui'
 import { ref, useTemplateRef } from 'vue'
 
-import { get as getSettings, set as setSettings } from '@/helpers/settings'
-import { useTheming } from '@/store/state'
-import type { FeatureFlag } from '@/store/theme.ts'
-
 const { formatMessage } = useVIntl()
-const themeStore = useTheming()
-const skipUnknownPackWarningFeatureFlag = 'skip_unknown_pack_warning' as FeatureFlag
 
-const dontShowAgain = ref(false)
 const modal = useTemplateRef('modal')
 const onProceed = ref<() => Promise<void>>()
 const isProceeding = ref(false)
@@ -85,10 +76,6 @@ const messages = defineMessages({
 		id: 'unknown-pack-warning-modal.malware-statement',
 		defaultMessage: `Malware is often distributed through modpack files by sharing them on platforms like Discord.`,
 	},
-	dontShowAgain: {
-		id: 'unknown-pack-warning-modal.dont-show-again',
-		defaultMessage: `Don't show this warning again`,
-	},
 	installAnyway: {
 		id: 'unknown-pack-warning-modal.install-anyway',
 		defaultMessage: `Install anyway`,
@@ -98,13 +85,6 @@ const messages = defineMessages({
 function show(createInstance: () => Promise<void>, selectedFileName = '') {
 	onProceed.value = createInstance
 	fileName.value = selectedFileName
-	dontShowAgain.value = false
-
-	if (themeStore.getFeatureFlag(skipUnknownPackWarningFeatureFlag)) {
-		// noinspection ES6MissingAwait
-		createInstance()
-		return
-	}
 
 	modal.value?.show()
 }
@@ -118,16 +98,9 @@ function cancel() {
 	modal.value?.hide()
 }
 
-async function proceed() {
+function proceed() {
 	if (!onProceed.value) {
 		return
-	}
-
-	if (dontShowAgain.value) {
-		themeStore.featureFlags[skipUnknownPackWarningFeatureFlag] = true
-		const settings = await getSettings()
-		settings.feature_flags[skipUnknownPackWarningFeatureFlag] = true
-		await setSettings(settings)
 	}
 
 	const createInstance = onProceed.value
