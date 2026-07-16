@@ -1,0 +1,27 @@
+DEFAULT_BRANCH: main
+
+# MegaLinter runs here purely as a SARIF security feed into GitHub code
+# scanning, not as a general linter: style and correctness are already owned
+# by the repo's turbo/eslint/prettier/cargo (clippy, fmt), typos, tombi and
+# cargo-shear stack. Restricting to a single linter keeps MegaLinter from
+# duplicating or fighting that stack.
+ENABLE_LINTERS: REPOSITORY_OSV_SCANNER
+
+# osv-scanner (dependency CVE scanning) is project-scope, so it walks the whole
+# tree regardless of the changed-file filter. VALIDATE_ALL_CODEBASE keeps its
+# behaviour identical on push and on PRs.
+VALIDATE_ALL_CODEBASE: true
+
+# osv-scanner findings are advisory: surface transitive-dependency CVEs in the
+# Security tab, but never gate a PR on them (a fix often needs an upstream bump
+# we don't control).
+REPOSITORY_OSV_SCANNER_DISABLE_ERRORS: true
+
+# Aggregate osv-scanner's output into a single
+# `megalinter-reports/megalinter-report.sarif`, which the workflow uploads to
+# the GitHub code-scanning UI via github/codeql-action/upload-sarif.
+SARIF_REPORTER: true
+
+FILEIO_REPORTER: false
+FLAVOR_SUGGESTIONS: false
+SHOW_ELAPSED_TIME: true
