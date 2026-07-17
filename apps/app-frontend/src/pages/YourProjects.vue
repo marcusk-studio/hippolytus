@@ -142,10 +142,13 @@ async function load() {
 		if (id !== loadId) return
 		if (result === null) {
 			// Backend has no active credentials — the session expired
-			// server-side and was cleared. Treat as signed out even though the
-			// frontend credentials ref hasn't caught up yet.
+			// server-side and was cleared. Flag this page as signed out, then
+			// reconcile the app-wide auth state so the rest of the UI stops
+			// showing the user as signed in. The flag covers the case where no
+			// refresh hook is available.
 			serverUnauthenticated.value = true
 			data.value = null
+			await auth.refreshSession?.()
 			return
 		}
 		data.value = result

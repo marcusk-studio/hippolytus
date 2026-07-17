@@ -1,6 +1,6 @@
 <script setup>
 import { DownloadIcon, PlayIcon } from '@modrinth/assets'
-import { ButtonStyled, injectNotificationManager } from '@modrinth/ui'
+import { ButtonStyled, injectAuth, injectNotificationManager } from '@modrinth/ui'
 import dayjs from 'dayjs'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
@@ -20,10 +20,13 @@ import { useBreadcrumbs } from '@/store/breadcrumbs'
 
 const { handleError } = injectNotificationManager()
 const { install: installVersion } = injectContentInstall()
+const auth = injectAuth()
 
 const featuredModpacks = ref([])
 const featuredMods = ref([])
 const filter = ref('')
+
+let featuredLoadId = 0
 
 const route = useRoute()
 const breadcrumbs = useBreadcrumbs()
@@ -98,9 +101,13 @@ const hydrateNonPublicFeatured = async (hits) => {
 		return []
 	}
 
+	// Bypass the cache: whether these resolve depends on the current session,
+	// so a copy cached while signed in must not leak into a signed-out view.
 	// A featured pack the current user has no access to is expected to fail
 	// here, so swallow the error instead of surfacing it as an app error.
-	const projects = await Promise.all(missing.map((p) => get_project(p.id).catch(() => null)))
+	const projects = await Promise.all(
+		missing.map((p) => get_project(p.id, 'bypass').catch(() => null)),
+	)
 
 	return await Promise.all(
 		projects
@@ -124,10 +131,16 @@ const hydrateNonPublicFeatured = async (hits) => {
 }
 
 const getFeaturedModpacks = async () => {
+	// Guards against overlapping loads (mount plus a sign-in) clobbering each
+	// other, since which packs resolve depends on the session in effect.
+	const loadId = ++featuredLoadId
+
 	await fetchFeaturedProjects()
 
 	if (featuredProjects.value.length === 0) {
-		featuredModpacks.value = []
+		if (loadId === featuredLoadId) {
+			featuredModpacks.value = []
+		}
 		return
 	}
 
@@ -152,7 +165,9 @@ const getFeaturedModpacks = async () => {
 	const entries = [...hits, ...(await hydrateNonPublicFeatured(hits))]
 
 	if (entries.length === 0) {
-		featuredModpacks.value = []
+		if (loadId === featuredLoadId) {
+			featuredModpacks.value = []
+		}
 		return
 	}
 
@@ -175,6 +190,10 @@ const getFeaturedModpacks = async () => {
 			}
 		}),
 	)
+
+	if (loadId !== featuredLoadId) {
+		return
+	}
 
 	featuredModpacks.value = entries.map((entry, index) => {
 		const instance = instances.find((p) => p.link?.project_id === entry.project_id)
@@ -201,6 +220,16 @@ const getFeaturedModpacks = async () => {
 		selectedModpackId.value = featuredModpacks.value[0].project_id
 	}
 }
+
+// Which featured packs resolve depends on the session, so reload when the user
+// signs in or out. Without this, a user who signs in while sitting on the home
+// screen wouldn't see the private packs they just gained access to.
+watch(
+	() => auth.session_token.value,
+	() => {
+		getFeaturedModpacks()
+	},
+)
 
 watch(selectedModpackId, (newValue) => {
 	if (newValue) {

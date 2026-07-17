@@ -583,9 +583,15 @@ watch(incompatibilityWarningModal, (modal) => {
 	}
 })
 
-setupAuthProvider(credentials, async (_redirectPath) => {
-	await signIn()
-})
+setupAuthProvider(
+	credentials,
+	async (_redirectPath) => {
+		await signIn()
+	},
+	async () => {
+		await fetchCredentials()
+	},
+)
 
 async function validateSession(sessionToken) {
 	try {
