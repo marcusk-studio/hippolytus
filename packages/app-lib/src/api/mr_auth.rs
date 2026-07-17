@@ -4,7 +4,9 @@ use reqwest::Method;
 
 /// Cache types whose entries can hold data only a signed-in user was allowed to
 /// see, such as private and unlisted projects. The cache is keyed by id and not
-/// partitioned by account, so these are dropped when signing out.
+/// partitioned by account, so these are dropped whenever the active account
+/// changes: on sign-out, and on sign-in since that can replace a different
+/// account without sign-out running.
 const AUTHENTICATED_CACHE_TYPES: &[CacheValueType] = &[
     CacheValueType::Project,
     CacheValueType::ProjectV3,
@@ -33,6 +35,13 @@ pub async fn authenticate_finish_flow(
     .await?;
 
     creds.upsert(&state.pool).await?;
+
+    // Signing in makes this the active account, replacing any previous one
+    // without logout necessarily having run, so drop cached data the previous
+    // session was allowed to see before this one can read it.
+    CachedEntry::purge_cache_types(AUTHENTICATED_CACHE_TYPES, &state.pool)
+        .await?;
+
     state
         .friends_socket
         .connect(&state.pool, &state.api_semaphore, &state.process_manager)

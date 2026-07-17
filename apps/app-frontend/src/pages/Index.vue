@@ -229,16 +229,16 @@ const getFeaturedModpacks = async () => {
 // screen wouldn't see the private packs they just gained access to.
 watch(
 	() => auth.session_token.value,
-	(token) => {
-		if (!token) {
-			// Drop non-public packs synchronously. The reload below is async, so
-			// until it finishes the list would keep showing packs that only the
-			// previous session was allowed to see.
-			featuredModpacks.value = featuredModpacks.value.filter((modpack) => !modpack.nonPublic)
+	() => {
+		// Any identity change invalidates packs only the previous session could
+		// see, whether that's a sign-out or a switch straight to another
+		// account. Drop them synchronously: the reload below is async, so until
+		// it finishes the list would keep showing them. Public packs stay, so
+		// the list doesn't blank out.
+		featuredModpacks.value = featuredModpacks.value.filter((modpack) => !modpack.nonPublic)
 
-			if (!featuredModpacks.value.some((m) => m.project_id === selectedModpackId.value)) {
-				selectedModpackId.value = featuredModpacks.value[0]?.project_id ?? ''
-			}
+		if (!featuredModpacks.value.some((m) => m.project_id === selectedModpackId.value)) {
+			selectedModpackId.value = featuredModpacks.value[0]?.project_id ?? ''
 		}
 
 		getFeaturedModpacks()
