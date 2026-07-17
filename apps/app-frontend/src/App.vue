@@ -1281,7 +1281,11 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 			<NavButton v-tooltip.right="'Skin selector'" to="/skins">
 				<ChangeSkinIcon />
 			</NavButton>
-			<NavButton v-tooltip.right="'Your projects'" to="/your-projects">
+			<NavButton
+				v-if="themeStore.featureFlags.your_projects_tab"
+				v-tooltip.right="'Your projects'"
+				to="/your-projects"
+			>
 				<OrganizationIcon />
 			</NavButton>
 			<NavButton
