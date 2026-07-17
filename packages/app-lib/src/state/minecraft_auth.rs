@@ -278,12 +278,17 @@ impl Credentials {
                     Self::remove(self.offline_profile.id, exec).await?;
 
                 // Notify the frontend directly, rather than relying on this error
-                // reaching a caller that surfaces the sign-in modal. Emit only if
-                // this call is the one that actually removed the row, so concurrent
-                // refreshes of the same account (e.g. the accounts list and the
-                // default-user lookup both firing on startup) raise the modal once.
+                // reaching a caller that surfaces the sign-in modal. Two conditions
+                // gate the emit:
+                //   - only the call that actually removed the row emits, so
+                //     concurrent refreshes of the same account (e.g. the accounts
+                //     list and the default-user lookup both firing on startup) raise
+                //     the modal once;
+                //   - only the active account emits, since `get_all` refreshes every
+                //     stored row and pruning a stale inactive account should not tell
+                //     a still-signed-in user they were signed out.
                 // Ignore emit failures: the sign-out itself has already happened.
-                if removed > 0 {
+                if removed > 0 && self.active {
                     let _ = crate::event::emit::emit_minecraft_auth_signed_out(
                         self.offline_profile.id,
                         err.to_string(),

@@ -677,7 +677,13 @@ command_listener(handleCommand)
 // runs after initialize_state resolves, by which point AccountsCard may already have
 // triggered an auto sign-out via get_default_user. The signed-out event is
 // fire-and-forget, so the listener must be live before any account refresh can emit it.
-minecraft_auth_signed_out_listener((e) => error.showError(new Error(e.message)))
+minecraft_auth_signed_out_listener((e) => {
+	error.showError(new Error(e.message))
+	// The backend has already removed the account; refresh the sidebar so it does
+	// not keep listing it when the sign-out was detected outside AccountsCard's own
+	// refresh path (e.g. while launching an instance).
+	accounts.value?.refreshValues()
+})
 
 async function handleCommand(e) {
 	if (!e) return
