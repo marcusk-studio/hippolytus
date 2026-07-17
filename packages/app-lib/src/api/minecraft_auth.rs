@@ -39,15 +39,10 @@ pub async fn finish_login(
 #[tracing::instrument]
 pub async fn get_default_user() -> crate::Result<Option<uuid::Uuid>> {
     let state = State::get().await?;
-
-    let user = match Credentials::get_active(&state.pool).await {
-        Ok(user) => user,
-        // The account this would have returned has just been signed out, so from the
-        // caller's point of view there simply is no default user anymore
-        Err(err) if err.is_signed_out() => None,
-        Err(err) => return Err(err),
-    };
-
+    // A signed-out error propagates here on purpose: it lets the frontend surface the
+    // "you were signed out" modal once, at the moment the revoked account is removed.
+    // Subsequent calls find no active account and simply return `None`.
+    let user = Credentials::get_active(&state.pool).await?;
     Ok(user.map(|user| user.offline_profile.id))
 }
 
