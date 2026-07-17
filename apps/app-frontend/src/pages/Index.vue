@@ -1,13 +1,18 @@
 <script setup>
 import { DownloadIcon, PlayIcon } from '@modrinth/assets'
-import { ButtonStyled, injectNotificationManager } from '@modrinth/ui'
+import { ButtonStyled, injectAuth, injectNotificationManager } from '@modrinth/ui'
 import dayjs from 'dayjs'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 import RecentWorldsList from '@/components/ui/world/RecentWorldsList.vue'
 import { trackEvent } from '@/helpers/analytics'
-import { get_project, get_search_results, get_version_many } from '@/helpers/cache.js'
+import {
+	get_organization,
+	get_project,
+	get_search_results,
+	get_version_many,
+} from '@/helpers/cache.js'
 import { instance_listener, process_listener } from '@/helpers/events'
 import { list, run, update_managed_modrinth_version } from '@/helpers/instance'
 import { injectContentInstall } from '@/providers/content-install'
@@ -15,10 +20,13 @@ import { useBreadcrumbs } from '@/store/breadcrumbs'
 
 const { handleError } = injectNotificationManager()
 const { install: installVersion } = injectContentInstall()
+const auth = injectAuth()
 
 const featuredModpacks = ref([])
 const featuredMods = ref([])
 const filter = ref('')
+
+let featuredLoadId = 0
 
 const route = useRoute()
 const breadcrumbs = useBreadcrumbs()
@@ -77,8 +85,67 @@ const fetchFeaturedProjects = async () => {
 	}
 }
 
+/**
+ * Hydrates featured packs that the search index can't return.
+ *
+ * Search only indexes public (approved/archived) projects, so a featured pack
+ * that is private or unlisted never appears in the hits. Fetching the project
+ * directly is authenticated, so it resolves for members who can see the pack
+ * and fails for everyone else.
+ */
+const hydrateNonPublicFeatured = async (hits) => {
+	const found = new Set(hits.map((hit) => hit.project_id))
+	const missing = featuredProjects.value.filter((p) => !found.has(p.id))
+
+	if (missing.length === 0) {
+		return []
+	}
+
+	// Bypass the cache: whether these resolve depends on the current session,
+	// so a copy cached while signed in must not leak into a signed-out view.
+	// A featured pack the current user has no access to is expected to fail
+	// here, so swallow the error instead of surfacing it as an app error.
+	const projects = await Promise.all(
+		missing.map((p) => get_project(p.id, 'bypass').catch(() => null)),
+	)
+
+	return await Promise.all(
+		projects
+			.filter((project) => project?.project_type === 'modpack')
+			.map(async (project) => {
+				const organization = project.organization
+					? await get_organization(project.organization).catch(() => null)
+					: null
+
+				return {
+					project_id: project.id,
+					project_type: project.project_type,
+					slug: project.slug,
+					title: project.title,
+					description: project.description,
+					icon_url: project.icon_url,
+					author: organization?.name,
+					// Marks an entry the search index wouldn't return, so it can
+					// be dropped the moment the session that revealed it ends.
+					nonPublic: true,
+				}
+			}),
+	)
+}
+
 const getFeaturedModpacks = async () => {
+	// Guards against overlapping loads (mount plus a sign-in) clobbering each
+	// other, since which packs resolve depends on the session in effect.
+	const loadId = ++featuredLoadId
+
 	await fetchFeaturedProjects()
+
+	if (featuredProjects.value.length === 0) {
+		if (loadId === featuredLoadId) {
+			featuredModpacks.value = []
+		}
+		return
+	}
 
 	// Create structured filters exactly like in the browse file
 	const filters = []
@@ -88,11 +155,7 @@ const getFeaturedModpacks = async () => {
 
 	// Project ID filter - each project_id is its own entry in the inner array,
 	// which the Modrinth search API treats as OR (there is no `OR` keyword)
-	if (featuredProjects.value.length > 0) {
-		filters.push(featuredProjects.value.map((p) => `project_id:${p.id}`))
-	} else {
-		filters.push(['project_id:none'])
-	}
+	filters.push(featuredProjects.value.map((p) => `project_id:${p.id}`))
 
 	// Build the facets parameter in the format the API expects
 	const facetsParam = JSON.stringify(filters)
@@ -101,56 +164,86 @@ const getFeaturedModpacks = async () => {
 	const query = `?facets=${facetsParam}&limit=10&index=follows${filter.value ? `&query=${filter.value}` : ''}`
 
 	const response = await get_search_results(query)
+	const hits = response?.result?.hits ?? []
+	const entries = [...hits, ...(await hydrateNonPublicFeatured(hits))]
 
-	if (response?.result?.hits) {
-		const instances = (await list().catch(handleError)) ?? []
+	if (entries.length === 0) {
+		if (loadId === featuredLoadId) {
+			featuredModpacks.value = []
+		}
+		return
+	}
 
-		const latestVersions = await Promise.all(
-			response.result.hits.map(async (hit) => {
-				try {
-					const project = await get_project(hit.project_id)
+	const instances = (await list().catch(handleError)) ?? []
 
-					if (!project?.versions?.length) {
-						return null
-					}
+	const latestVersions = await Promise.all(
+		entries.map(async (entry) => {
+			try {
+				const project = await get_project(entry.project_id)
 
-					const versions = await get_version_many(project.versions)
-					return versions.sort((a, b) => new Date(b.date_published) - new Date(a.date_published))[0]
-				} catch (error) {
-					handleError(error)
+				if (!project?.versions?.length) {
 					return null
 				}
-			}),
-		)
 
-		featuredModpacks.value = response.result.hits.map((hit, index) => {
-			const instance = instances.find((p) => p.link?.project_id === hit.project_id)
-
-			const isInstalled = !!instance
-			installed.value[hit.project_id] = isInstalled
-
-			if (isInstalled && latestVersions[index]) {
-				const currentVersion = instance.link.version_id
-				const latestVersion = latestVersions[index].id
-				hasUpdate.value[hit.project_id] = currentVersion !== latestVersion
+				const versions = await get_version_many(project.versions)
+				return versions.sort((a, b) => new Date(b.date_published) - new Date(a.date_published))[0]
+			} catch (error) {
+				handleError(error)
+				return null
 			}
+		}),
+	)
 
-			return {
-				...hit,
-				project_id: hit.project_id,
-				project_type: hit.project_type,
-				slug: hit.slug,
-				latestVersionId: latestVersions[index]?.id,
-			}
-		})
+	if (loadId !== featuredLoadId) {
+		return
+	}
 
-		if (!selectedModpackId.value && featuredModpacks.value.length > 0) {
-			selectedModpackId.value = featuredModpacks.value[0].project_id
+	featuredModpacks.value = entries.map((entry, index) => {
+		const instance = instances.find((p) => p.link?.project_id === entry.project_id)
+
+		const isInstalled = !!instance
+		installed.value[entry.project_id] = isInstalled
+
+		if (isInstalled && latestVersions[index]) {
+			const currentVersion = instance.link.version_id
+			const latestVersion = latestVersions[index].id
+			hasUpdate.value[entry.project_id] = currentVersion !== latestVersion
 		}
-	} else {
-		featuredModpacks.value = []
+
+		return {
+			...entry,
+			project_id: entry.project_id,
+			project_type: entry.project_type,
+			slug: entry.slug,
+			latestVersionId: latestVersions[index]?.id,
+		}
+	})
+
+	if (!selectedModpackId.value && featuredModpacks.value.length > 0) {
+		selectedModpackId.value = featuredModpacks.value[0].project_id
 	}
 }
+
+// Which featured packs resolve depends on the session, so reload when the user
+// signs in or out. Without this, a user who signs in while sitting on the home
+// screen wouldn't see the private packs they just gained access to.
+watch(
+	() => auth.session_token.value,
+	() => {
+		// Any identity change invalidates packs only the previous session could
+		// see, whether that's a sign-out or a switch straight to another
+		// account. Drop them synchronously: the reload below is async, so until
+		// it finishes the list would keep showing them. Public packs stay, so
+		// the list doesn't blank out.
+		featuredModpacks.value = featuredModpacks.value.filter((modpack) => !modpack.nonPublic)
+
+		if (!featuredModpacks.value.some((m) => m.project_id === selectedModpackId.value)) {
+			selectedModpackId.value = featuredModpacks.value[0]?.project_id ?? ''
+		}
+
+		getFeaturedModpacks()
+	},
+)
 
 watch(selectedModpackId, (newValue) => {
 	if (newValue) {

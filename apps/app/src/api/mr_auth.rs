@@ -14,6 +14,7 @@ pub fn init<R: tauri::Runtime>() -> TauriPlugin<R> {
             modrinth_login,
             logout,
             get,
+            get_user_projects,
             cancel_modrinth_login,
         ])
         .build()
@@ -75,6 +76,11 @@ pub async fn logout() -> Result<()> {
 #[tauri::command]
 pub async fn get() -> Result<Option<ModrinthCredentials>> {
     Ok(theseus::mr_auth::get_credentials().await?)
+}
+
+#[tauri::command]
+pub async fn get_user_projects() -> Result<Option<serde_json::Value>> {
+    Ok(theseus::mr_auth::get_user_projects().await?)
 }
 
 #[tauri::command]

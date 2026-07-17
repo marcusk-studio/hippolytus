@@ -10,6 +10,7 @@ type AppCredentials = {
 export function setupAuthProvider(
 	credentials: Ref<AppCredentials | null | undefined>,
 	requestSignIn: (redirectPath: string) => void | Promise<void>,
+	refreshSession?: () => Promise<void>,
 ) {
 	const sessionToken = ref<string | null>(null)
 	const user = ref<AuthUser | null>(null)
@@ -20,6 +21,7 @@ export function setupAuthProvider(
 		user,
 		isReady,
 		requestSignIn,
+		refreshSession,
 	}
 
 	watchEffect(() => {

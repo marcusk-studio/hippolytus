@@ -15,6 +15,7 @@ import {
 	LeftArrowIcon,
 	LibraryIcon,
 	NotepadTextIcon,
+	OrganizationIcon,
 	RefreshCwIcon,
 	RightArrowIcon,
 	SettingsIcon,
@@ -582,9 +583,15 @@ watch(incompatibilityWarningModal, (modal) => {
 	}
 })
 
-setupAuthProvider(credentials, async (_redirectPath) => {
-	await signIn()
-})
+setupAuthProvider(
+	credentials,
+	async (_redirectPath) => {
+		await signIn()
+	},
+	async () => {
+		await fetchCredentials()
+	},
+)
 
 async function validateSession(sessionToken) {
 	try {
@@ -1279,6 +1286,13 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 			</NavButton>
 			<NavButton v-tooltip.right="'Skin selector'" to="/skins">
 				<ChangeSkinIcon />
+			</NavButton>
+			<NavButton
+				v-if="themeStore.featureFlags.your_projects_tab"
+				v-tooltip.right="'Your projects'"
+				to="/your-projects"
+			>
+				<OrganizationIcon />
 			</NavButton>
 			<NavButton
 				v-tooltip.right="'Library'"

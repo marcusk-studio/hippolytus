@@ -7,6 +7,7 @@ export const DEFAULT_FEATURE_FLAGS = {
 	page_path: false,
 	worlds_tab: false,
 	worlds_in_home: true,
+	your_projects_tab: false,
 	skip_non_essential_warnings: false,
 	i18n_debug: false,
 	show_instance_play_time: true,
