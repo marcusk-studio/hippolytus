@@ -8,10 +8,22 @@ export interface MinecraftAuthError {
 
 export const minecraftAuthErrors: MinecraftAuthError[] = [
 	{
+		errorMatchers: [
+			'The saved Microsoft sign-in is no longer valid, so the account was signed out',
+		],
+		whatHappened:
+			'Your saved Microsoft sign-in token expired or was revoked, so Modrinth App signed the affected Minecraft account out.',
+		stepsToFix: [
+			'Sign in to the account again',
+			'Once the new sign-in finishes, try launching Minecraft again',
+		],
+	},
+	{
 		errorMatchers: ['Failed to deserialize response to JSON during step RefreshOAuthToken:'],
 		whatHappened:
-			'Your saved Microsoft sign-in token has expired or was revoked, so Modrinth App cannot refresh your Minecraft session.',
+			'Modrinth App could not refresh your Minecraft session, and Microsoft did not say why.',
 		stepsToFix: [
+			'Wait a few minutes and try again',
 			'Sign out of the affected Minecraft account in Modrinth App',
 			'Sign in to the account again',
 			'Once the new sign-in finishes, try launching Minecraft again',

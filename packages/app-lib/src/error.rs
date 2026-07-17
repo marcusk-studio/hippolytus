@@ -190,6 +190,21 @@ pub struct Error {
     pub source: tracing_error::TracedError<Arc<ErrorKind>>,
 }
 
+impl Error {
+    /// Whether this error was caused by a Minecraft account being signed out because
+    /// its saved Microsoft sign-in is no longer valid.
+    pub fn is_signed_out(&self) -> bool {
+        matches!(
+            *self.raw,
+            ErrorKind::MinecraftAuthenticationError(
+                crate::state::MinecraftAuthenticationError::RefreshTokenRevoked {
+                    ..
+                }
+            )
+        )
+    }
+}
+
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         self.source.source()

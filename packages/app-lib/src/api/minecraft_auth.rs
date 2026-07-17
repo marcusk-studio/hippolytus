@@ -39,7 +39,15 @@ pub async fn finish_login(
 #[tracing::instrument]
 pub async fn get_default_user() -> crate::Result<Option<uuid::Uuid>> {
     let state = State::get().await?;
-    let user = Credentials::get_active(&state.pool).await?;
+
+    let user = match Credentials::get_active(&state.pool).await {
+        Ok(user) => user,
+        // The account this would have returned has just been signed out, so from the
+        // caller's point of view there simply is no default user anymore
+        Err(err) if err.is_signed_out() => None,
+        Err(err) => return Err(err),
+    };
+
     Ok(user.map(|user| user.offline_profile.id))
 }
 
