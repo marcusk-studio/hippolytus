@@ -1,0 +1,51 @@
+name: MegaLinter
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  megalinter:
+    name: Security (osv-scanner) → code scanning
+    runs-on: ubuntu-latest
+    permissions:
+      # Required for github/codeql-action/upload-sarif to write the findings
+      # into Security > Code scanning.
+      security-events: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 1
+
+      - name: Run MegaLinter
+        if: ${{ !cancelled() }}
+        uses: oxsecurity/megalinter/flavors/ci_light@ef3e84b8b836d76db562d0f3ed7da61e8fd538bc # v9.6.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Surface MegaLinter's aggregated SARIF into Security > Code scanning.
+      # Best-effort: a missing/empty SARIF, or a forked PR without code-scanning
+      # write access, must not fail the job.
+      - name: Upload MegaLinter SARIF to code scanning
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@7188fc363630916deb702c7fdcf4e481b751f97a # v4.37.1
+        with:
+          sarif_file: megalinter-reports/megalinter-report.sarif
+          category: mega-linter
+
+      - name: Archive MegaLinter reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: megalinter-reports
+          path: |
+            megalinter-reports
+            mega-linter.log
