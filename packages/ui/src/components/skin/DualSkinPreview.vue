@@ -32,7 +32,7 @@
 		>
 			<Suspense>
 				<Group :position="[left.x, left.y, left.z]" :rotation="[0, left.ry, 0]">
-					<primitive v-if="leftScene" :object="leftScene" />
+					<primitive v-if="leftScene && !solo" :object="leftScene" />
 				</Group>
 			</Suspense>
 
@@ -72,6 +72,15 @@
 				<select v-model="selectedAnim" class="bg-black/60 text-white outline-none">
 					<option v-for="name in clipNames" :key="name" :value="name">{{ name }}</option>
 				</select>
+			</label>
+			<label class="mt-1 flex items-center gap-1">
+				user
+				<input
+					v-model="debugUsername"
+					placeholder="logged-in user"
+					class="w-32 bg-black/60 px-1 text-white outline-none"
+				/>
+				<span :class="solo ? 'text-brand' : 'opacity-60'">{{ solo ? 'solo' : 'dual' }}</span>
 			</label>
 			<div class="mt-1 flex gap-1">
 				<button
@@ -115,12 +124,24 @@ const props = withDefaults(
 	defineProps<{
 		leftTextureSrc: string
 		rightTextureSrc: string
+		/** Logged-in username; when it's the mascot's, the scene goes solo. */
+		username?: string
 		debug?: boolean
 	}>(),
-	{ debug: false },
+	{ debug: false, username: '' },
 )
 
 const container = ref<HTMLElement | null>(null)
+
+// When the mascot himself is logged in, a second identical avatar is pointless —
+// render only the right character (Marcus) dancing solo. debugUsername lets the
+// debug overlay simulate different logged-in users.
+const MASCOT_USERNAME = 'xMARCUSKx'
+const SOLO_EMOTE = 'floss'
+const debugUsername = ref('')
+const effectiveUsername = computed(() => debugUsername.value.trim() || props.username)
+const solo = computed(() => effectiveUsername.value.toLowerCase() === MASCOT_USERNAME.toLowerCase())
+const isSideActive = (side: 'left' | 'right') => !solo.value || side === 'right'
 
 // Supersample above native so the pixel-art texture edges don't ladder/crawl
 // under motion. Passing a fixed number (not a [min,max] range, which would clamp
@@ -143,6 +164,8 @@ const BASE = {
 	left: { x: -0.699, y: -0.707, z: -0.1, ry: 0.494 },
 	right: { x: 0.625, y: -0.727, z: -0.15, ry: -0.589 },
 }
+// Solo mode centers the single (right) character facing the camera.
+const SOLO: Placement = { x: 0, y: -0.72, z: 0, ry: 0 }
 const INTERACTIONS: Scene[] = [
 	{
 		name: 'meeting',
@@ -218,6 +241,8 @@ function makeInit(side: 'left' | 'right') {
 		const clips: Record<string, THREE.AnimationClip> = { ...emoteClips }
 		for (const clip of gltfClips) clips[clip.name] = clip
 		rigs[side] = { mixer, clips }
+		// A hidden side (left, in solo mode) loads but stays at rest.
+		if (!isSideActive(side)) return
 		if (demo.value && !interacting) {
 			baseIdle(side)
 			scheduleFlourish(side)
@@ -256,6 +281,14 @@ watch(selectedAnim, (name) => {
 	if (demo.value) return
 	playOn('left', name)
 	playOn('right', name)
+})
+
+// Restart the director when solo mode flips (e.g. debug username change) so the
+// scene reconfigures between dual and solo.
+watch(solo, () => {
+	if (!demo.value) return
+	clearDirectorTimers()
+	startDirector()
 })
 
 function setScene(s: { left: Placement; right: Placement }) {
@@ -307,6 +340,12 @@ function scheduleFlourish(side: 'left' | 'right') {
 
 function startIdleAmbient() {
 	interacting = false
+	if (solo.value) {
+		Object.assign(rightTarget, SOLO)
+		baseIdle('right')
+		scheduleFlourish('right')
+		return
+	}
 	setScene(BASE)
 	baseIdle('left')
 	baseIdle('right')
@@ -323,6 +362,20 @@ function runEvent() {
 	window.clearTimeout(flourishTimer.right)
 	window.clearTimeout(returnTimer.left)
 	window.clearTimeout(returnTimer.right)
+	// Solo: Marcus just flosses on his own instead of a two-person interaction.
+	if (solo.value) {
+		Object.assign(rightTarget, SOLO)
+		playOn('right', SOLO_EMOTE, 0, true)
+		const soloClip = rigs.right?.clips[SOLO_EMOTE]
+		eventTimer = window.setTimeout(
+			() => {
+				startIdleAmbient()
+				scheduleEvent()
+			},
+			soloClip ? soloClip.duration * 1000 : 6000,
+		)
+		return
+	}
 	const scene = weightedPick(INTERACTIONS)
 	setScene(scene)
 	playScene(scene)
@@ -354,7 +407,7 @@ function clearDirectorTimers() {
 function onCanvasClick(e: MouseEvent) {
 	const rect = container.value?.getBoundingClientRect()
 	if (!rect) return
-	const side = e.clientX - rect.left < rect.width / 2 ? 'left' : 'right'
+	const side = solo.value ? 'right' : e.clientX - rect.left < rect.width / 2 ? 'left' : 'right'
 	const clip = rigs[side]?.clips.interact
 	if (!clip) return
 	playOn(side, 'interact', 0, true)
@@ -482,7 +535,7 @@ function onHudUp() {
 }
 
 function onHudDown(e: PointerEvent) {
-	if ((e.target as HTMLElement).closest('button, select')) return
+	if ((e.target as HTMLElement).closest('button, select, input')) return
 	hudLastX = e.clientX
 	hudLastY = e.clientY
 	window.addEventListener('pointermove', onHudMove)
