@@ -274,18 +274,22 @@ impl Credentials {
                     self.offline_profile.id
                 );
 
-                Self::remove(self.offline_profile.id, exec).await?;
+                let removed =
+                    Self::remove(self.offline_profile.id, exec).await?;
 
                 // Notify the frontend directly, rather than relying on this error
-                // reaching a caller that surfaces the sign-in modal. Whichever call
-                // triggers the refresh, and whichever concurrent caller wins the
-                // race to remove the row, the modal is shown exactly where it should
-                // be. Ignore emit failures: the sign-out itself has already happened.
-                let _ = crate::event::emit::emit_minecraft_auth_signed_out(
-                    self.offline_profile.id,
-                    err.to_string(),
-                )
-                .await;
+                // reaching a caller that surfaces the sign-in modal. Emit only if
+                // this call is the one that actually removed the row, so concurrent
+                // refreshes of the same account (e.g. the accounts list and the
+                // default-user lookup both firing on startup) raise the modal once.
+                // Ignore emit failures: the sign-out itself has already happened.
+                if removed > 0 {
+                    let _ = crate::event::emit::emit_minecraft_auth_signed_out(
+                        self.offline_profile.id,
+                        err.to_string(),
+                    )
+                    .await;
+                }
 
                 return Err(ErrorKind::from(err).into());
             }
@@ -644,13 +648,17 @@ impl Credentials {
         Ok(())
     }
 
+    /// Removes the user with the given UUID, returning the number of rows deleted.
+    ///
+    /// A return value of `0` means another caller had already removed the user, which
+    /// callers rely on to avoid acting on the same removal twice under concurrency.
     pub async fn remove(
         uuid: Uuid,
         exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
-    ) -> crate::Result<()> {
+    ) -> crate::Result<u64> {
         let uuid = uuid.as_hyphenated().to_string();
 
-        sqlx::query!(
+        let result = sqlx::query!(
             "
             DELETE FROM minecraft_users WHERE uuid = $1
             ",
@@ -659,7 +667,7 @@ impl Credentials {
         .execute(exec)
         .await?;
 
-        Ok(())
+        Ok(result.rows_affected())
     }
 }
 
