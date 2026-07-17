@@ -391,8 +391,6 @@ async function setupApp() {
 		}),
 	)
 
-	await minecraft_auth_signed_out_listener((e) => error.showError(new Error(e.message)))
-
 	fetch(`https://cdn.marcusk.fun/appCriticalAnnouncement_${version}.json`)
 		.then((response) => response.json())
 		.then((res) => {
@@ -674,6 +672,12 @@ provide('accountsCard', accounts)
 const sidebarSkinPreview = ref(null)
 
 command_listener(handleCommand)
+
+// Registered here, during synchronous setup, rather than in setupApp: setupApp only
+// runs after initialize_state resolves, by which point AccountsCard may already have
+// triggered an auto sign-out via get_default_user. The signed-out event is
+// fire-and-forget, so the listener must be live before any account refresh can emit it.
+minecraft_auth_signed_out_listener((e) => error.showError(new Error(e.message)))
 
 async function handleCommand(e) {
 	if (!e) return
