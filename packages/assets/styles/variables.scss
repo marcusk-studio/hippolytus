@@ -372,7 +372,7 @@ html {
 
 	--color-gradient-button-bg: linear-gradient(180deg, #3a3d47 0%, #33363d 100%);
 
-	--loading-bar-gradient: linear-gradient(to right, var(--color-brand) 0%, #1ffa9a 100%);
+	--loading-bar-gradient: linear-gradient(to right, var(--color-brand) 0%, var(--color-orange-300) 100%);
 
 	--color-platform-fabric: #dbb69b;
 	--color-platform-quilt: #c796f9;

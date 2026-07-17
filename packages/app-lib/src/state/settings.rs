@@ -69,6 +69,7 @@ pub enum FeatureFlag {
     I18nDebug,
     ShowInstancePlayTime,
     SkipNonEssentialWarnings,
+    DualSkinDebug,
 }
 
 impl Settings {
