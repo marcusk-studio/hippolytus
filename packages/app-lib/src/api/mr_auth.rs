@@ -1,20 +1,6 @@
-use crate::state::{CacheValueType, CachedEntry, ModrinthCredentials};
+use crate::state::{AUTHENTICATED_CACHE_TYPES, CachedEntry, ModrinthCredentials};
 use crate::util::fetch::fetch_json;
 use reqwest::Method;
-
-/// Cache types whose entries can hold data only a signed-in user was allowed to
-/// see, such as private and unlisted projects. The cache is keyed by id and not
-/// partitioned by account, so these are dropped whenever the active account
-/// changes: on sign-out, and on sign-in since that can replace a different
-/// account without sign-out running.
-const AUTHENTICATED_CACHE_TYPES: &[CacheValueType] = &[
-    CacheValueType::Project,
-    CacheValueType::ProjectV3,
-    CacheValueType::ProjectVersions,
-    CacheValueType::Version,
-    CacheValueType::Team,
-    CacheValueType::Organization,
-];
 
 #[tracing::instrument]
 pub fn authenticate_begin_flow() -> &'static str {
@@ -36,9 +22,9 @@ pub async fn authenticate_finish_flow(
 
     creds.upsert(&state.pool).await?;
 
-    // Signing in makes this the active account, replacing any previous one
-    // without logout necessarily having run, so drop cached data the previous
-    // session was allowed to see before this one can read it.
+    // Signing in deactivates any other account without removing it, so this is
+    // the one identity change that doesn't go through `remove`. Drop the cached
+    // data the previous session was allowed to see before this one reads it.
     CachedEntry::purge_cache_types(AUTHENTICATED_CACHE_TYPES, &state.pool)
         .await?;
 
@@ -56,14 +42,10 @@ pub async fn logout() -> crate::Result<()> {
     let current = ModrinthCredentials::get_active(&state.pool).await?;
 
     if let Some(current) = current {
+        // Removing the credentials also purges the cached data they gave
+        // access to.
         ModrinthCredentials::remove(&current.user_id, &state.pool).await?;
         state.friends_socket.disconnect().await?;
-
-        // Fetches made while signed in are cached to disk regardless of cache
-        // behaviour, so without this, project metadata the session revealed
-        // (including private and unlisted projects) stays readable afterwards.
-        CachedEntry::purge_cache_types(AUTHENTICATED_CACHE_TYPES, &state.pool)
-            .await?;
     }
 
     Ok(())

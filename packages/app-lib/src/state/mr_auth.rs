@@ -1,10 +1,23 @@
-use crate::state::{CacheBehaviour, CachedEntry};
+use crate::state::{CacheBehaviour, CacheValueType, CachedEntry};
 use crate::util::fetch::{FetchSemaphore, fetch_advanced};
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use dashmap::DashMap;
 use futures::TryStreamExt;
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
+
+/// Cache types whose entries can hold data only a signed-in user was allowed to
+/// see, such as private and unlisted projects. The cache is keyed by id and not
+/// partitioned by account, so these must not outlive the session that was
+/// allowed to see them.
+pub const AUTHENTICATED_CACHE_TYPES: &[CacheValueType] = &[
+    CacheValueType::Project,
+    CacheValueType::ProjectV3,
+    CacheValueType::ProjectVersions,
+    CacheValueType::Version,
+    CacheValueType::Team,
+    CacheValueType::Organization,
+];
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ModrinthCredentials {
@@ -159,7 +172,7 @@ impl ModrinthCredentials {
 
     pub async fn remove(
         user_id: &str,
-        exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
+        exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite> + Copy,
     ) -> crate::Result<()> {
         sqlx::query!(
             "
@@ -169,6 +182,10 @@ impl ModrinthCredentials {
         )
         .execute(exec)
         .await?;
+
+        // Purging here covers every way a session ends: signing out, and a
+        // session expiring when its refresh fails.
+        CachedEntry::purge_cache_types(AUTHENTICATED_CACHE_TYPES, exec).await?;
 
         Ok(())
     }
