@@ -276,6 +276,17 @@ impl Credentials {
 
                 Self::remove(self.offline_profile.id, exec).await?;
 
+                // Notify the frontend directly, rather than relying on this error
+                // reaching a caller that surfaces the sign-in modal. Whichever call
+                // triggers the refresh, and whichever concurrent caller wins the
+                // race to remove the row, the modal is shown exactly where it should
+                // be. Ignore emit failures: the sign-out itself has already happened.
+                let _ = crate::event::emit::emit_minecraft_auth_signed_out(
+                    self.offline_profile.id,
+                    err.to_string(),
+                )
+                .await;
+
                 return Err(ErrorKind::from(err).into());
             }
             Err(err) => return Err(ErrorKind::from(err).into()),

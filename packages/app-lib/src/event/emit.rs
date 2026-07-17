@@ -279,6 +279,26 @@ pub async fn emit_friend(payload: FriendPayload) -> crate::Result<()> {
 }
 
 #[allow(unused_variables)]
+pub async fn emit_minecraft_auth_signed_out(
+    uuid: Uuid,
+    message: String,
+) -> crate::Result<()> {
+    #[cfg(feature = "tauri")]
+    {
+        let event_state = crate::EventState::get()?;
+        event_state
+            .app
+            .emit(
+                "minecraft_auth_signed_out",
+                crate::event::MinecraftAuthSignedOutPayload { uuid, message },
+            )
+            .map_err(EventError::from)?;
+    }
+
+    Ok(())
+}
+
+#[allow(unused_variables)]
 pub async fn emit_notification(payload: Value) -> crate::Result<()> {
     #[cfg(feature = "tauri")]
     {

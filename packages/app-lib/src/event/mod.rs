@@ -299,6 +299,16 @@ pub enum FriendPayload {
     StatusSync,
 }
 
+/// Emitted when a Minecraft account is signed out automatically because its saved
+/// Microsoft sign-in is no longer valid. The frontend uses this to surface the
+/// sign-in error modal regardless of which call happened to trigger the refresh.
+#[derive(Serialize, Clone)]
+#[cfg(feature = "tauri")]
+pub struct MinecraftAuthSignedOutPayload {
+    pub uuid: Uuid,
+    pub message: String,
+}
+
 #[cfg(feature = "tauri")]
 pub use self::log_types::*;
 

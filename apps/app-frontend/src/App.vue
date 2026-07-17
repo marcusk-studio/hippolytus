@@ -80,7 +80,11 @@ import { hide_ads_window, init_ads_window, show_ads_window } from '@/helpers/ads
 import { debugAnalytics, optInAnalytics, trackEvent } from '@/helpers/analytics'
 import { check_reachable } from '@/helpers/auth.js'
 import { get_user, get_version } from '@/helpers/cache.js'
-import { command_listener, warning_listener } from '@/helpers/events.js'
+import {
+	command_listener,
+	minecraft_auth_signed_out_listener,
+	warning_listener,
+} from '@/helpers/events.js'
 import { install_create_modpack_instance, install_get_modpack_preview } from '@/helpers/install'
 import { list, run } from '@/helpers/instance'
 import { cancelLogin, get as getCreds, login, logout } from '@/helpers/mr_auth.ts'
@@ -386,6 +390,8 @@ async function setupApp() {
 			type: 'warn',
 		}),
 	)
+
+	await minecraft_auth_signed_out_listener((e) => error.showError(new Error(e.message)))
 
 	fetch(`https://cdn.marcusk.fun/appCriticalAnnouncement_${version}.json`)
 		.then((response) => response.json())
