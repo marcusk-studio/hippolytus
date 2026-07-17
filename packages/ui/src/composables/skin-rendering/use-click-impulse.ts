@@ -96,6 +96,18 @@ export function useClickImpulse() {
 		updateDamageFlash(delta)
 	}
 
+	function reset() {
+		clickImpulseEnergy.value = 0
+		clickImpulsePhase.value = 0
+		clickImpulseOffsetX.value = 0
+		clickImpulseRotationZ.value = 0
+		clickImpulseScaleX.value = 1
+		clickImpulseScaleY.value = 1
+		damageFlashRemainingSeconds = 0
+		damageFlashCooldownSeconds = 0
+		damageFlashIntensity.value = 0
+	}
+
 	return {
 		clickImpulseOffsetX,
 		clickImpulseRotationZ,
@@ -104,5 +116,6 @@ export function useClickImpulse() {
 		damageFlashIntensity,
 		addClickImpulse,
 		update,
+		reset,
 	}
 }

@@ -37,6 +37,7 @@ export function useSkinPreviewAnimation(
 		damageFlashIntensity,
 		addClickImpulse,
 		update: updateClickFeedback,
+		reset: resetClickFeedback,
 	} = useClickImpulse()
 
 	const baseAnimation = computed(() => animationConfig.value?.baseAnimation ?? '')
@@ -292,9 +293,7 @@ export function useSkinPreviewAnimation(
 		actions.value = {}
 		currentAnimation.value = ''
 		lastRandomAnimation.value = ''
-		damageFlashRemainingSeconds = 0
-		damageFlashCooldownSeconds = 0
-		damageFlashIntensity.value = 0
+		resetClickFeedback()
 	}
 
 	watch(
