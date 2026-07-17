@@ -125,6 +125,9 @@ const hydrateNonPublicFeatured = async (hits) => {
 					description: project.description,
 					icon_url: project.icon_url,
 					author: organization?.name,
+					// Marks an entry the search index wouldn't return, so it can
+					// be dropped the moment the session that revealed it ends.
+					nonPublic: true,
 				}
 			}),
 	)
@@ -226,7 +229,18 @@ const getFeaturedModpacks = async () => {
 // screen wouldn't see the private packs they just gained access to.
 watch(
 	() => auth.session_token.value,
-	() => {
+	(token) => {
+		if (!token) {
+			// Drop non-public packs synchronously. The reload below is async, so
+			// until it finishes the list would keep showing packs that only the
+			// previous session was allowed to see.
+			featuredModpacks.value = featuredModpacks.value.filter((modpack) => !modpack.nonPublic)
+
+			if (!featuredModpacks.value.some((m) => m.project_id === selectedModpackId.value)) {
+				selectedModpackId.value = featuredModpacks.value[0]?.project_id ?? ''
+			}
+		}
+
 		getFeaturedModpacks()
 	},
 )

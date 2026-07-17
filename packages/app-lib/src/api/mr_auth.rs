@@ -1,6 +1,18 @@
-use crate::state::ModrinthCredentials;
+use crate::state::{CacheValueType, CachedEntry, ModrinthCredentials};
 use crate::util::fetch::fetch_json;
 use reqwest::Method;
+
+/// Cache types whose entries can hold data only a signed-in user was allowed to
+/// see, such as private and unlisted projects. The cache is keyed by id and not
+/// partitioned by account, so these are dropped when signing out.
+const AUTHENTICATED_CACHE_TYPES: &[CacheValueType] = &[
+    CacheValueType::Project,
+    CacheValueType::ProjectV3,
+    CacheValueType::ProjectVersions,
+    CacheValueType::Version,
+    CacheValueType::Team,
+    CacheValueType::Organization,
+];
 
 #[tracing::instrument]
 pub fn authenticate_begin_flow() -> &'static str {
@@ -37,6 +49,12 @@ pub async fn logout() -> crate::Result<()> {
     if let Some(current) = current {
         ModrinthCredentials::remove(&current.user_id, &state.pool).await?;
         state.friends_socket.disconnect().await?;
+
+        // Fetches made while signed in are cached to disk regardless of cache
+        // behaviour, so without this, project metadata the session revealed
+        // (including private and unlisted projects) stays readable afterwards.
+        CachedEntry::purge_cache_types(AUTHENTICATED_CACHE_TYPES, &state.pool)
+            .await?;
     }
 
     Ok(())
