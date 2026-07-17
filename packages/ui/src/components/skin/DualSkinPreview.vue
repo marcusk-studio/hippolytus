@@ -31,13 +31,29 @@
 			}"
 		>
 			<Suspense>
-				<Group :position="[left.x, left.y, left.z]" :rotation="[0, left.ry, 0]">
+				<Group
+					:position="[left.x + impulses.left.clickImpulseOffsetX.value, left.y, left.z]"
+					:rotation="[0, left.ry, impulses.left.clickImpulseRotationZ.value]"
+					:scale="[
+						impulses.left.clickImpulseScaleX.value,
+						impulses.left.clickImpulseScaleY.value,
+						1,
+					]"
+				>
 					<primitive v-if="leftScene && !solo" :object="leftScene" />
 				</Group>
 			</Suspense>
 
 			<Suspense>
-				<Group :position="[right.x, right.y, right.z]" :rotation="[0, right.ry, 0]">
+				<Group
+					:position="[right.x + impulses.right.clickImpulseOffsetX.value, right.y, right.z]"
+					:rotation="[0, right.ry, impulses.right.clickImpulseRotationZ.value]"
+					:scale="[
+						impulses.right.clickImpulseScaleX.value,
+						impulses.right.clickImpulseScaleY.value,
+						1,
+					]"
+				>
 					<primitive v-if="rightScene" :object="rightScene" />
 				</Group>
 			</Suspense>
@@ -114,9 +130,14 @@ import { TresCanvas, useRenderLoop } from '@tresjs/core'
 import * as THREE from 'three'
 import { computed, onMounted, onUnmounted, reactive, ref, toRef, watch } from 'vue'
 
-import { useForegroundRenderMode, useSkinPreviewScene } from '#ui/composables/skin-rendering'
+import {
+	useClickImpulse,
+	useForegroundRenderMode,
+	useSkinPreviewScene,
+} from '#ui/composables/skin-rendering'
 
 import { emoteToClip } from './emote-clip'
+import { syncDamageFlashShader } from './skin-preview-shader'
 
 const renderMode = useForegroundRenderMode()
 
@@ -234,6 +255,10 @@ type Rig = {
 	current?: THREE.AnimationAction
 }
 const rigs: Partial<Record<'left' | 'right', Rig>> = {}
+
+// Per-character click feedback: recoil shake/squash, and a red damage flash when
+// clicked fast enough — the same effect the skins tab has.
+const impulses = { left: useClickImpulse(), right: useClickImpulse() }
 
 function makeInit(side: 'left' | 'right') {
 	return (scene: THREE.Object3D, gltfClips: THREE.AnimationClip[]) => {
@@ -410,6 +435,7 @@ function onCanvasClick(e: MouseEvent) {
 	const side = solo.value ? 'right' : e.clientX - rect.left < rect.width / 2 ? 'left' : 'right'
 	const clip = rigs[side]?.clips.interact
 	if (!clip) return
+	impulses[side].addClickImpulse()
 	playOn(side, 'interact', 0, true)
 	window.clearTimeout(interactTimer[side])
 	interactTimer[side] = window.setTimeout(() => {
@@ -454,10 +480,21 @@ function ease(cur: Placement, tgt: Placement, k: number) {
 	cur.ry += (tgt.ry - cur.ry) * k
 }
 
+// Push the flash intensity into the model's materials whenever it changes (or a
+// scene loads), mirroring how SkinPreviewRenderer drives it.
+watch([leftScene, impulses.left.damageFlashIntensity], () =>
+	syncDamageFlashShader(leftScene.value, impulses.left.damageFlashIntensity.value),
+)
+watch([rightScene, impulses.right.damageFlashIntensity], () =>
+	syncDamageFlashShader(rightScene.value, impulses.right.damageFlashIntensity.value),
+)
+
 const { onLoop } = useRenderLoop()
 onLoop(({ delta }: { delta: number }) => {
 	rigs.left?.mixer.update(delta)
 	rigs.right?.mixer.update(delta)
+	impulses.left.update(delta)
+	impulses.right.update(delta)
 	if (demo.value) {
 		const k = Math.min(1, delta * 6)
 		ease(left, leftTarget, k)
