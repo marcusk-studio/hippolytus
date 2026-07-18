@@ -73,6 +73,10 @@ pub enum MinecraftAuthenticationError {
         #[source]
         source: reqwest::Error,
     },
+    #[error(
+        "The saved Microsoft sign-in is no longer valid, so the account was signed out: {description}"
+    )]
+    RefreshTokenRevoked { description: String },
     #[error("Error reading XBOX Session ID header")]
     NoSessionId,
     #[error("Error reading user hash")]
@@ -258,7 +262,45 @@ impl Credentials {
             return Ok(());
         }
 
-        let oauth_token = oauth_refresh(&self.refresh_token).await?;
+        let oauth_token = match oauth_refresh(&self.refresh_token).await {
+            Ok(oauth_token) => oauth_token,
+            Err(
+                err @ MinecraftAuthenticationError::RefreshTokenRevoked {
+                    ..
+                },
+            ) => {
+                tracing::warn!(
+                    "Signing out user {} because Microsoft rejected its saved sign-in: {err}",
+                    self.offline_profile.id
+                );
+
+                let removed =
+                    Self::remove(self.offline_profile.id, exec).await?;
+
+                // Notify the frontend directly, rather than relying on this error
+                // reaching a caller that surfaces the sign-in modal. Two conditions
+                // gate the emit:
+                //   - only the call that actually removed the row emits, so
+                //     concurrent refreshes of the same account (e.g. the accounts
+                //     list and the default-user lookup both firing on startup) raise
+                //     the modal once;
+                //   - only the active account emits, since `get_all` refreshes every
+                //     stored row and pruning a stale inactive account should not tell
+                //     a still-signed-in user they were signed out.
+                // Ignore emit failures: the sign-out itself has already happened.
+                if removed > 0 && self.active {
+                    let _ = crate::event::emit::emit_minecraft_auth_signed_out(
+                        self.offline_profile.id,
+                        err.to_string(),
+                    )
+                    .await;
+                }
+
+                return Err(ErrorKind::from(err).into());
+            }
+            Err(err) => return Err(ErrorKind::from(err).into()),
+        };
+
         let (pair, current_date) =
             DeviceTokenPair::refresh_and_get_device_token(
                 oauth_token.date,
@@ -476,6 +518,10 @@ impl Credentials {
 
     /// Fetches the currently selected credentials from the database, attempting
     /// to refresh them if they are expired.
+    ///
+    /// Refresh failures are ignored so that stale credentials stay usable while
+    /// offline, except when they cause the account to be signed out, which is
+    /// reported as an [`Error::is_signed_out`](crate::Error::is_signed_out) error.
     pub async fn get_active(
         exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite> + Copy,
     ) -> crate::Result<Option<Self>> {
@@ -506,7 +552,13 @@ impl Credentials {
                         .unwrap_or_else(Utc::now),
                     active: x.active == 1,
                 };
-                credentials.refresh(exec).await.ok();
+
+                if let Err(err) = credentials.refresh(exec).await
+                    && err.is_signed_out()
+                {
+                    return Err(err);
+                }
+
                 Some(credentials)
             }
             None => None,
@@ -542,7 +594,12 @@ impl Credentials {
             };
 
             async move {
-                credentials.refresh(exec).await.ok();
+                if let Err(err) = credentials.refresh(exec).await
+                    && err.is_signed_out()
+                {
+                    return Ok(acc);
+                }
+
                 acc.insert(uuid, credentials);
 
                 Ok(acc)
@@ -596,13 +653,17 @@ impl Credentials {
         Ok(())
     }
 
+    /// Removes the user with the given UUID, returning the number of rows deleted.
+    ///
+    /// A return value of `0` means another caller had already removed the user, which
+    /// callers rely on to avoid acting on the same removal twice under concurrency.
     pub async fn remove(
         uuid: Uuid,
         exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
-    ) -> crate::Result<()> {
+    ) -> crate::Result<u64> {
         let uuid = uuid.as_hyphenated().to_string();
 
-        sqlx::query!(
+        let result = sqlx::query!(
             "
             DELETE FROM minecraft_users WHERE uuid = $1
             ",
@@ -611,7 +672,7 @@ impl Credentials {
         .execute(exec)
         .await?;
 
-        Ok(())
+        Ok(result.rows_affected())
     }
 }
 
@@ -911,6 +972,25 @@ struct OAuthToken {
     // pub foci: String,
 }
 
+/// An OAuth error response, as returned by the Microsoft identity platform when a
+/// token request fails.
+#[derive(Deserialize)]
+struct OAuthError {
+    error: String,
+    error_description: Option<String>,
+}
+
+impl OAuthError {
+    /// Whether this error means the refresh token can never succeed again, and so
+    /// only an interactive sign-in can recover the account.
+    ///
+    /// Microsoft returns these when the token has expired, was revoked, or the
+    /// account password changed.
+    fn is_refresh_token_revoked(&self) -> bool {
+        matches!(&*self.error, "invalid_grant" | "interaction_required")
+    }
+}
+
 #[tracing::instrument]
 async fn oauth_token(
     code: &str,
@@ -993,6 +1073,15 @@ async fn oauth_refresh(
             step: MinecraftAuthStep::RefreshOAuthToken,
         }
     })?;
+
+    if !status.is_success()
+        && let Ok(error) = serde_json::from_str::<OAuthError>(&text)
+        && error.is_refresh_token_revoked()
+    {
+        return Err(MinecraftAuthenticationError::RefreshTokenRevoked {
+            description: error.error_description.unwrap_or(error.error),
+        });
+    }
 
     let body = serde_json::from_str(&text).map_err(|source| {
         MinecraftAuthenticationError::DeserializeResponse {
@@ -1602,4 +1691,39 @@ fn generate_oauth_challenge() -> String {
 
     let bytes: Vec<u8> = (0..64).map(|_| rng.r#gen::<u8>()).collect();
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn expired_grant_response_is_classified_as_revoked() {
+        let error: OAuthError = serde_json::from_str(
+            r#"{"error":"invalid_grant","error_description":"The user could not be authenticated as the grant is expired. The user must sign in again.","foci":"1","correlation_id":"a0f874b6-3433-4aeb-b16a-4b6bf4488435"}"#,
+        )
+        .expect("expected a well-formed OAuth error response to parse");
+
+        assert!(error.is_refresh_token_revoked());
+    }
+
+    #[test]
+    fn transient_server_error_is_not_classified_as_revoked() {
+        let error: OAuthError = serde_json::from_str(
+            r#"{"error":"temporarily_unavailable","error_description":"The server is temporarily too busy to handle the request."}"#,
+        )
+        .expect("expected a well-formed OAuth error response to parse");
+
+        assert!(!error.is_refresh_token_revoked());
+    }
+
+    #[test]
+    fn successful_token_response_is_not_an_oauth_error() {
+        assert!(
+            serde_json::from_str::<OAuthError>(
+                r#"{"token_type":"bearer","expires_in":86400,"access_token":"access","refresh_token":"refresh"}"#,
+            )
+            .is_err()
+        );
+    }
 }

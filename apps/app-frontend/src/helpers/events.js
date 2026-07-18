@@ -112,6 +112,17 @@ export async function friend_listener(callback) {
 	return await listen('friend', (event) => callback(event.payload))
 }
 
+/// Payload for the 'minecraft_auth_signed_out' event
+/*
+    MinecraftAuthSignedOutPayload {
+        uuid: string,     // the signed-out account's UUID
+        message: string,  // the underlying error, used to match sign-in guidance
+    }
+*/
+export async function minecraft_auth_signed_out_listener(callback) {
+	return await listen('minecraft_auth_signed_out', (event) => callback(event.payload))
+}
+
 export async function notification_listener(callback) {
 	return await listen('notification', (event) => callback(event.payload))
 }

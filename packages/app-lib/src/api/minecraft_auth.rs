@@ -39,7 +39,17 @@ pub async fn finish_login(
 #[tracing::instrument]
 pub async fn get_default_user() -> crate::Result<Option<uuid::Uuid>> {
     let state = State::get().await?;
-    let user = Credentials::get_active(&state.pool).await?;
+
+    let user = match Credentials::get_active(&state.pool).await {
+        Ok(user) => user,
+        // The revoked account was just removed. The frontend is told about this out
+        // of band by the `minecraft_auth_signed_out` event, so surfacing the raw
+        // error here too would only add a redundant generic toast on startup; from
+        // this getter's point of view there is simply no default user anymore.
+        Err(err) if err.is_signed_out() => None,
+        Err(err) => return Err(err),
+    };
+
     Ok(user.map(|user| user.offline_profile.id))
 }
 
