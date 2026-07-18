@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.6.0](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.5.0...apps-v2.6.0) (2026-07-18)
+
+
+### ✨ Features
+
+* **app:** add "Your projects" view for accessible org & personal packs ([#81](https://github.com/marcusk-studio/hippolytus/issues/81)) ([d272c32](https://github.com/marcusk-studio/hippolytus/commit/d272c32d72f5e51d6bad24f4bda1b299aec67578))
+* **app:** solo floss for the mascot, home-scene click flash, and loading-bar green fix ([#85](https://github.com/marcusk-studio/hippolytus/issues/85)) ([dff0231](https://github.com/marcusk-studio/hippolytus/commit/dff0231ca0595ab3e6425d317dfb04497370b7e4))
+
+
+### 🐛 Bugfixes
+
+* **app:** sign out Minecraft accounts with a revoked Microsoft token ([#83](https://github.com/marcusk-studio/hippolytus/issues/83)) ([14bb4ad](https://github.com/marcusk-studio/hippolytus/commit/14bb4ad57389133830723588f697cf512c7512df))
+
 ## [2.5.0](https://github.com/marcusk-studio/hippolytus/compare/apps-v2.4.0...apps-v2.5.0) (2026-07-16)
 
 
